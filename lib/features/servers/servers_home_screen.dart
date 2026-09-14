@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
 import 'add_server_screen.dart';
 import 'servers_provider.dart';
@@ -61,6 +62,8 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
+enum _TileAction { test, remove }
+
 class _ServerTile extends ConsumerWidget {
   const _ServerTile({required this.profile});
 
@@ -76,12 +79,47 @@ class _ServerTile extends ConsumerWidget {
       leading: const Icon(Icons.dns),
       title: Text(profile.label),
       subtitle: Text('${profile.username}@${profile.host}:${profile.port} · $auth'),
-      trailing: IconButton(
-        icon: const Icon(Icons.delete_outline),
-        tooltip: 'Remove',
-        onPressed: () => _confirmRemove(context, ref),
+      trailing: PopupMenuButton<_TileAction>(
+        onSelected: (a) => switch (a) {
+          _TileAction.test => _testConnection(context, ref),
+          _TileAction.remove => _confirmRemove(context, ref),
+        },
+        itemBuilder: (_) => const [
+          PopupMenuItem(
+            value: _TileAction.test,
+            child: ListTile(
+              leading: Icon(Icons.network_check),
+              title: Text('Test connection'),
+            ),
+          ),
+          PopupMenuItem(
+            value: _TileAction.remove,
+            child: ListTile(
+              leading: Icon(Icons.delete_outline),
+              title: Text('Remove'),
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  Future<void> _testConnection(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(content: Text('Connecting to ${profile.label}…')),
+    );
+    final ConnectionCheck check =
+        await ref.read(moavControllerProvider(profile.id)).ping();
+    messenger.hideCurrentSnackBar();
+    final text = !check.reachable
+        ? 'Could not connect: ${check.error ?? 'unknown error'}'
+        : check.moavInstalled == true
+            ? 'Connected. MoaV ${check.moavVersion ?? ''} is installed.'
+            : check.moavInstalled == false
+                ? 'Connected. MoaV is not installed yet.'
+                : 'Connected. ${check.error ?? ''}';
+    messenger.showSnackBar(SnackBar(content: Text(text.trim())));
   }
 
   Future<void> _confirmRemove(BuildContext context, WidgetRef ref) async {

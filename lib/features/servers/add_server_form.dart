@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/server_profile.dart';
+import '../../core/ssh_key_installer.dart';
+import '../../core/ssh_moav_controller.dart';
 import '../../security/key_service.dart';
 
 /// Which credential the user chose on the add-server form.
@@ -26,8 +28,12 @@ class AddServerFormState {
     this.importedKeyPem = '',
     this.password = '',
     this.generatedKey,
+    this.oneTimePassword = '',
+    this.keyInstalled = false,
+    this.installingKey = false,
     this.submitting = false,
     this.error,
+    this.notice,
   });
 
   final String label;
@@ -38,8 +44,16 @@ class AddServerFormState {
   final String importedKeyPem;
   final String password;
   final Ed25519KeyMaterial? generatedKey;
+
+  /// Password used once by the "Install key on server" helper. Never saved.
+  final String oneTimePassword;
+
+  /// True once the generated public key was installed and verified.
+  final bool keyInstalled;
+  final bool installingKey;
   final bool submitting;
   final String? error;
+  final String? notice;
 
   AddServerFormState copyWith({
     String? label,
@@ -51,9 +65,14 @@ class AddServerFormState {
     String? password,
     Ed25519KeyMaterial? generatedKey,
     bool clearGeneratedKey = false,
+    String? oneTimePassword,
+    bool? keyInstalled,
+    bool? installingKey,
     bool? submitting,
     String? error,
     bool clearError = false,
+    String? notice,
+    bool clearNotice = false,
   }) =>
       AddServerFormState(
         label: label ?? this.label,
@@ -65,8 +84,12 @@ class AddServerFormState {
         password: password ?? this.password,
         generatedKey:
             clearGeneratedKey ? null : (generatedKey ?? this.generatedKey),
+        oneTimePassword: oneTimePassword ?? this.oneTimePassword,
+        keyInstalled: keyInstalled ?? this.keyInstalled,
+        installingKey: installingKey ?? this.installingKey,
         submitting: submitting ?? this.submitting,
         error: clearError ? null : (error ?? this.error),
+        notice: clearNotice ? null : (notice ?? this.notice),
       );
 
   int? get parsedPort {
@@ -95,11 +118,17 @@ class AddServerFormState {
         AuthChoice.password => password.isEmpty ? null : password,
       };
 
-  bool get isValid =>
-      hostError == null &&
-      portError == null &&
-      usernameError == null &&
-      secret != null;
+  bool get connectionFieldsValid =>
+      hostError == null && portError == null && usernameError == null;
+
+  bool get isValid => connectionFieldsValid && secret != null;
+
+  /// The key helper needs connection details, a key, and a one-time password.
+  bool get canInstallKey =>
+      connectionFieldsValid &&
+      generatedKey != null &&
+      oneTimePassword.isNotEmpty &&
+      !installingKey;
 
   ServerProfile toProfile(String id) => ServerProfile(
         id: id,
@@ -112,6 +141,9 @@ class AddServerFormState {
 }
 
 final keyServiceProvider = Provider<KeyService>((_) => const KeyService());
+
+final keyInstallerProvider =
+    Provider<SshKeyInstaller>((_) => const SshKeyInstaller());
 
 class AddServerFormNotifier extends Notifier<AddServerFormState> {
   @override
@@ -126,16 +158,53 @@ class AddServerFormNotifier extends Notifier<AddServerFormState> {
       state = state.copyWith(importedKeyPem: v, clearError: true);
   void setPassword(String v) =>
       state = state.copyWith(password: v, clearError: true);
+  void setOneTimePassword(String v) =>
+      state = state.copyWith(oneTimePassword: v, clearError: true);
 
   void setAuthChoice(AuthChoice c) =>
-      state = state.copyWith(authChoice: c, clearError: true);
+      state = state.copyWith(authChoice: c, clearError: true, clearNotice: true);
 
   Future<void> generateKey() async {
     try {
       final key = await ref.read(keyServiceProvider).generateEd25519();
-      state = state.copyWith(generatedKey: key, clearError: true);
-    } on UnimplementedError catch (e) {
-      state = state.copyWith(error: e.message);
+      state = state.copyWith(
+        generatedKey: key,
+        keyInstalled: false,
+        clearError: true,
+        clearNotice: true,
+      );
+    } on Object catch (e) {
+      state = state.copyWith(error: 'Could not generate key: $e');
+    }
+  }
+
+  /// Appends the generated public key to the server's `authorized_keys`
+  /// using [AddServerFormState.oneTimePassword], then verifies key auth.
+  Future<void> installKeyOnServer() async {
+    final s = state;
+    final key = s.generatedKey;
+    if (key == null || !s.canInstallKey) return;
+    state = s.copyWith(installingKey: true, clearError: true, clearNotice: true);
+    try {
+      await ref.read(keyInstallerProvider).install(
+            host: s.host.trim(),
+            port: s.parsedPort ?? 22,
+            username: s.username.trim(),
+            password: s.oneTimePassword,
+            publicKeyLine: key.publicKeyOpenSsh,
+            privateKeyPem: key.privateKeyPem,
+          );
+      state = state.copyWith(
+        installingKey: false,
+        keyInstalled: true,
+        oneTimePassword: '',
+        notice: 'Key installed and verified on the server.',
+      );
+    } on Object catch (e) {
+      state = state.copyWith(
+        installingKey: false,
+        error: 'Could not install key: ${SshMoavController.describeError(e)}',
+      );
     }
   }
 

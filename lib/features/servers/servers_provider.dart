@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/moav_controller.dart';
 import '../../core/moav_controller_factory.dart';
 import '../../core/server_profile.dart';
 import '../../security/secure_cred_store.dart';
@@ -12,6 +13,19 @@ final moavControllerFactoryProvider = Provider<MoavControllerFactory>((ref) {
   return MoavControllerFactory(
     secretResolver: (profile) => store.readSecret(profile.id),
   );
+});
+
+/// One long-lived [MoavController] per saved server, so an SSH session opened
+/// for a ping can be reused by the deploy screen. Keyed by profile id; the
+/// profile itself is read (not watched) so list updates don't drop sessions.
+final moavControllerProvider =
+    Provider.family<MoavController, String>((ref, serverId) {
+  final profiles = ref.read(serversProvider).value ?? const <ServerProfile>[];
+  final profile = profiles.firstWhere(
+    (p) => p.id == serverId,
+    orElse: () => throw StateError('Unknown server $serverId'),
+  );
+  return ref.read(moavControllerFactoryProvider).forServer(profile);
 });
 
 /// The saved servers. Loaded from the secure store on first read.
@@ -36,6 +50,7 @@ class ServersNotifier extends AsyncNotifier<List<ServerProfile>> {
     final next = current.where((p) => p.id != id).toList(growable: false);
     await _store.saveProfiles(next);
     await _store.deleteSecret(id);
+    ref.invalidate(moavControllerProvider(id));
     state = AsyncData(next);
   }
 }

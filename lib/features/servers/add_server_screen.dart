@@ -102,6 +102,13 @@ class AddServerScreen extends ConsumerWidget {
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ],
+          if (form.notice != null) ...[
+            const SizedBox(height: 16),
+            Text(
+              form.notice!,
+              style: TextStyle(color: Theme.of(context).colorScheme.primary),
+            ),
+          ],
           const SizedBox(height: 24),
           FilledButton(
             onPressed: form.isValid && !form.submitting
@@ -162,7 +169,7 @@ class _AuthSection extends StatelessWidget {
           children: [
             const Text(
               'An ed25519 key is generated on this device. The private key '
-              'never leaves the secure store; you install the public key on '
+              'never leaves the secure store; only the public key goes on '
               'the server.',
             ),
             const SizedBox(height: 12),
@@ -173,12 +180,53 @@ class _AuthSection extends StatelessWidget {
                 label: const Text('Generate ed25519 key'),
               )
             else ...[
-              const Text('Public key (install on server):'),
+              const Text('Public key:'),
               const SizedBox(height: 4),
               SelectableText(
                 key.publicKeyOpenSsh,
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
               ),
+              const SizedBox(height: 16),
+              if (form.keyInstalled)
+                Row(
+                  children: [
+                    Icon(Icons.check_circle,
+                        color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 8),
+                    const Expanded(child: Text('Installed on the server')),
+                  ],
+                )
+              else ...[
+                Text(
+                  'Install it on the server now (uses the server password '
+                  'once, never stored), or add the line above to '
+                  '~/.ssh/authorized_keys yourself.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  decoration: const InputDecoration(
+                    labelText: 'Server password (one-time)',
+                  ),
+                  obscureText: true,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  onChanged: notifier.setOneTimePassword,
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed:
+                      form.canInstallKey ? notifier.installKeyOnServer : null,
+                  icon: form.installingKey
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.cloud_upload_outlined),
+                  label: const Text('Install key on server'),
+                ),
+              ],
             ],
           ],
         );

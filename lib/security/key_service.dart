@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:dartssh2/dartssh2.dart';
+import 'package:pinenacl/ed25519.dart' as ed25519;
 
 /// An ed25519 key pair held in memory only while the user is adding a server.
 class Ed25519KeyMaterial {
@@ -20,10 +24,49 @@ class KeyService {
 
   /// Generates a fresh ed25519 key pair on-device.
   ///
-  /// M1 follow-up: dartssh2 does not expose key *generation*, so this will use
-  /// a small ed25519 primitive and emit OpenSSH private-key format.
-  Future<Ed25519KeyMaterial> generateEd25519({String comment = 'moav-deploy'}) {
-    throw UnimplementedError('On-device key generation lands later in M1');
+  /// The seed comes from pinenacl's CSPRNG (the same primitive dartssh2 uses to
+  /// sign). The private key is serialised as an unencrypted
+  /// `OPENSSH PRIVATE KEY` block, which is what [SSHKeyPair.fromPem] consumes
+  /// for auth; the public line is standard `authorized_keys` syntax.
+  Future<Ed25519KeyMaterial> generateEd25519({
+    String comment = 'moav-deploy',
+  }) async {
+    final signing = ed25519.SigningKey.generate();
+    // OpenSSH stores the 64-byte (seed ‖ public) form as the private key.
+    final privateKey = Uint8List.fromList(signing.asTypedList);
+    final publicKey = Uint8List.fromList(signing.verifyKey.asTypedList);
+    final safeComment = sanitizeComment(comment);
+    final pair = OpenSSHEd25519KeyPair(publicKey, privateKey, safeComment);
+    return Ed25519KeyMaterial(
+      privateKeyPem: pair.toPem(),
+      publicKeyOpenSsh: publicKeyLine(pair, safeComment),
+    );
+  }
+
+  /// `ssh-ed25519 <base64 wire blob> <comment>`.
+  static String publicKeyLine(OpenSSHEd25519KeyPair pair, String comment) {
+    final blob = base64Encode(pair.toPublicKey().encode());
+    return comment.isEmpty
+        ? 'ssh-ed25519 $blob'
+        : 'ssh-ed25519 $blob $comment';
+  }
+
+  /// Comments end up in `authorized_keys`; keep them shell- and file-safe.
+  static String sanitizeComment(String comment) =>
+      comment.replaceAll(RegExp(r'[^A-Za-z0-9._@-]'), '-');
+
+  /// Derives the public `authorized_keys` line from a private key PEM, or
+  /// `null` if the PEM is not a single usable ed25519 key.
+  String? publicKeyFromPem(String pem, {String comment = 'moav-deploy'}) {
+    try {
+      final pairs = SSHKeyPair.fromPem(pem.trim());
+      final pair = pairs.whereType<OpenSSHEd25519KeyPair>().firstOrNull;
+      if (pair == null) return null;
+      final c = pair.comment.isEmpty ? comment : pair.comment;
+      return publicKeyLine(pair, sanitizeComment(c));
+    } on Object catch (_) {
+      return null;
+    }
   }
 
   /// Validates a pasted private key. Returns an error message, or `null` when
