@@ -33,7 +33,8 @@ abstract class MoavController {
   Future<Bundle> getBundle(String user);           // configs + QR payloads
   Future<TestMatrix> testUser(String name);        // per-protocol pass/fail
   Future<void> service(ServiceAction a);           // start/stop/restart/regenerate-users
-  Future<Monitoring> monitoring();                 // Grafana URL + key metrics
+  Future<ServiceStatusReport> status();            // moav status table + dashboard URLs
+  Future<Monitoring> monitoring();                 // Grafana URL/health + key metrics
 }
 ```
 
@@ -45,14 +46,38 @@ abstract class MoavController {
   defensively and **file an upstream issue on MoaV** to add JSON + a
   non-interactive install. Track the gaps in `docs/MOAV-CLI-GAPS.md`.
 - **Long installs survive backgrounding.** Never hold one live SSH session for
-  a multi-minute install. Launch it detached on the server
-  (`nohup … > /opt/moav/.deploy.log 2>&1 &` or a tmux session), return a job
-  handle, and poll `installStatus` by tailing that log on reconnect. iOS will
-  suspend the app; the server keeps working; we re-attach.
-- **Interactive installer:** `install.sh` prompts for domain / email / admin
-  password. Drive it non-interactively via env/answers file if MoaV supports
-  it; otherwise feed answers over the PTY as a stopgap and push the
-  env-driven install upstream.
+  a multi-minute install. The app uploads a small idempotent job to
+  `~/.moav-deploy/` on the server (script + mode-0600 spec, written over
+  stdin so secrets never hit `ps`), launches it with `setsid nohup … &`,
+  returns the PID as a job handle (persisted in the secure store), and polls
+  `installStatus` by tailing `~/.moav-deploy/deploy.log` on reconnect. The
+  log carries `[moav-deploy] step N/5` and `[moav-deploy] exit=<code>`
+  markers so status is derivable from the log alone. iOS will suspend the
+  app; the server keeps working; we re-attach.
+- **Install is idempotent and never destructive.** On a box that already has
+  `/opt/moav` the job keeps the checkout untouched (no `git pull`), fills only
+  empty/placeholder `.env` values, skips `moav bootstrap` when the box was
+  already bootstrapped, and leaves running services alone. Verified live
+  against yorkschool.xyz (git HEAD, `.env`, users, bundles and container set
+  identical before/after).
+- **Interactive installer:** `install.sh` has no `--yes`, but every prompt
+  falls back to a sane default when `/dev/tty` cannot be opened (which is the
+  case under `setsid`). Domain / email / admin password are not installer
+  inputs at all; they live in `/opt/moav/.env`, which the job writes before
+  running `moav bootstrap --yes`. Remaining gaps are in
+  `docs/MOAV-CLI-GAPS.md`.
+
+- **Manage & operate (M3/M4).** Command strings and parsers live in
+  `lib/core/moav_cli.dart`, separate from the transport, with fixture-based
+  unit tests. `user list`, `doctor` and `status` are text-parsed; `test` uses
+  `--json` (found as the trailing JSON document after Docker build noise).
+  Bundles are read over SFTP from `/opt/moav/outputs/bundles/<user>`; only
+  text configs are pulled and single-line links / WireGuard confs become QR
+  payloads. Usernames are validated on-device with the CLI's own rule before
+  they are shell-quoted, and `user revoke` is confirmed by re-listing since
+  the CLI always exits 0 for it. Prometheus is not published on the host, so
+  headline metrics go through `docker exec moav-prometheus wget` against the
+  port parsed from the container's `--web.listen-address`.
 
 ## Security
 
@@ -65,9 +90,11 @@ abstract class MoavController {
 
 ## Monitoring
 
-MoaV already ships Grafana + Prometheus. P1: surface the Grafana URL and a few
-headline numbers from `moav doctor` / the metrics endpoint; embed a Grafana
-panel via webview where practical. P2: richer native charts from the API.
+MoaV already ships Grafana + Prometheus. P1 (done): Grafana URL derived the
+same way `get_grafana_url` does from `.env`, `/api/health` for up/version,
+seven headline numbers from Prometheus instant queries, and Grafana embedded
+in a webview (with open-in-browser for self-signed certificates). P2: richer
+native charts from the API.
 
 ## Distribution
 

@@ -1,0 +1,39 @@
+ℹ Testing connectivity for user: carol
+ℹ Building client image (cached if unchanged)...
+#40 DONE 0.7s
+
+Xray 26.7.28 (Xray, Penetrates Everything.) 5ca6f4b (go1.26.5 linux/amd64)
+2026/09/14 06:03:02.621800 [Info] infra/conf/serial: Reading config: &{Name:/config/xdns-direct-config.json Format:json}
+{
+  "timestamp": "2026-09-14T06:03:19+00:00",
+  "config_dir": "/config",
+  "overall_status": "fail",
+  "summary": {
+    "pass": 3,
+    "fail": 1,
+    "warn": 1,
+    "skip": 1
+  },
+  "tests": {
+    "reality": {
+      "status": "pass",
+      "detail": "Connected via VLESS/Reality, exit IP: 203.0.113.8"
+    }
+,
+    "anytls": {
+      "status": "skip",
+      "detail": "No AnyTLS config found in bundle"
+    }
+,
+    "wireguard": {
+      "status": "warn",
+      "detail": "config valid; WireGuard tunnel not brought up"
+    }
+,
+    "telemt": {
+      "status": "fail",
+      "detail": "TCP connection to 203.0.113.8:993 failed (port blocked or service down)"
+    }
+
+  }
+}

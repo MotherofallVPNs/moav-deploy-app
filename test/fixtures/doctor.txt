@@ -1,0 +1,46 @@
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MoaV Doctor
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ℹ Running 15 diagnostic check(s)...
+
+docker - Check Docker and prerequisites
+    ✓ Docker 29.7.2 — running
+    ✓ Docker Compose 5.4.0
+    Docker disk: images=4.306GB, volumes=Volumes
+
+memory - Check available RAM
+    RAM: 1.9 GB total, 791 MB available (60% used)
+    ✓ Memory OK
+
+dns - Check DNS records for enabled protocols
+ℹ Expected server IP: 203.0.113.8
+✓ Main A record: example.org points to 203.0.113.8
+ℹ CDN check skipped: ENABLE_CDN is not true.
+
+services - Check running services vs enabled config
+    ✓ trusttunnel — running
+    ✗ sing-box — not running
+
+ports - Check required ports are available
+    ✓ Port 53 bound by MoaV dns-router
+
+host - Check CPU load, swap pressure and zombie processes
+    ✓ load 1.18 on 2 vCPU
+    ! 929 MiB swapped out (861 MiB RAM available)
+      Swap I/O shows up as latency on every connection.
+    ✓ 1 zombie process(es)
+
+updates - Check for MoaV updates
+    Current version: v2.2.2
+    ○ Update available: v2.2.4 (current: v2.2.2)
+      Run: moav update
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Doctor Summary
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ 13 check(s) passed
+✗ 2 check(s) failed

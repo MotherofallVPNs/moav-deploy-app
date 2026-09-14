@@ -8,27 +8,34 @@ the app installs and manages MoaV on yorkschool.xyz and shows its Grafana.
 ### M0. Project scaffold
 - Flutter app (iOS + Android), Riverpod state, `flutter_secure_storage`, `dartssh2`, `qr_flutter`, `webview_flutter`.
 - CI: `flutter analyze` + `flutter test` on push (GitHub Actions).
-- `MoavController` interface + `SshMoavController` skeleton (methods throwing `UnimplementedError`).
+- `MoavController` interface + `SshMoavController` skeleton (methods throwing `UnimplementedError`). ✅
 
-### M1. Connect & credentials
+### M1. Connect & credentials ✅
 - Add-server form: host, port, username, auth (generate/import ed25519 key **or** password).
 - Store creds in Secure Enclave / Keystore; biometric app-lock.
-- "Install my public key" helper. `ping()`: reachable + is `moav` installed?
+- "Install my public key" helper (one-time password, verified by a key-auth session). `ping()`: opens an SSH session, runs `moav --version`.
 
-### M2. Deploy
+### M2. Deploy ✅
 - `install(InstallSpec)`: run `install.sh` **detached**, return a job handle.
 - `installStatus`: tail the deploy log, render live progress; survive app suspend/reconnect.
-- Handle the domain/email/admin-password inputs (env-driven if MoaV supports it, PTY answers as stopgap).
+- Domain/email/admin-password are written to `.env` (only when unset) before `moav bootstrap --yes`; no PTY driving needed.
 
-### M3. Manage users
-- List / add / remove users (`moav user …`).
-- `getBundle`: pull a user's bundle over SFTP, render QR + share sheet.
-- `testUser`: run `moav test <user>`, show per-protocol pass/fail/warn.
+### M3. Manage users ✅
+- List / add / remove users (`moav user …`), parsed from the sectioned text
+  output; names validated client-side with the CLI's own rule.
+- `getBundle`: pull a user's bundle over SFTP, render one QR per phone link
+  (subscription, Reality, Hysteria2, Trojan, Shadowsocks, XHTTP, WireGuard,
+  AmneziaWG, MTProxy) with copy + share sheet.
+- `testUser`: `moav test <user> --json` parsed into a per-protocol matrix
+  (UI lands with M4's operate screen).
 
-### M4. Operate & monitor
-- Service controls: start / stop / restart / `regenerate-users`.
-- `doctor()` health view (green/red per check).
-- Grafana: surface URL + headline metrics; embed a panel via webview.
+### M4. Operate & monitor ✅
+- Service controls: start / stop / restart (all or one service) with
+  confirmation, `regenerate-users`; live status table from `moav status`.
+- `doctor()` health view (pass/warn/fail per check, expandable detail).
+- Per-user connectivity test screen (`moav test --json`).
+- Grafana: URL from `.env`, `/api/health` probe, headline metrics from
+  Prometheus (`docker exec`), embedded webview + open-in-browser.
 
 ### M5. Harden & ship P1
 - Error states, offline/timeout handling, redaction (never log secrets).
