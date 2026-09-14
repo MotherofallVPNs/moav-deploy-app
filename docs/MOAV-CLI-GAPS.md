@@ -29,3 +29,13 @@ against MoaV **v2.2.2** on yorkschool.xyz (2026-09-14).
 3. Ensure `.env` exists; fill only empty/placeholder `DOMAIN`, `ACME_EMAIL`, `ADMIN_PASSWORD`.
 4. `moav bootstrap --yes` **only** if `outputs/bundles` is empty (never bootstrapped).
 5. `moav start` only if step 4 ran; otherwise print `moav status` and leave services alone.
+
+## Eventual consistency of `moav user list` after add/revoke (found via live tests)
+`moav user add` / `moav user revoke` trigger an asynchronous service
+regeneration. On a busy box, `moav user list` can briefly report a stale or
+transient count (e.g. a just-revoked user reappearing, or an extra transient
+entry) for a few seconds before settling. The app's `SshMoavController` already
+re-lists to confirm add/remove, but clients must treat the user count as
+eventually consistent. Live tests poll with a bounded settle window rather than
+asserting on the first read. A `moav user list --json` with a definitive,
+post-regen view would remove this race (tracked in issue #8).

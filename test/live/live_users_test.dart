@@ -33,6 +33,22 @@ void main() {
   late final List<MoavUser> before;
   var created = false;
 
+  // `moav user add/revoke` kicks off an async service regeneration, so a busy
+  // box briefly reports an inconsistent user list. Poll until it settles
+  // rather than asserting on the first read. See docs/MOAV-CLI-GAPS.md.
+  Future<List<MoavUser>> settleUsers(
+    bool Function(List<MoavUser>) done, {
+    Duration timeout = const Duration(seconds: 90),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    var users = await controller.listUsers();
+    while (!done(users) && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(seconds: 3));
+      users = await controller.listUsers();
+    }
+    return users;
+  }
+
   setUpAll(() async {
     if (!enabled) return;
     final keyPem = File(keyPath!).readAsStringSync();
@@ -59,8 +75,9 @@ void main() {
           await controller.removeUser(testUser);
         }
       }
-      // Pre-existing users must be exactly as we found them.
-      final after = await controller.listUsers();
+      // Pre-existing users must be exactly as we found them once regen settles.
+      final after =
+          await settleUsers((u) => !u.any((e) => e.name == testUser));
       expect(after.map((u) => u.name).toSet(), before.map((u) => u.name).toSet());
     } finally {
       controller.dispose();
@@ -84,7 +101,8 @@ void main() {
     expect(added.bundleReady, isTrue,
         reason: 'moav user add should generate the bundle directory');
 
-    final listed = await controller.listUsers();
+    final listed = await settleUsers(
+        (u) => u.any((e) => e.name == testUser) && u.length == before.length + 1);
     expect(listed.map((u) => u.name), contains(testUser));
     expect(listed.length, before.length + 1);
 
@@ -109,7 +127,8 @@ void main() {
 
     await controller.removeUser(testUser);
     created = false;
-    final after = await controller.listUsers();
+    final after = await settleUsers(
+        (u) => !u.any((e) => e.name == testUser) && u.length == before.length);
     expect(after.any((u) => u.name == testUser), isFalse);
     expect(after.length, before.length);
     await expectLater(controller.getBundle(testUser), throwsStateError);
