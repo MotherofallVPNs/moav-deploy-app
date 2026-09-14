@@ -8,6 +8,7 @@ import '../server/server_screen.dart';
 import '../users/users_screen.dart';
 import 'add_server_screen.dart';
 import 'servers_provider.dart';
+import '../../widgets/error_view.dart';
 
 class ServersHomeScreen extends ConsumerWidget {
   const ServersHomeScreen({super.key});
@@ -20,7 +21,10 @@ class ServersHomeScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('MoaV Deploy')),
       body: servers.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Could not load servers: $e')),
+        error: (e, _) => ErrorView(
+          error: e,
+          onRetry: () => ref.invalidate(serversProvider),
+        ),
         data: (list) => list.isEmpty
             ? const _EmptyState()
             : ListView.separated(

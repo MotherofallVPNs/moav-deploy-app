@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
 import 'deploy_provider.dart';
+import '../../widgets/error_view.dart';
 
 /// Deploy MoaV on a server: collects installer inputs, launches the detached
 /// install, and streams the server-side log with live status.
@@ -132,10 +133,7 @@ class _InstallFormState extends State<_InstallForm> {
         ),
         if (s.error != null) ...[
           const SizedBox(height: 16),
-          Text(
-            s.error!,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
+          ErrorBanner(error: s.error!),
         ],
         const SizedBox(height: 24),
         FilledButton.icon(
@@ -233,9 +231,9 @@ class _JobViewState extends State<_JobView> {
               ),
               if (s.error != null) ...[
                 const SizedBox(height: 8),
-                Text(
-                  '${s.error} — will retry',
-                  style: TextStyle(color: scheme.error, fontSize: 12),
+                ErrorBanner(
+                  error: s.error!,
+                  trailing: s.polling ? 'Retrying automatically.' : null,
                 ),
               ],
             ],

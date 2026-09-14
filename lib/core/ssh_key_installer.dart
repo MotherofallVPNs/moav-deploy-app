@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:dartssh2/dartssh2.dart';
 
 import 'ssh_connection.dart';
+import 'app_error.dart';
 
 /// "Install my public key": appends a public key line to the remote user's
 /// `authorized_keys` over a password-authenticated session, then proves the
@@ -80,7 +81,14 @@ class SshKeyInstaller {
         timeout: timeout,
       );
     } on Object catch (e) {
-      throw StateError('Key was installed but key auth failed: $e');
+      throw AppError(
+        AppErrorKind.auth,
+        'The key was installed but the server still rejected it.',
+        hint: 'Check that PubkeyAuthentication is enabled in sshd_config and '
+            'that the home directory is not group-writable. '
+            '(${AppError.from(e).message})',
+        cause: e,
+      );
     }
     try {
       final out = await SshConnection.run(client, 'echo ok', timeout: timeout);

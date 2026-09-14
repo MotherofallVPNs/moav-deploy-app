@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'add_server_form.dart';
 import 'servers_provider.dart';
+import '../../widgets/error_view.dart';
 
 class AddServerScreen extends ConsumerWidget {
   const AddServerScreen({super.key});
@@ -97,10 +98,7 @@ class AddServerScreen extends ConsumerWidget {
           _AuthSection(form: form, notifier: notifier),
           if (form.error != null) ...[
             const SizedBox(height: 16),
-            Text(
-              form.error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
+            ErrorBanner(error: form.error!),
           ],
           if (form.notice != null) ...[
             const SizedBox(height: 16),
@@ -146,7 +144,7 @@ class AddServerScreen extends ConsumerWidget {
             secret: secret,
           );
     } on Object catch (e) {
-      notifier.setError('Could not save: $e');
+      notifier.setError('Could not save: ${errorSummary(e)}');
       return;
     }
     if (context.mounted) Navigator.of(context).pop();

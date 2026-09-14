@@ -6,7 +6,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
-import '../../core/ssh_moav_controller.dart';
+import '../../widgets/error_view.dart';
 import '../operate/user_test_screen.dart';
 import 'users_provider.dart';
 
@@ -44,11 +44,9 @@ class UserBundleScreen extends ConsumerWidget {
       ),
       body: bundle.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(SshMoavController.describeError(e), textAlign: TextAlign.center),
-          ),
+        error: (e, _) => ErrorView(
+          error: e,
+          onRetry: () => ref.invalidate(bundleProvider(key)),
         ),
         data: (b) => _BundleView(bundle: b),
       ),

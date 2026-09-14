@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/moav_controller.dart';
-import '../../core/ssh_moav_controller.dart';
+import '../../core/app_error.dart';
 import '../servers/servers_provider.dart';
 import '../users/users_provider.dart';
 
@@ -54,7 +54,7 @@ class ServiceActionsNotifier extends Notifier<ServiceActionState> {
       state = ServiceActionState(message: '${describe(action)} done');
     } on Object catch (e) {
       if (!ref.mounted) return;
-      state = ServiceActionState(error: SshMoavController.describeError(e));
+      state = ServiceActionState(error: AppError.from(e).summary);
     } finally {
       ref.invalidate(statusProvider(serverId));
       if (action.kind == ServiceActionKind.regenerateUsers) {

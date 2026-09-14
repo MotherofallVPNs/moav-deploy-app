@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/server_profile.dart';
 import '../../core/ssh_key_installer.dart';
-import '../../core/ssh_moav_controller.dart';
+import '../../core/app_error.dart';
 import '../../security/key_service.dart';
 
 /// Which credential the user chose on the add-server form.
@@ -174,7 +174,7 @@ class AddServerFormNotifier extends Notifier<AddServerFormState> {
         clearNotice: true,
       );
     } on Object catch (e) {
-      state = state.copyWith(error: 'Could not generate key: $e');
+      state = state.copyWith(error: 'Could not generate key: ${AppError.from(e).message}');
     }
   }
 
@@ -203,7 +203,7 @@ class AddServerFormNotifier extends Notifier<AddServerFormState> {
     } on Object catch (e) {
       state = state.copyWith(
         installingKey: false,
-        error: 'Could not install key: ${SshMoavController.describeError(e)}',
+        error: 'Could not install key: ${AppError.from(e, host: s.host.trim(), port: s.parsedPort).summary}',
       );
     }
   }

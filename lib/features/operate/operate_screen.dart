@@ -4,7 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
-import '../../core/ssh_moav_controller.dart';
+import '../../widgets/error_view.dart';
 import 'grafana_screen.dart';
 import 'operate_provider.dart';
 
@@ -152,10 +152,7 @@ class _ServicesTab extends ConsumerWidget {
           status.when(
             loading: () => const Center(child: Padding(
               padding: EdgeInsets.all(24), child: CircularProgressIndicator())),
-            error: (e, _) => _ErrorTile(
-              message: SshMoavController.describeError(e),
-              onRetry: () => ref.invalidate(statusProvider(profile.id)),
-            ),
+            error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(statusProvider(profile.id))),
             data: (s) => Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -256,10 +253,7 @@ class _HealthTab extends ConsumerWidget {
           ],
         ),
       ),
-      error: (e, _) => _ErrorTile(
-        message: SshMoavController.describeError(e),
-        onRetry: () => ref.invalidate(doctorProvider(profile.id)),
-      ),
+      error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(doctorProvider(profile.id))),
       data: (r) {
         final fails = r.checks.where((c) => c.result == CheckResult.fail).length;
         final warns = r.checks.where((c) => c.result == CheckResult.warn).length;
@@ -351,10 +345,7 @@ class _MonitoringTab extends ConsumerWidget {
     final mon = ref.watch(monitoringProvider(profile.id));
     return mon.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => _ErrorTile(
-        message: SshMoavController.describeError(e),
-        onRetry: () => ref.invalidate(monitoringProvider(profile.id)),
-      ),
+      error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(monitoringProvider(profile.id))),
       data: (m) => RefreshIndicator(
         onRefresh: () => ref.refresh(monitoringProvider(profile.id).future),
         child: ListView(
@@ -478,30 +469,6 @@ class _MetricTile extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ErrorTile extends StatelessWidget {
-  const _ErrorTile({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.error_outline, size: 40),
-          const SizedBox(height: 12),
-          Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-          OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
-        ],
       ),
     );
   }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import '../../core/app_error.dart';
+import '../../widgets/error_view.dart';
 
 /// Grafana embedded in a webview. Login is Grafana's own; nothing is stored.
 class GrafanaScreen extends StatefulWidget {
@@ -63,22 +65,18 @@ class _GrafanaScreenState extends State<GrafanaScreen> {
             : null,
       ),
       body: _error != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Could not load Grafana: $_error', textAlign: TextAlign.center),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Self-signed certificates are rejected by the in-app view; '
-                      'use "Open in browser" and accept the certificate there.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
+          ? ErrorView(
+              error: AppError(
+                AppErrorKind.unreachable,
+                'Could not load Grafana.',
+                hint: 'Self-signed certificates are rejected by the in-app view; '
+                    'use "Open in browser" and accept the certificate there.',
+                detail: _error,
               ),
+              onRetry: () {
+                setState(() => _error = null);
+                _controller.reload();
+              },
             )
           : WebViewWidget(controller: _controller),
     );

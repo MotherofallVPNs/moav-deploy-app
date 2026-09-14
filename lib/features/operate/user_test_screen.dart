@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
-import '../../core/ssh_moav_controller.dart';
+import '../../widgets/error_view.dart';
 import 'operate_provider.dart';
 import 'operate_screen.dart';
 
@@ -50,11 +50,10 @@ class UserTestScreen extends ConsumerWidget {
             ],
           ),
         ),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(SshMoavController.describeError(e), textAlign: TextAlign.center),
-          ),
+        error: (e, _) => ErrorView(
+          error: e,
+          onRetry: () => ref.invalidate(userTestProvider(key)),
+          retryLabel: 'Run again',
         ),
         data: (m) => ListView(
           padding: const EdgeInsets.all(16),

@@ -1,11 +1,16 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/app.dart';
+import 'package:moav_deploy/core/app_error.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
 import 'package:moav_deploy/core/moav_controller_factory.dart';
 import 'package:moav_deploy/core/server_profile.dart';
+import 'package:moav_deploy/core/ssh_connection.dart';
 import 'package:moav_deploy/core/ssh_key_installer.dart';
 import 'package:moav_deploy/features/servers/add_server_form.dart';
 import 'package:moav_deploy/features/servers/servers_provider.dart';
@@ -72,6 +77,17 @@ class _FakeController implements MoavController {
   final List<InstallStatus> statuses;
   InstallSpec? installedSpec;
   int statusCalls = 0;
+
+  /// Thrown by the next controller call, then cleared (fault injection).
+  Object? nextError;
+
+  void _maybeFail() {
+    final e = nextError;
+    if (e != null) {
+      nextError = null;
+      throw e;
+    }
+  }
   final users = <MoavUser>[
     const MoavUser(name: 'alice', bundleReady: true, protocols: ['sing-box']),
     const MoavUser(name: 'bob'),
@@ -84,6 +100,7 @@ class _FakeController implements MoavController {
 
   @override
   Future<InstallHandle> install(InstallSpec spec) async {
+    _maybeFail();
     installedSpec = spec;
     return const InstallHandle(jobId: '4242', logPath: '.moav-deploy/deploy.log');
   }
@@ -97,7 +114,10 @@ class _FakeController implements MoavController {
   }
 
   @override
-  Future<List<MoavUser>> listUsers() async => List.of(users);
+  Future<List<MoavUser>> listUsers() async {
+    _maybeFail();
+    return List.of(users);
+  }
 
   @override
   Future<MoavUser> addUser(String name) async {
@@ -115,6 +135,7 @@ class _FakeController implements MoavController {
 
   @override
   Future<Bundle> getBundle(String user) async {
+    _maybeFail();
     log.add('bundle $user');
     if (!users.any((u) => u.name == user)) throw StateError('No bundle');
     return Bundle(
@@ -148,7 +169,12 @@ class _FakeController implements MoavController {
       );
 
   @override
-  Future<ServiceStatusReport> status() async => ServiceStatusReport(
+  Future<ServiceStatusReport> status() async {
+    _maybeFail();
+    return _status();
+  }
+
+  ServiceStatusReport _status() => ServiceStatusReport(
         collectedAt: DateTime(2026),
         version: '2.2.2',
         defaultProfiles: const ['proxy', 'admin'],
@@ -207,6 +233,7 @@ class _FakeFactory extends MoavControllerFactory {
 
 Widget _app(_FakeCredStore store, {List<Override> overrides = const []}) =>
     ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         secureCredStoreProvider.overrideWithValue(store),
         ...overrides,
@@ -584,6 +611,112 @@ void main() {
     expect(find.text('1 pass · 0 warn · 1 fail · 1 skipped'), findsOneWidget);
     expect(find.text('reality'), findsOneWidget);
     expect(find.text('port blocked'), findsOneWidget);
+  });
+
+  testWidgets('users screen: timeout shows a hint and Retry recovers',
+      (tester) async {
+    final store = _FakeCredStore()..profiles = [_profile];
+    final controller = _FakeController(const [])
+      ..nextError = TimeoutException('listUsers');
+    await tester.pumpWidget(_app(
+      store,
+      overrides: [
+        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+      ],
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('York'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Users'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('The server did not respond in time.'), findsOneWidget);
+    expect(find.textContaining('Check the connection'), findsOneWidget);
+    expect(find.text('alice'), findsNothing);
+    expect(find.byIcon(Icons.timer_off_outlined), findsOneWidget);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(find.text('alice'), findsOneWidget);
+    expect(find.text('Retry'), findsNothing);
+  });
+
+  testWidgets('bundle screen: failed command shows exit code, never the secret',
+      (tester) async {
+    final store = _FakeCredStore()..profiles = [_profile];
+    final controller = _FakeController(const []);
+    await tester.pumpWidget(_app(
+      store,
+      overrides: [
+        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+      ],
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('York'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Users'));
+    await tester.pumpAndSettle();
+    controller.nextError = SshCommandException(
+      'cat bundle',
+      const SshOutput(
+        stdout: 'ADMIN_PASSWORD="hunter2"\nvless://abc@h:443#x',
+        stderr: '',
+        exitCode: 2,
+      ),
+    );
+    await tester.tap(find.text('alice'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('The command failed on the server (exit 2).'), findsOneWidget);
+    await tester.tap(find.text('Details'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('hunter2'), findsNothing);
+    expect(find.textContaining('vless://abc'), findsNothing);
+    expect(find.textContaining('[redacted]'), findsOneWidget);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(find.byType(QrImageView), findsOneWidget);
+  });
+
+  testWidgets('services tab: unreachable host shows Retry; deploy shows a banner',
+      (tester) async {
+    final store = _FakeCredStore()..profiles = [_profile];
+    final controller = _FakeController(const [])
+      ..nextError = const SocketException(
+        'Connection failed',
+        osError: OSError('Connection refused', 61),
+      );
+    await tester.pumpWidget(_app(
+      store,
+      overrides: [
+        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+      ],
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('York'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Services'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connection refused by the server.'), findsOneWidget);
+    expect(find.byIcon(Icons.cloud_off), findsOneWidget);
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(find.text('sing-box'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    controller.nextError = const SocketException(
+      'Failed host lookup',
+      osError: OSError('nodename nor servname provided, or not known', 8),
+    );
+    await tester.tap(find.text('Deploy'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start install'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not find the server.'), findsOneWidget);
+    expect(find.textContaining('Check the hostname'), findsOneWidget);
+    expect(find.text('Start install'), findsOneWidget); // form stays, can retry
   });
 
   test('form validation', () {

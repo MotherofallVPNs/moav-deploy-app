@@ -82,6 +82,9 @@ class AppError implements Exception {
   static AppError from(Object e, {String? host, int? port}) {
     if (e is AppError) return e;
 
+    // Plain strings are already user-facing messages from our own code.
+    if (e is String) return AppError(AppErrorKind.unknown, _clip(e, 400));
+
     if (e is TimeoutException) {
       return AppError(
         AppErrorKind.timeout,
@@ -260,3 +263,9 @@ class AppError implements Exception {
     return '…${t.substring(t.length - max)}';
   }
 }
+
+/// Riverpod 3 retries failed providers with exponential backoff by default.
+/// For an SSH tool every connection attempt is a network signal and a
+/// potential auth lockout, so retries are always explicit (the Retry button
+/// or the deploy poller), never implicit. Install on the root ProviderScope.
+Duration? noProviderRetry(int retryCount, Object error) => null;

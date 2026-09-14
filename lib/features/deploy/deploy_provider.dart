@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/moav_controller.dart';
-import '../../core/ssh_moav_controller.dart';
+import '../../core/app_error.dart';
 import '../servers/servers_provider.dart';
 
 /// Screen state for a server's detached install job.
@@ -21,7 +21,8 @@ class DeployState {
   final InstallStatus? status;
   final bool starting;
   final bool polling;
-  final String? error;
+  /// Classified failure of the last start/poll, if any.
+  final AppError? error;
 
   bool get isRunning =>
       handle != null && !(status?.isTerminal ?? false) && status?.phase != InstallPhase.unknown;
@@ -33,7 +34,7 @@ class DeployState {
     bool clearStatus = false,
     bool? starting,
     bool? polling,
-    String? error,
+    AppError? error,
     bool clearError = false,
   }) =>
       DeployState(
@@ -93,7 +94,7 @@ class DeployNotifier extends Notifier<DeployState> {
       if (!ref.mounted) return;
       state = state.copyWith(
         starting: false,
-        error: SshMoavController.describeError(e),
+        error: AppError.from(e),
       );
     }
   }
@@ -110,7 +111,7 @@ class DeployNotifier extends Notifier<DeployState> {
       if (status.isTerminal) _stopPolling();
     } on Object catch (e) {
       if (!ref.mounted) return;
-      state = state.copyWith(error: SshMoavController.describeError(e));
+      state = state.copyWith(error: AppError.from(e));
     }
   }
 

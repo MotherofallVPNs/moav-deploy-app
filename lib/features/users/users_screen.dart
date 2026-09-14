@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
-import '../../core/ssh_moav_controller.dart';
+import '../../widgets/error_view.dart';
 import 'user_bundle_screen.dart';
 import 'users_provider.dart';
 
@@ -34,10 +34,7 @@ class UsersScreen extends ConsumerWidget {
       ),
       body: users.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => _ErrorState(
-          message: SshMoavController.describeError(e),
-          onRetry: notifier.refresh,
-        ),
+        error: (e, _) => ErrorView(error: e, onRetry: notifier.refresh),
         data: (list) => list.isEmpty
             ? const Center(child: Text('No users yet. Add one to get a bundle.'))
             : RefreshIndicator(
@@ -84,7 +81,7 @@ class UsersScreen extends ConsumerWidget {
     } on Object catch (e) {
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
-        SnackBar(content: Text('Could not add user: ${SshMoavController.describeError(e)}')),
+        SnackBar(content: Text('Could not add user: ${errorSummary(e)}')),
       );
     }
   }
@@ -121,7 +118,7 @@ class UsersScreen extends ConsumerWidget {
       messenger.showSnackBar(SnackBar(content: Text('Revoked ${user.name}')));
     } on Object catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Could not revoke: ${SshMoavController.describeError(e)}')),
+        SnackBar(content: Text('Could not revoke: ${errorSummary(e)}')),
       );
     }
   }
@@ -215,32 +212,6 @@ class _AddUserDialogState extends State<_AddUserDialog> {
           child: const Text('Add'),
         ),
       ],
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 40),
-            const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 12),
-            OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
-          ],
-        ),
-      ),
     );
   }
 }
