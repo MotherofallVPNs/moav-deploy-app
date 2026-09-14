@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:dartssh2/dartssh2.dart';
 
+import 'app_error.dart';
 import 'install_script.dart';
 import 'moav_cli.dart';
 import 'moav_controller.dart';
@@ -54,7 +55,10 @@ class SshMoavController implements MoavController {
       return parsePing(out.combined);
     } on Object catch (e) {
       _dropClient();
-      return ConnectionCheck(reachable: false, error: describeError(e));
+      return ConnectionCheck(
+        reachable: false,
+        error: AppError.from(e, host: profile.host, port: profile.port).summary,
+      );
     }
   }
 
@@ -250,7 +254,7 @@ class SshMoavController implements MoavController {
     _validateName(user);
     final client = await _connected();
     final dir = '${MoavCli.bundlesDir}/$user';
-    final sftp = await client.sftp();
+    final sftp = await client.sftp().timeout(connectTimeout);
     try {
       final List<SftpName> names;
       try {
@@ -347,9 +351,14 @@ class SshMoavController implements MoavController {
         allowFailure: allowFailure,
         timeout: timeout,
       );
-    } on TimeoutException {
+    } on SshCommandException {
+      rethrow; // the session is fine; the command just failed
+    } on Object catch (e) {
+      // Timeouts, socket errors and SSH transport errors all leave the
+      // cached client in an unknown state; drop it so the next call
+      // reconnects instead of failing again on a dead session.
       _dropClient();
-      rethrow;
+      throw AppError.from(e, host: profile.host, port: profile.port);
     }
   }
 
@@ -381,16 +390,20 @@ class SshMoavController implements MoavController {
       throw StateError('No stored credential for ${profile.label}');
     }
     final usePassword = profile.authMethod == SshAuthMethod.password;
-    final client = await SshConnection.open(
-      host: profile.host,
-      port: profile.port,
-      username: profile.username,
-      privateKeyPem: usePassword ? null : secret,
-      password: usePassword ? secret : null,
-      timeout: connectTimeout,
-    );
-    _client = client;
-    return client;
+    try {
+      final client = await SshConnection.open(
+        host: profile.host,
+        port: profile.port,
+        username: profile.username,
+        privateKeyPem: usePassword ? null : secret,
+        password: usePassword ? secret : null,
+        timeout: connectTimeout,
+      );
+      _client = client;
+      return client;
+    } on Object catch (e) {
+      throw AppError.from(e, host: profile.host, port: profile.port);
+    }
   }
 
   void _dropClient() {
@@ -399,13 +412,7 @@ class SshMoavController implements MoavController {
     if (c != null && !c.isClosed) c.close();
   }
 
-  /// Error text safe to surface. Never includes credentials.
-  static String describeError(Object e) {
-    if (e is TimeoutException) return 'Connection timed out';
-    if (e is SSHAuthFailError || e is SSHAuthAbortError) {
-      return 'Authentication failed';
-    }
-    final text = e.toString().replaceFirst(RegExp(r'^\w+Exception: '), '');
-    return text.length > 200 ? '${text.substring(0, 200)}…' : text;
-  }
+  /// One-line error text safe to surface. Never includes credentials or a
+  /// stack trace. Prefer [AppError.from] when the UI can show a hint too.
+  static String describeError(Object e) => AppError.from(e).message;
 }

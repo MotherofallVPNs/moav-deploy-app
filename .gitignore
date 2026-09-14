@@ -29,3 +29,7 @@ android/local.properties
 android/key.properties
 android/**/GeneratedPluginRegistrant.java
 android/app/.cxx/
+
+# orchestrator scratch files
+.worker-prompt-*.txt
+.worker.log.*
