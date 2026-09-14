@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
 import '../../core/ssh_moav_controller.dart';
+import '../operate/user_test_screen.dart';
 import 'users_provider.dart';
 
 /// One user's client configs: a QR per phone-friendly link, copy and share.
@@ -29,6 +30,11 @@ class UserBundleScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text(user),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.network_check),
+            tooltip: 'Test connectivity',
+            onPressed: () => Navigator.of(context).push(UserTestScreen.route(profile, user)),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Re-fetch bundle',

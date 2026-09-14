@@ -33,7 +33,8 @@ abstract class MoavController {
   Future<Bundle> getBundle(String user);           // configs + QR payloads
   Future<TestMatrix> testUser(String name);        // per-protocol pass/fail
   Future<void> service(ServiceAction a);           // start/stop/restart/regenerate-users
-  Future<Monitoring> monitoring();                 // Grafana URL + key metrics
+  Future<ServiceStatusReport> status();            // moav status table + dashboard URLs
+  Future<Monitoring> monitoring();                 // Grafana URL/health + key metrics
 }
 ```
 
@@ -66,6 +67,18 @@ abstract class MoavController {
   running `moav bootstrap --yes`. Remaining gaps are in
   `docs/MOAV-CLI-GAPS.md`.
 
+- **Manage & operate (M3/M4).** Command strings and parsers live in
+  `lib/core/moav_cli.dart`, separate from the transport, with fixture-based
+  unit tests. `user list`, `doctor` and `status` are text-parsed; `test` uses
+  `--json` (found as the trailing JSON document after Docker build noise).
+  Bundles are read over SFTP from `/opt/moav/outputs/bundles/<user>`; only
+  text configs are pulled and single-line links / WireGuard confs become QR
+  payloads. Usernames are validated on-device with the CLI's own rule before
+  they are shell-quoted, and `user revoke` is confirmed by re-listing since
+  the CLI always exits 0 for it. Prometheus is not published on the host, so
+  headline metrics go through `docker exec moav-prometheus wget` against the
+  port parsed from the container's `--web.listen-address`.
+
 ## Security
 
 - Keys generated on-device (ed25519), stored in iOS Keychain/Secure Enclave and
@@ -77,9 +90,11 @@ abstract class MoavController {
 
 ## Monitoring
 
-MoaV already ships Grafana + Prometheus. P1: surface the Grafana URL and a few
-headline numbers from `moav doctor` / the metrics endpoint; embed a Grafana
-panel via webview where practical. P2: richer native charts from the API.
+MoaV already ships Grafana + Prometheus. P1 (done): Grafana URL derived the
+same way `get_grafana_url` does from `.env`, `/api/health` for up/version,
+seven headline numbers from Prometheus instant queries, and Grafana embedded
+in a webview (with open-in-browser for self-signed certificates). P2: richer
+native charts from the API.
 
 ## Distribution
 

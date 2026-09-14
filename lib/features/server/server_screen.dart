@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/server_profile.dart';
 import '../deploy/deploy_screen.dart';
+import '../operate/operate_screen.dart';
 import '../users/users_screen.dart';
 
 /// Hub for one server: everything the app can do with it.
@@ -30,6 +31,26 @@ class ServerScreen extends StatelessWidget {
             title: 'Users',
             subtitle: 'Add, revoke, share bundles and QR codes',
             onTap: () => Navigator.of(context).push(UsersScreen.route(profile)),
+          ),
+          _HubTile(
+            icon: Icons.settings_outlined,
+            title: 'Services',
+            subtitle: 'Start, stop, restart; regenerate user bundles',
+            onTap: () => Navigator.of(context).push(OperateScreen.route(profile)),
+          ),
+          _HubTile(
+            icon: Icons.monitor_heart_outlined,
+            title: 'Health',
+            subtitle: 'moav doctor, check by check',
+            onTap: () => Navigator.of(context)
+                .push(OperateScreen.route(profile, tab: OperateTab.health)),
+          ),
+          _HubTile(
+            icon: Icons.insights_outlined,
+            title: 'Monitoring',
+            subtitle: 'Grafana and headline metrics',
+            onTap: () => Navigator.of(context)
+                .push(OperateScreen.route(profile, tab: OperateTab.monitoring)),
           ),
           _HubTile(
             icon: Icons.rocket_launch_outlined,

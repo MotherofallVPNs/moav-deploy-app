@@ -29,10 +29,13 @@ the app installs and manages MoaV on yorkschool.xyz and shows its Grafana.
 - `testUser`: `moav test <user> --json` parsed into a per-protocol matrix
   (UI lands with M4's operate screen).
 
-### M4. Operate & monitor
-- Service controls: start / stop / restart / `regenerate-users`.
-- `doctor()` health view (green/red per check).
-- Grafana: surface URL + headline metrics; embed a panel via webview.
+### M4. Operate & monitor ✅
+- Service controls: start / stop / restart (all or one service) with
+  confirmation, `regenerate-users`; live status table from `moav status`.
+- `doctor()` health view (pass/warn/fail per check, expandable detail).
+- Per-user connectivity test screen (`moav test --json`).
+- Grafana: URL from `.env`, `/api/health` probe, headline metrics from
+  Prometheus (`docker exec`), embedded webview + open-in-browser.
 
 ### M5. Harden & ship P1
 - Error states, offline/timeout handling, redaction (never log secrets).

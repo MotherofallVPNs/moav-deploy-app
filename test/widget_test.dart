@@ -138,6 +138,60 @@ class _FakeController implements MoavController {
   }
 
   @override
+  Future<DoctorReport> doctor() async => DoctorReport(
+        collectedAt: DateTime(2026, 9, 14, 8),
+        checks: const [
+          DoctorCheck(name: 'docker', result: CheckResult.pass, detail: 'Check Docker\n✓ Docker 29 — running'),
+          DoctorCheck(name: 'host', result: CheckResult.warn, detail: 'Check CPU load\n! 929 MiB swapped out'),
+          DoctorCheck(name: 'services', result: CheckResult.fail, detail: 'Check services\n✗ sing-box — not running'),
+        ],
+      );
+
+  @override
+  Future<ServiceStatusReport> status() async => ServiceStatusReport(
+        collectedAt: DateTime(2026),
+        version: '2.2.2',
+        defaultProfiles: const ['proxy', 'admin'],
+        grafanaUrl: Uri.parse('https://example.org:9444'),
+        services: const [
+          ServiceStatus(name: 'sing-box', state: ServiceState.running, uptime: '7 days', ports: ['443']),
+          ServiceStatus(name: 'certbot', state: ServiceState.exited),
+        ],
+      );
+
+  @override
+  Future<void> service(ServiceAction action) async {
+    log.add('service ${action.kind.name} ${action.service}');
+  }
+
+  @override
+  Future<Monitoring> monitoring() async => Monitoring(
+        grafanaUrl: Uri.parse('https://example.org:9444'),
+        adminUrl: Uri.parse('https://example.org:9443'),
+        grafanaHealthy: true,
+        grafanaVersion: '13.1.3',
+        metrics: const [
+          Metric(name: 'Load (1m)', value: '1.18'),
+          Metric(name: 'Inbound', value: '33 B', unit: '/s'),
+        ],
+      );
+
+  @override
+  Future<TestMatrix> testUser(String name) async {
+    log.add('test $name');
+    return TestMatrix(
+      user: name,
+      ranAt: DateTime(2026),
+      overall: CheckResult.fail,
+      results: const [
+        ProtocolTest(protocol: 'reality', result: CheckResult.pass, detail: 'Connected'),
+        ProtocolTest(protocol: 'telemt', result: CheckResult.fail, detail: 'port blocked'),
+        ProtocolTest(protocol: 'anytls', result: CheckResult.skip, detail: 'no config'),
+      ],
+    );
+  }
+
+  @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('${invocation.memberName}');
 }
@@ -439,6 +493,97 @@ void main() {
     expect(controller.log, contains('remove carol'));
     expect(find.text('carol'), findsNothing);
     expect(controller.users.map((u) => u.name), ['alice', 'bob']);
+  });
+
+  testWidgets('operate: services with confirmed restart, health, monitoring',
+      (tester) async {
+    final store = _FakeCredStore()..profiles = [_profile];
+    final controller = _FakeController(const []);
+    await tester.pumpWidget(_app(
+      store,
+      overrides: [
+        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+      ],
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('York'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Services'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('MoaV 2.2.2 · 1 of 2 running'), findsOneWidget);
+    expect(find.text('sing-box'), findsOneWidget);
+    expect(find.textContaining('up 7 days'), findsOneWidget);
+
+    // Restart all asks first; cancel does nothing.
+    await tester.tap(find.text('Restart all'));
+    await tester.pumpAndSettle();
+    expect(find.text('Restart all services?'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(controller.log, isNot(contains(startsWith('service'))));
+
+    // Per-service stop goes through after confirmation.
+    await tester.tap(find.byIcon(Icons.more_vert).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Stop'));
+    await tester.pumpAndSettle();
+    expect(find.text('Stop sing-box?'), findsOneWidget);
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(controller.log, contains('service stop sing-box'));
+    expect(find.text('Stop sing-box done'), findsOneWidget);
+
+    // Start all needs no confirmation.
+    await tester.tap(find.text('Start all'));
+    await tester.pumpAndSettle();
+    expect(controller.log, contains('service start null'));
+
+    // Health tab shows doctor checks with the failing one flagged.
+    await tester.tap(find.text('Health'));
+    await tester.pumpAndSettle();
+    expect(find.text('1 check(s) failing'), findsOneWidget);
+    expect(find.text('docker'), findsOneWidget);
+    expect(find.byIcon(Icons.cancel), findsWidgets);
+    await tester.tap(find.text('services'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('sing-box — not running'), findsOneWidget);
+
+    // Monitoring tab shows Grafana health, URL and metrics.
+    await tester.tap(find.text('Monitoring'));
+    await tester.pumpAndSettle();
+    expect(find.text('Grafana 13.1.3 is up'), findsOneWidget);
+    expect(find.text('https://example.org:9444'), findsOneWidget);
+    expect(find.text('Load (1m)'), findsOneWidget);
+    expect(find.text('33 B/s'), findsOneWidget);
+    expect(find.text('Admin dashboard'), findsOneWidget);
+  });
+
+  testWidgets('user connectivity test shows the protocol matrix',
+      (tester) async {
+    final store = _FakeCredStore()..profiles = [_profile];
+    final controller = _FakeController(const []);
+    await tester.pumpWidget(_app(
+      store,
+      overrides: [
+        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+      ],
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('York'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Users'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('alice'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.network_check));
+    await tester.pumpAndSettle();
+
+    expect(controller.log, contains('test alice'));
+    expect(find.text('Some protocols need attention'), findsOneWidget);
+    expect(find.text('1 pass · 0 warn · 1 fail · 1 skipped'), findsOneWidget);
+    expect(find.text('reality'), findsOneWidget);
+    expect(find.text('port blocked'), findsOneWidget);
   });
 
   test('form validation', () {
