@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dartssh2/dartssh2.dart';
 
+import 'install_script.dart';
 import 'moav_controller.dart';
 import 'server_profile.dart';
 import 'ssh_connection.dart';
@@ -34,7 +35,7 @@ class SshMoavController implements MoavController {
   SSHClient? _client;
 
   /// Where the detached installer writes its log on the server.
-  static const deployLogPath = '.moav-deploy/deploy.log';
+  static const deployLogPath = InstallScript.logPath;
 
   /// Opens an SSH session and runs `echo __ok__; moav --version` to report
   /// reachability, whether auth works, and the installed MoaV version.
@@ -79,16 +80,112 @@ class SshMoavController implements MoavController {
     );
   }
 
-  /// M2: uploads a detached, idempotent install job and returns its PID.
+  /// Uploads [InstallScript] and its spec file to `~/.moav-deploy/`, then
+  /// launches it with `setsid nohup … &` so it survives the SSH session and
+  /// the app being backgrounded. Returns the PID as the job id.
+  ///
+  /// Idempotent on the server side (see [InstallScript]); if a job is still
+  /// running its handle is returned instead of starting a second one.
   @override
-  Future<InstallHandle> install(InstallSpec spec) {
-    throw UnimplementedError('install: M2');
+  Future<InstallHandle> install(InstallSpec spec) async {
+    final client = await _connected();
+    await SshConnection.writeFile(
+      client,
+      InstallScript.scriptPath,
+      InstallScript.script,
+      mode: '700',
+    );
+    await SshConnection.writeFile(
+      client,
+      InstallScript.specPath,
+      InstallScript.spec(spec),
+    );
+    final out = await SshConnection.run(client, InstallScript.launch);
+    final m = RegExp(r'^(STARTED|RUNNING) (\d+)', multiLine: true)
+        .firstMatch(out.stdout);
+    if (m == null) {
+      throw StateError('Could not start install: ${out.combined.trim()}');
+    }
+    return InstallHandle(jobId: m.group(2)!, logPath: InstallScript.logPath);
   }
 
-  /// M2: `kill -0 <pid>; tail` the deploy log.
+  /// `kill -0 <pid>; tail -n 400 ~/.moav-deploy/deploy.log`.
+  ///
+  /// Phase is derived from the terminal `[moav-deploy] exit=` marker first,
+  /// then process liveness; progress from the latest `step N/5` marker.
   @override
-  Future<InstallStatus> installStatus(InstallHandle handle) {
-    throw UnimplementedError('installStatus: M2');
+  Future<InstallStatus> installStatus(InstallHandle handle) async {
+    final client = await _connected();
+    final out = await SshConnection.run(
+      client,
+      InstallScript.status(handle.jobId),
+      allowFailure: true,
+    );
+    return parseInstallStatus(out.stdout);
+  }
+
+  static InstallStatus parseInstallStatus(String raw) {
+    final idx = raw.indexOf('__LOG__');
+    final head = idx < 0 ? raw : raw.substring(0, idx);
+    final alive = head.contains('ALIVE');
+    final log = idx < 0 ? '' : raw.substring(idx + '__LOG__'.length);
+    final lines = SshConnection.stripAnsi(log)
+        .split('\n')
+        .map((l) => l.trimRight())
+        .toList();
+    while (lines.isNotEmpty && lines.first.isEmpty) {
+      lines.removeAt(0);
+    }
+    while (lines.isNotEmpty && lines.last.isEmpty) {
+      lines.removeLast();
+    }
+
+    int? exitCode;
+    int step = 0;
+    String? stepTitle;
+    for (final l in lines) {
+      if (l.startsWith(InstallScript.exitMarker)) {
+        exitCode = int.tryParse(l.substring(InstallScript.exitMarker.length).trim());
+      } else if (l.startsWith(InstallScript.stepMarker)) {
+        final m = RegExp(r'step (\d+)/\d+: (.*)').firstMatch(l);
+        if (m != null) {
+          step = int.parse(m.group(1)!);
+          stepTitle = m.group(2);
+        }
+      }
+    }
+    final progress = step == 0 ? null : step / InstallScript.totalSteps;
+
+    if (exitCode != null) {
+      return InstallStatus(
+        phase: exitCode == 0 ? InstallPhase.succeeded : InstallPhase.failed,
+        logTail: lines,
+        progress: exitCode == 0 ? 1.0 : progress,
+        message: exitCode == 0
+            ? 'Install finished'
+            : 'Install failed (exit $exitCode)',
+      );
+    }
+    if (alive) {
+      return InstallStatus(
+        phase: step == 0 ? InstallPhase.pending : InstallPhase.running,
+        logTail: lines,
+        progress: progress,
+        message: stepTitle,
+      );
+    }
+    if (lines.isEmpty) {
+      return const InstallStatus(
+        phase: InstallPhase.unknown,
+        message: 'No install log found on the server',
+      );
+    }
+    return InstallStatus(
+      phase: InstallPhase.failed,
+      logTail: lines,
+      progress: progress,
+      message: 'Install process ended without reporting a result',
+    );
   }
 
   /// `moav doctor --json` (falls back to parsing text output).

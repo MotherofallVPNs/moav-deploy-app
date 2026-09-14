@@ -26,6 +26,7 @@ class SecureCredStore {
 
   static const _profilesKey = 'moav.servers.v1';
   static String _secretKey(String serverId) => 'moav.secret.v1.$serverId';
+  static String _installKey(String serverId) => 'moav.install.v1.$serverId';
 
   Future<List<ServerProfile>> loadProfiles() async {
     final raw = await _storage.read(key: _profilesKey);
@@ -50,6 +51,20 @@ class SecureCredStore {
 
   Future<void> deleteSecret(String serverId) =>
       _storage.delete(key: _secretKey(serverId));
+
+  /// Remembers a detached install job so it can be re-attached after the app
+  /// was suspended or restarted. Stored as JSON (see `InstallHandle.toJson`).
+  Future<void> writeInstallHandle(String serverId, Map<String, Object?> json) =>
+      _storage.write(key: _installKey(serverId), value: jsonEncode(json));
+
+  Future<Map<String, Object?>?> readInstallHandle(String serverId) async {
+    final raw = await _storage.read(key: _installKey(serverId));
+    if (raw == null || raw.isEmpty) return null;
+    return jsonDecode(raw) as Map<String, Object?>;
+  }
+
+  Future<void> deleteInstallHandle(String serverId) =>
+      _storage.delete(key: _installKey(serverId));
 
   /// Device-seizure quick wipe: removes every server and secret.
   Future<void> wipeAll() => _storage.deleteAll();

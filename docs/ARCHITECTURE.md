@@ -45,14 +45,26 @@ abstract class MoavController {
   defensively and **file an upstream issue on MoaV** to add JSON + a
   non-interactive install. Track the gaps in `docs/MOAV-CLI-GAPS.md`.
 - **Long installs survive backgrounding.** Never hold one live SSH session for
-  a multi-minute install. Launch it detached on the server
-  (`nohup … > /opt/moav/.deploy.log 2>&1 &` or a tmux session), return a job
-  handle, and poll `installStatus` by tailing that log on reconnect. iOS will
-  suspend the app; the server keeps working; we re-attach.
-- **Interactive installer:** `install.sh` prompts for domain / email / admin
-  password. Drive it non-interactively via env/answers file if MoaV supports
-  it; otherwise feed answers over the PTY as a stopgap and push the
-  env-driven install upstream.
+  a multi-minute install. The app uploads a small idempotent job to
+  `~/.moav-deploy/` on the server (script + mode-0600 spec, written over
+  stdin so secrets never hit `ps`), launches it with `setsid nohup … &`,
+  returns the PID as a job handle (persisted in the secure store), and polls
+  `installStatus` by tailing `~/.moav-deploy/deploy.log` on reconnect. The
+  log carries `[moav-deploy] step N/5` and `[moav-deploy] exit=<code>`
+  markers so status is derivable from the log alone. iOS will suspend the
+  app; the server keeps working; we re-attach.
+- **Install is idempotent and never destructive.** On a box that already has
+  `/opt/moav` the job keeps the checkout untouched (no `git pull`), fills only
+  empty/placeholder `.env` values, skips `moav bootstrap` when the box was
+  already bootstrapped, and leaves running services alone. Verified live
+  against yorkschool.xyz (git HEAD, `.env`, users, bundles and container set
+  identical before/after).
+- **Interactive installer:** `install.sh` has no `--yes`, but every prompt
+  falls back to a sane default when `/dev/tty` cannot be opened (which is the
+  case under `setsid`). Domain / email / admin password are not installer
+  inputs at all; they live in `/opt/moav/.env`, which the job writes before
+  running `moav bootstrap --yes`. Remaining gaps are in
+  `docs/MOAV-CLI-GAPS.md`.
 
 ## Security
 

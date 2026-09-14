@@ -8,17 +8,17 @@ the app installs and manages MoaV on yorkschool.xyz and shows its Grafana.
 ### M0. Project scaffold
 - Flutter app (iOS + Android), Riverpod state, `flutter_secure_storage`, `dartssh2`, `qr_flutter`, `webview_flutter`.
 - CI: `flutter analyze` + `flutter test` on push (GitHub Actions).
-- `MoavController` interface + `SshMoavController` skeleton (methods throwing `UnimplementedError`).
+- `MoavController` interface + `SshMoavController` skeleton (methods throwing `UnimplementedError`). ✅
 
-### M1. Connect & credentials
+### M1. Connect & credentials ✅
 - Add-server form: host, port, username, auth (generate/import ed25519 key **or** password).
 - Store creds in Secure Enclave / Keystore; biometric app-lock.
-- "Install my public key" helper. `ping()`: reachable + is `moav` installed?
+- "Install my public key" helper (one-time password, verified by a key-auth session). `ping()`: opens an SSH session, runs `moav --version`.
 
-### M2. Deploy
+### M2. Deploy ✅
 - `install(InstallSpec)`: run `install.sh` **detached**, return a job handle.
 - `installStatus`: tail the deploy log, render live progress; survive app suspend/reconnect.
-- Handle the domain/email/admin-password inputs (env-driven if MoaV supports it, PTY answers as stopgap).
+- Domain/email/admin-password are written to `.env` (only when unset) before `moav bootstrap --yes`; no PTY driving needed.
 
 ### M3. Manage users
 - List / add / remove users (`moav user …`).

@@ -4,6 +4,7 @@ library;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:moav_deploy/core/moav_controller.dart';
 import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/core/ssh_connection.dart';
 import 'package:moav_deploy/core/ssh_key_installer.dart';
@@ -110,4 +111,68 @@ void main() {
     }
   }, skip: skip);
 
+  test('idempotent install re-run leaves existing MoaV untouched', () async {
+    final client = await SshConnection.open(
+      host: host!,
+      port: port,
+      username: user!,
+      privateKeyPem: keyPem,
+    );
+    Future<String> snapshot() async {
+      final out = await SshConnection.run(
+        client,
+        'cd /opt/moav && git rev-parse HEAD && git status --porcelain | md5sum '
+        '&& md5sum .env && ls outputs/bundles | md5sum && '
+        'ls state/users 2>/dev/null | md5sum && '
+        'docker ps -q | sort | md5sum',
+      );
+      return out.stdout;
+    }
+
+    final before = await snapshot();
+
+    final handle = await controller.install(
+      const InstallSpec(
+        domain: 'yorkschool.xyz',
+        email: 'info@yorkschool.xyz',
+        adminPassword: 'not-applied-existing-config-wins',
+      ),
+    );
+    // ignore: avoid_print
+    print('job ${handle.jobId} log ${handle.logPath}');
+
+    InstallStatus status;
+    final deadline = DateTime.now().add(const Duration(minutes: 10));
+    do {
+      await Future<void>.delayed(const Duration(seconds: 3));
+      status = await controller.installStatus(handle);
+      // ignore: avoid_print
+      print('${status.phase} ${status.progress} ${status.message}');
+    } while (!status.isTerminal &&
+        status.phase != InstallPhase.unknown &&
+        DateTime.now().isBefore(deadline));
+
+    // ignore: avoid_print
+    print(status.logTail.join('\n'));
+    expect(status.phase, InstallPhase.succeeded);
+    final log = status.logTail.join('\n');
+    expect(log, contains('Existing MoaV install found'));
+    expect(log, contains('Using existing installation.'));
+    expect(log, contains('DOMAIN already configured'));
+    expect(log, contains('ADMIN_PASSWORD already configured'));
+    expect(log, contains('Already bootstrapped - skipping'));
+    expect(log, contains('Services left untouched'));
+    expect(log, isNot(contains('not-applied-existing-config-wins')));
+
+    final after = await snapshot();
+    expect(after, before);
+
+    // spec.env is removed by the job.
+    final spec = await SshConnection.run(
+      client,
+      'test -e ~/.moav-deploy/spec.env && echo present || echo gone',
+    );
+    expect(spec.stdout.trim(), 'gone');
+    client.close();
+  }, skip: skip, timeout: const Timeout(Duration(minutes: 12)));
 }

@@ -13,4 +13,12 @@ A Flutter mobile app (iOS + Android) to **deploy, manage, and monitor [MoaV](htt
 See [`docs/PLAN.md`](docs/PLAN.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Status
-Bootstrapping. Test server: `yorkschool.xyz`.
+M0–M2 done (scaffold, connect & credentials, detached idempotent deploy). Test server: `yorkschool.xyz`.
+
+## Development
+```
+flutter pub get
+flutter analyze --fatal-infos
+flutter test                                   # unit + widget tests
+MOAV_TEST_SSH_KEY=~/.ssh/key MOAV_TEST_HOST=h MOAV_TEST_USER=root flutter test test/live   # live, additive-only checks
+```

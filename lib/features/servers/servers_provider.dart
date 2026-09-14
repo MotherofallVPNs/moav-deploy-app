@@ -50,6 +50,7 @@ class ServersNotifier extends AsyncNotifier<List<ServerProfile>> {
     final next = current.where((p) => p.id != id).toList(growable: false);
     await _store.saveProfiles(next);
     await _store.deleteSecret(id);
+    await _store.deleteInstallHandle(id);
     ref.invalidate(moavControllerProvider(id));
     state = AsyncData(next);
   }

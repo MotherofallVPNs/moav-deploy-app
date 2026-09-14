@@ -15,6 +15,7 @@ import 'package:moav_deploy/security/secure_cred_store.dart';
 class _FakeCredStore implements SecureCredStore {
   List<ServerProfile> profiles = [];
   final Map<String, String> secrets = {};
+  final Map<String, Map<String, Object?>> installHandles = {};
 
   @override
   Future<List<ServerProfile>> loadProfiles() async => profiles;
@@ -27,9 +28,19 @@ class _FakeCredStore implements SecureCredStore {
   @override
   Future<void> deleteSecret(String id) async => secrets.remove(id);
   @override
+  Future<void> writeInstallHandle(String id, Map<String, Object?> json) async =>
+      installHandles[id] = json;
+  @override
+  Future<Map<String, Object?>?> readInstallHandle(String id) async =>
+      installHandles[id];
+  @override
+  Future<void> deleteInstallHandle(String id) async =>
+      installHandles.remove(id);
+  @override
   Future<void> wipeAll() async {
     profiles = [];
     secrets.clear();
+    installHandles.clear();
   }
 }
 
@@ -53,11 +64,31 @@ class _FakeKeyInstaller extends SshKeyInstaller {
   }
 }
 
-/// Ping-only controller for the connection test.
+/// Scripted controller: each `installStatus` call pops the next status.
 class _FakeController implements MoavController {
+  _FakeController(this.statuses);
+
+  final List<InstallStatus> statuses;
+  InstallSpec? installedSpec;
+  int statusCalls = 0;
+
   @override
   Future<ConnectionCheck> ping() async =>
       const ConnectionCheck(reachable: true, moavInstalled: true, moavVersion: '2.2.2');
+
+  @override
+  Future<InstallHandle> install(InstallSpec spec) async {
+    installedSpec = spec;
+    return const InstallHandle(jobId: '4242', logPath: '.moav-deploy/deploy.log');
+  }
+
+  @override
+  Future<InstallStatus> installStatus(InstallHandle handle) async {
+    expect(handle.jobId, '4242');
+    final i = statusCalls < statuses.length ? statusCalls : statuses.length - 1;
+    statusCalls++;
+    return statuses[i];
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>
@@ -194,7 +225,7 @@ void main() {
 
   testWidgets('test connection reports the MoaV version', (tester) async {
     final store = _FakeCredStore()..profiles = [_profile];
-    final controller = _FakeController();
+    final controller = _FakeController(const []);
     await tester.pumpWidget(_app(
       store,
       overrides: [
@@ -209,6 +240,90 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Connected. MoaV 2.2.2 is installed.'), findsOneWidget);
+  });
+
+  testWidgets('deploy screen starts a detached install and streams the log',
+      (tester) async {
+    final store = _FakeCredStore()..profiles = [_profile];
+    final controller = _FakeController(const [
+      InstallStatus(
+        phase: InstallPhase.running,
+        progress: 0.2,
+        message: 'Preflight',
+        logTail: ['[moav-deploy] step 1/5: Preflight'],
+      ),
+      InstallStatus(
+        phase: InstallPhase.succeeded,
+        progress: 1,
+        message: 'Install finished',
+        logTail: [
+          '[moav-deploy] step 1/5: Preflight',
+          '[moav-deploy] step 5/5: Start services',
+          '[moav-deploy] exit=0',
+        ],
+      ),
+    ]);
+    await tester.pumpWidget(_app(
+      store,
+      overrides: [
+        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+      ],
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('York'));
+    await tester.pumpAndSettle();
+    expect(find.text('Start install'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextField, 'Domain'), 'vpn.example.org');
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Admin dashboard password'), 'secret');
+    await tester.tap(find.text('Start install'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(controller.installedSpec?.domain, 'vpn.example.org');
+    expect(store.installHandles['s1']?['jobId'], '4242');
+    expect(find.text('Running'), findsOneWidget);
+    expect(find.text('[moav-deploy] step 1/5: Preflight'), findsOneWidget);
+
+    // Next poll reports completion and polling stops.
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(find.text('Done'), findsOneWidget);
+    expect(find.text('[moav-deploy] exit=0'), findsOneWidget);
+    expect(find.text('Start another install'), findsOneWidget);
+    final callsAtDone = controller.statusCalls;
+    await tester.pump(const Duration(seconds: 10));
+    expect(controller.statusCalls, callsAtDone);
+
+    await tester.tap(find.text('Start another install'));
+    await tester.pumpAndSettle();
+    expect(store.installHandles, isEmpty);
+    expect(find.text('Start install'), findsOneWidget);
+  });
+
+  testWidgets('deploy screen re-attaches to a saved job on open',
+      (tester) async {
+    final store = _FakeCredStore()
+      ..profiles = [_profile]
+      ..installHandles['s1'] = {'jobId': '4242', 'logPath': 'x'};
+    final controller = _FakeController(const [
+      InstallStatus(phase: InstallPhase.running, message: 'Bootstrap'),
+    ]);
+    await tester.pumpWidget(_app(
+      store,
+      overrides: [
+        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+      ],
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('York'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Bootstrap'), findsOneWidget);
+    expect(find.text('Start install'), findsNothing);
   });
 
   test('form validation', () {
