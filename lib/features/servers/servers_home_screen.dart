@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
 import '../deploy/deploy_screen.dart';
+import '../server/server_screen.dart';
+import '../users/users_screen.dart';
 import 'add_server_screen.dart';
 import 'servers_provider.dart';
 
@@ -63,7 +65,7 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-enum _TileAction { test, deploy, remove }
+enum _TileAction { test, users, deploy, remove }
 
 class _ServerTile extends ConsumerWidget {
   const _ServerTile({required this.profile});
@@ -80,10 +82,12 @@ class _ServerTile extends ConsumerWidget {
       leading: const Icon(Icons.dns),
       title: Text(profile.label),
       subtitle: Text('${profile.username}@${profile.host}:${profile.port} · $auth'),
-      onTap: () => Navigator.of(context).push(DeployScreen.route(profile)),
+      onTap: () => Navigator.of(context).push(ServerScreen.route(profile)),
       trailing: PopupMenuButton<_TileAction>(
         onSelected: (a) => switch (a) {
           _TileAction.test => _testConnection(context, ref),
+          _TileAction.users =>
+            Navigator.of(context).push(UsersScreen.route(profile)),
           _TileAction.deploy =>
             Navigator.of(context).push(DeployScreen.route(profile)),
           _TileAction.remove => _confirmRemove(context, ref),
@@ -94,6 +98,13 @@ class _ServerTile extends ConsumerWidget {
             child: ListTile(
               leading: Icon(Icons.network_check),
               title: Text('Test connection'),
+            ),
+          ),
+          PopupMenuItem(
+            value: _TileAction.users,
+            child: ListTile(
+              leading: Icon(Icons.people_outline),
+              title: Text('Users'),
             ),
           ),
           PopupMenuItem(

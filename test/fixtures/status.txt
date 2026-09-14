@@ -1,0 +1,27 @@
+
+MoaV v2.2.2 (contrib/conduit-monitoring)  │  sing-box 1.13.19  wstunnel 10.6.2  conduit 2.0.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Service Status
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+  ┌──────────────────────┬──────────────┬─────────────────────┬──────────────┬─────────────────┐
+  │ Service              │ Status       │ Last Run            │ Uptime       │ Ports           │
+  ├──────────────────────┼──────────────┼─────────────────────┼──────────────┼─────────────────┤
+  │ admin                │ ● running    │ 2026-08-24 14:33:28 │ 2 weeks      │ 9443            │
+  │ grafana              │ ● running    │ 2026-08-20 15:31:47 │ 2 weeks      │ 9444            │
+  │ sing-box             │ ● running    │ 2026-08-17 20:07:27 │ 7 days       │ 2082,443,8388,8443,8445 │
+  │ certbot              │ ○ exited     │ 2026-08-24 14:33:31 │ -            │ -               │
+  │ gooserelay           │ - never      │ -                   │ -            │ -               │
+  └──────────────────────┴──────────────┴─────────────────────┴──────────────┴─────────────────┘
+
+  Note: certbot is a one-time service that obtains SSL certificates.
+
+  Admin Dashboard: https://example.org:9443
+  Grafana:         https://example.org:9444
+  Grafana (CDN):   https://grafana.example.org:2083
+ℹ Default profiles: proxy wireguard admin monitoring
+
+  Commands: moav logs [service] | moav stop | moav restart | moav version

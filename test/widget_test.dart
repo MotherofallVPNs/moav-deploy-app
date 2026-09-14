@@ -10,6 +10,7 @@ import 'package:moav_deploy/core/ssh_key_installer.dart';
 import 'package:moav_deploy/features/servers/add_server_form.dart';
 import 'package:moav_deploy/features/servers/servers_provider.dart';
 import 'package:moav_deploy/security/secure_cred_store.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 /// In-memory stand-in so tests never touch platform channels.
 class _FakeCredStore implements SecureCredStore {
@@ -71,6 +72,11 @@ class _FakeController implements MoavController {
   final List<InstallStatus> statuses;
   InstallSpec? installedSpec;
   int statusCalls = 0;
+  final users = <MoavUser>[
+    const MoavUser(name: 'alice', bundleReady: true, protocols: ['sing-box']),
+    const MoavUser(name: 'bob'),
+  ];
+  final log = <String>[];
 
   @override
   Future<ConnectionCheck> ping() async =>
@@ -88,6 +94,47 @@ class _FakeController implements MoavController {
     final i = statusCalls < statuses.length ? statusCalls : statuses.length - 1;
     statusCalls++;
     return statuses[i];
+  }
+
+  @override
+  Future<List<MoavUser>> listUsers() async => List.of(users);
+
+  @override
+  Future<MoavUser> addUser(String name) async {
+    log.add('add $name');
+    final u = MoavUser(name: name, bundleReady: true);
+    users.add(u);
+    return u;
+  }
+
+  @override
+  Future<void> removeUser(String name) async {
+    log.add('remove $name');
+    users.removeWhere((u) => u.name == name);
+  }
+
+  @override
+  Future<Bundle> getBundle(String user) async {
+    log.add('bundle $user');
+    if (!users.any((u) => u.name == user)) throw StateError('No bundle');
+    return Bundle(
+      user: user,
+      fetchedAt: DateTime(2026),
+      path: '/opt/moav/outputs/bundles/$user',
+      entries: [
+        BundleEntry(
+          protocol: 'reality',
+          fileName: 'reality.txt',
+          content: 'vless://$user@h:443\n',
+          qrPayload: 'vless://$user@h:443',
+        ),
+        const BundleEntry(
+          protocol: 'trusttunnel',
+          fileName: 'trusttunnel.toml',
+          content: '# tt',
+        ),
+      ],
+    );
   }
 
   @override
@@ -273,6 +320,9 @@ void main() {
 
     await tester.tap(find.text('York'));
     await tester.pumpAndSettle();
+    expect(find.text('Users'), findsOneWidget);
+    await tester.tap(find.text('Deploy'));
+    await tester.pumpAndSettle();
     expect(find.text('Start install'), findsOneWidget);
 
     await tester.enterText(find.widgetWithText(TextField, 'Domain'), 'vpn.example.org');
@@ -319,11 +369,76 @@ void main() {
     ));
     await tester.pumpAndSettle();
     await tester.tap(find.text('York'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Deploy'));
     await tester.pump();
     await tester.pump();
 
     expect(find.text('Bootstrap'), findsOneWidget);
     expect(find.text('Start install'), findsNothing);
+  });
+
+  testWidgets('users: list, open bundle with QR, add and revoke',
+      (tester) async {
+    final store = _FakeCredStore()..profiles = [_profile];
+    final controller = _FakeController(const []);
+    await tester.pumpWidget(_app(
+      store,
+      overrides: [
+        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+      ],
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('York'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Users'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('alice'), findsOneWidget);
+    expect(find.text('bob'), findsOneWidget);
+    expect(find.textContaining('Bundle ready'), findsOneWidget);
+
+    // Bundle screen renders a QR for the link and lists the rest.
+    await tester.tap(find.text('alice'));
+    await tester.pumpAndSettle();
+    expect(find.byType(QrImageView), findsOneWidget);
+    expect(find.text('VLESS Reality'), findsOneWidget);
+    expect(find.text('TrustTunnel'), findsOneWidget);
+    expect(controller.log, ['bundle alice']);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Add: validation, then creation navigates to the new bundle.
+    await tester.tap(find.text('Add user'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Username'), 'bad name');
+    await tester.pumpAndSettle();
+    expect(find.text('Letters, numbers, _ and - only'), findsOneWidget);
+    expect(
+      tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Add')).onPressed,
+      isNull,
+    );
+    await tester.enterText(find.widgetWithText(TextField, 'Username'), 'carol');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+    expect(controller.log, contains('add carol'));
+    expect(find.text('carol'), findsOneWidget); // bundle screen title
+    expect(find.byType(QrImageView), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('carol'), findsOneWidget);
+
+    // Revoke with confirmation.
+    await tester.tap(find.byIcon(Icons.person_remove_outlined).last);
+    await tester.pumpAndSettle();
+    expect(find.text('Revoke carol?'), findsOneWidget);
+    await tester.tap(find.text('Revoke'));
+    await tester.pumpAndSettle();
+    expect(controller.log, contains('remove carol'));
+    expect(find.text('carol'), findsNothing);
+    expect(controller.users.map((u) => u.name), ['alice', 'bob']);
   });
 
   test('form validation', () {

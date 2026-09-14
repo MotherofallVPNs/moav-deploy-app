@@ -17,6 +17,7 @@ dependencies:
   webview_flutter: ^4.10.0
   local_auth: ^3.0.2
   pinenacl: ^0.6.0
+  share_plus: ^13.3.0
 
 dev_dependencies:
   flutter_test:

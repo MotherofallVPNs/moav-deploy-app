@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dartssh2/dartssh2.dart';
 
 import 'install_script.dart';
+import 'moav_cli.dart';
 import 'moav_controller.dart';
 import 'server_profile.dart';
 import 'ssh_connection.dart';
@@ -188,53 +190,182 @@ class SshMoavController implements MoavController {
     );
   }
 
-  /// `moav doctor --json` (falls back to parsing text output).
+  /// `moav doctor`, grouped per check. Text-only today (no `--json`).
   @override
-  Future<DoctorReport> doctor() {
-    throw UnimplementedError('doctor: M4');
+  Future<DoctorReport> doctor() async {
+    final out = await _run(MoavCli.doctor,
+        allowFailure: true, timeout: const Duration(minutes: 3));
+    final report = MoavCli.parseDoctor(out.stdout);
+    if (report.checks.isEmpty) {
+      throw StateError('moav doctor produced no checks: ${_short(out.combined)}');
+    }
+    return report;
   }
 
-  /// `moav user list --json`.
+  /// `moav user list` (sectioned text; no `--json` yet).
   @override
-  Future<List<MoavUser>> listUsers() {
-    throw UnimplementedError('listUsers: M3');
+  Future<List<MoavUser>> listUsers() async {
+    final out = await _run(MoavCli.userList);
+    return MoavCli.parseUserList(out.stdout);
   }
 
-  /// `moav user add <name>`.
+  /// `moav user add <name>`. Name is validated locally with the same rule the
+  /// CLI enforces, so a bad name never reaches the shell.
   @override
-  Future<MoavUser> addUser(String name) {
-    throw UnimplementedError('addUser: M3');
+  Future<MoavUser> addUser(String name) async {
+    _validateName(name);
+    final out = await _run(MoavCli.userAdd(name), timeout: const Duration(minutes: 3));
+    final text = SshConnection.stripAnsi(out.stdout);
+    if (RegExp(r'\b(error|failed)\b', caseSensitive: false).hasMatch(text) &&
+        !text.contains('already exists')) {
+      throw StateError('moav user add reported a problem: ${_short(text)}');
+    }
+    final users = await listUsers();
+    return users.firstWhere(
+      (u) => u.name == name,
+      orElse: () => throw StateError(
+        "User '$name' is not listed after 'moav user add': ${_short(text)}",
+      ),
+    );
   }
 
-  /// `moav user revoke <name>`.
+  /// `moav user revoke <name>`. The CLI always exits 0 here (it loops with
+  /// `|| true`), so success is confirmed by re-listing users.
   @override
-  Future<void> removeUser(String name) {
-    throw UnimplementedError('removeUser: M3');
+  Future<void> removeUser(String name) async {
+    _validateName(name);
+    final out = await _run(MoavCli.userRevoke(name),
+        allowFailure: true, timeout: const Duration(minutes: 3));
+    final text = SshConnection.stripAnsi(out.stdout);
+    final users = await listUsers();
+    if (users.any((u) => u.name == name)) {
+      throw StateError("User '$name' still exists after revoke: ${_short(text)}");
+    }
   }
 
-  /// Locates the user's bundle directory and pulls each config over SFTP.
+  /// Lists `/opt/moav/outputs/bundles/<user>` over SFTP and reads every
+  /// text config (images, HTML guide and zips are skipped).
   @override
-  Future<Bundle> getBundle(String user) {
-    throw UnimplementedError('getBundle: M3');
+  Future<Bundle> getBundle(String user) async {
+    _validateName(user);
+    final client = await _connected();
+    final dir = '${MoavCli.bundlesDir}/$user';
+    final sftp = await client.sftp();
+    try {
+      final List<SftpName> names;
+      try {
+        names = await sftp.listdir(dir).timeout(connectTimeout);
+      } on SftpStatusError {
+        throw StateError(
+          "No bundle found for '$user'. Add the user again or run "
+          "'moav regenerate-users' on the server.",
+        );
+      }
+      final entries = <BundleEntry>[];
+      for (final n in names) {
+        if (n.filename == '.' || n.filename == '..') continue;
+        if (n.attr.isDirectory) continue;
+        if (MoavCli.classifyBundleFile(n.filename) == null) continue;
+        if ((n.attr.size ?? 0) > maxBundleFileBytes) continue;
+        final f = await sftp.open('$dir/${n.filename}');
+        try {
+          final bytes = await f.readBytes().timeout(connectTimeout);
+          final entry = MoavCli.bundleEntry(
+            n.filename,
+            utf8.decode(bytes, allowMalformed: true),
+          );
+          if (entry != null) entries.add(entry);
+        } finally {
+          await f.close();
+        }
+      }
+      entries.sort(MoavCli.compareEntries);
+      return Bundle(
+        user: user,
+        entries: entries,
+        fetchedAt: DateTime.now(),
+        path: dir,
+      );
+    } finally {
+      await sftp.close();
+    }
   }
 
-  /// `moav test <name>`.
+  /// Bundle files larger than this are configs we never render (safety cap).
+  static const maxBundleFileBytes = 256 * 1024;
+
+  /// `moav test <name> --json`. Builds a client image on first run, so this
+  /// can take minutes; the JSON document is the tail of stdout.
   @override
-  Future<TestMatrix> testUser(String name) {
-    throw UnimplementedError('testUser: M3');
+  Future<TestMatrix> testUser(String name) async {
+    _validateName(name);
+    final out = await _run(MoavCli.test(name),
+        allowFailure: true, timeout: testTimeout);
+    return MoavCli.parseTest(name, out.stdout);
   }
+
+  static const testTimeout = Duration(minutes: 15);
 
   /// `moav start|stop|restart [service]` or `moav regenerate-users`.
   @override
-  Future<void> service(ServiceAction action) {
-    throw UnimplementedError('service: M4');
+  Future<void> service(ServiceAction action) async {
+    if (action.service != null) _validateName(action.service!);
+    await _run(MoavCli.service(action), timeout: const Duration(minutes: 10));
   }
 
-  /// Reads the Grafana URL from `moav doctor`/config and headline numbers from
-  /// the local Prometheus metrics endpoint.
+  /// `moav status` (box-drawn table; parsed as text).
   @override
-  Future<Monitoring> monitoring() {
-    throw UnimplementedError('monitoring: M4');
+  Future<ServiceStatusReport> status() async {
+    final out = await _run(MoavCli.status,
+        allowFailure: true, timeout: const Duration(minutes: 2));
+    final report = MoavCli.parseStatus(out.stdout);
+    if (report.services.isEmpty) {
+      throw StateError('moav status listed no services: ${_short(out.combined)}');
+    }
+    return report;
+  }
+
+  /// Dashboard URLs from `.env`, Grafana `/api/health`, and headline metrics
+  /// from Prometheus via `docker exec` (see [MoavCli.monitoring]).
+  @override
+  Future<Monitoring> monitoring() async {
+    final out = await _run(MoavCli.monitoring,
+        allowFailure: true, timeout: const Duration(minutes: 1));
+    return MoavCli.parseMonitoring(out.stdout);
+  }
+
+  Future<SshOutput> _run(
+    String command, {
+    bool allowFailure = false,
+    Duration timeout = const Duration(seconds: 60),
+  }) async {
+    final client = await _connected();
+    try {
+      return await SshConnection.run(
+        client,
+        command,
+        allowFailure: allowFailure,
+        timeout: timeout,
+      );
+    } on TimeoutException {
+      _dropClient();
+      rethrow;
+    }
+  }
+
+  static void _validateName(String name) {
+    if (!MoavUser.validName.hasMatch(name)) {
+      throw ArgumentError.value(
+        name,
+        'name',
+        'Use only letters, numbers, underscores and hyphens',
+      );
+    }
+  }
+
+  static String _short(String s) {
+    final t = SshConnection.stripAnsi(s).trim();
+    return t.length > 300 ? '…${t.substring(t.length - 300)}' : t;
   }
 
   /// Closes the cached SSH client, if any.

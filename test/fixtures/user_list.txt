@@ -1,0 +1,47 @@
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  User List
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+========================================
+         MoaV User List
+========================================
+
+=== sing-box Users (Reality/Trojan/Hysteria2) ===
+  • alice
+  • bob
+  • carol [bundle ready]
+
+  Total: 3 users
+
+=== WireGuard Peers ===
+  • alice (no IP found)
+  • carol (10.66.66.106)
+
+  Total: 2 peers
+
+=== AmneziaWG Peers ===
+  (no peers)
+
+=== Xray Users (XHTTP + XDNS) ===
+  • alice
+  • carol
+
+  Total: 2 users
+
+=== TrustTunnel Users ===
+  • alice
+  • carol
+
+  Total: 2 users
+
+=== Telegram MTProxy Users ===
+  • alice
+  • carol
+
+  Total: 2 users
+
+=== User Bundles ===
+  • carol (26 files)
+
+========================================

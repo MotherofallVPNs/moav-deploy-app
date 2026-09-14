@@ -20,10 +20,14 @@ the app installs and manages MoaV on yorkschool.xyz and shows its Grafana.
 - `installStatus`: tail the deploy log, render live progress; survive app suspend/reconnect.
 - Domain/email/admin-password are written to `.env` (only when unset) before `moav bootstrap --yes`; no PTY driving needed.
 
-### M3. Manage users
-- List / add / remove users (`moav user …`).
-- `getBundle`: pull a user's bundle over SFTP, render QR + share sheet.
-- `testUser`: run `moav test <user>`, show per-protocol pass/fail/warn.
+### M3. Manage users ✅
+- List / add / remove users (`moav user …`), parsed from the sectioned text
+  output; names validated client-side with the CLI's own rule.
+- `getBundle`: pull a user's bundle over SFTP, render one QR per phone link
+  (subscription, Reality, Hysteria2, Trojan, Shadowsocks, XHTTP, WireGuard,
+  AmneziaWG, MTProxy) with copy + share sheet.
+- `testUser`: `moav test <user> --json` parsed into a per-protocol matrix
+  (UI lands with M4's operate screen).
 
 ### M4. Operate & monitor
 - Service controls: start / stop / restart / `regenerate-users`.

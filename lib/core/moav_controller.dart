@@ -36,7 +36,10 @@ abstract class MoavController {
   /// Start / stop / restart services, or regenerate all users.
   Future<void> service(ServiceAction action);
 
-  /// Grafana URL plus a few headline metrics.
+  /// Per-service state (`moav status`) plus the dashboard URLs it prints.
+  Future<ServiceStatusReport> status();
+
+  /// Grafana URL, its health, plus a few headline metrics from Prometheus.
   Future<Monitoring> monitoring();
 }
 
@@ -158,11 +161,27 @@ class DoctorReport {
 }
 
 class MoavUser {
-  const MoavUser({required this.name, this.createdAt, this.enabled = true});
+  const MoavUser({
+    required this.name,
+    this.createdAt,
+    this.enabled = true,
+    this.bundleReady = false,
+    this.protocols = const [],
+  });
 
   final String name;
   final DateTime? createdAt;
   final bool enabled;
+
+  /// A client bundle directory exists for this user on the server.
+  final bool bundleReady;
+
+  /// Which server-side user stores list this name (e.g. `sing-box`,
+  /// `wireguard`, `xray`). Empty when unknown.
+  final List<String> protocols;
+
+  /// Usernames the `moav` CLI accepts.
+  static final validName = RegExp(r'^[a-zA-Z0-9_-]+$');
 
   @override
   bool operator ==(Object other) => other is MoavUser && other.name == name;
@@ -189,6 +208,25 @@ class BundleEntry {
 
   /// String to encode as a QR code, when the protocol supports it.
   final String? qrPayload;
+
+  /// Human title, e.g. `Hysteria2`.
+  String get title => BundleEntry.titles[protocol] ?? protocol;
+
+  static const titles = <String, String>{
+    'reality': 'VLESS Reality',
+    'trojan': 'Trojan',
+    'hysteria2': 'Hysteria2',
+    'shadowsocks': 'Shadowsocks',
+    'xhttp': 'VLESS XHTTP',
+    'telegram': 'Telegram MTProxy',
+    'subscription': 'Subscription (v2rayNG / Streisand)',
+    'wireguard': 'WireGuard',
+    'wireguard-wstunnel': 'WireGuard over wstunnel',
+    'amneziawg': 'AmneziaWG',
+    'trusttunnel': 'TrustTunnel',
+    'xdns': 'XDNS',
+    'dnstt': 'dnstt',
+  };
 }
 
 class Bundle {
@@ -196,11 +234,17 @@ class Bundle {
     required this.user,
     required this.entries,
     required this.fetchedAt,
+    this.path,
   });
 
   final String user;
   final List<BundleEntry> entries;
   final DateTime fetchedAt;
+
+  /// Server-side directory the bundle was read from.
+  final String? path;
+
+  Iterable<BundleEntry> get withQr => entries.where((e) => e.qrPayload != null);
 }
 
 class ProtocolTest {
@@ -222,13 +266,22 @@ class TestMatrix {
     required this.user,
     required this.results,
     required this.ranAt,
+    this.overall,
   });
 
   final String user;
   final List<ProtocolTest> results;
   final DateTime ranAt;
 
-  bool get allPass => results.every((r) => r.result == CheckResult.pass);
+  /// The CLI's own verdict (`pass` / `fail` / `warn`), when reported.
+  final CheckResult? overall;
+
+  /// Every protocol that was actually tested passed (skips ignored).
+  bool get allPass => results.every(
+        (r) => r.result == CheckResult.pass || r.result == CheckResult.skip,
+      );
+
+  int count(CheckResult r) => results.where((t) => t.result == r).length;
 }
 
 enum ServiceActionKind { start, stop, restart, regenerateUsers }
@@ -258,11 +311,67 @@ class Metric {
 class Monitoring {
   const Monitoring({
     required this.grafanaUrl,
+    this.grafanaCdnUrl,
+    this.adminUrl,
+    this.grafanaHealthy,
+    this.grafanaVersion,
     this.metrics = const [],
     this.collectedAt,
   });
 
   final Uri? grafanaUrl;
+
+  /// Grafana behind the CDN subdomain, when configured.
+  final Uri? grafanaCdnUrl;
+  final Uri? adminUrl;
+
+  /// `null` when the health probe could not run (e.g. monitoring disabled).
+  final bool? grafanaHealthy;
+  final String? grafanaVersion;
   final List<Metric> metrics;
   final DateTime? collectedAt;
+}
+
+enum ServiceState { running, exited, stopped, never, unknown }
+
+/// One row of `moav status`.
+class ServiceStatus {
+  const ServiceStatus({
+    required this.name,
+    required this.state,
+    this.lastRun,
+    this.uptime,
+    this.ports = const [],
+  });
+
+  final String name;
+  final ServiceState state;
+  final String? lastRun;
+  final String? uptime;
+  final List<String> ports;
+}
+
+class ServiceStatusReport {
+  const ServiceStatusReport({
+    required this.services,
+    required this.collectedAt,
+    this.version,
+    this.adminUrl,
+    this.grafanaUrl,
+    this.grafanaCdnUrl,
+    this.defaultProfiles = const [],
+  });
+
+  final List<ServiceStatus> services;
+  final DateTime collectedAt;
+
+  /// e.g. `2.2.2`.
+  final String? version;
+  final Uri? adminUrl;
+  final Uri? grafanaUrl;
+  final Uri? grafanaCdnUrl;
+  final List<String> defaultProfiles;
+
+  int get runningCount =>
+      services.where((s) => s.state == ServiceState.running).length;
 }
