@@ -1,0 +1,7 @@
+.dart_tool/
+build/
+.idea/
+*.iml
+.DS_Store
+ios/Pods/
+**/*.g.dart
