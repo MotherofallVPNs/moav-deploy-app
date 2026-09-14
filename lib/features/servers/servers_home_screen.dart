@@ -6,6 +6,7 @@ import '../../core/server_profile.dart';
 import '../deploy/deploy_screen.dart';
 import '../server/server_screen.dart';
 import '../users/users_screen.dart';
+import '../wipe/wipe_dialog.dart';
 import 'add_server_screen.dart';
 import 'servers_provider.dart';
 import '../../widgets/error_view.dart';
@@ -18,7 +19,20 @@ class ServersHomeScreen extends ConsumerWidget {
     final servers = ref.watch(serversProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('MoaV Deploy')),
+      appBar: AppBar(
+        title: const Text('MoaV Deploy'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_forever_outlined),
+            tooltip: 'Quick wipe',
+            onPressed: () => showWipeDialog(
+              context,
+              ref,
+              serverCount: servers.value?.length,
+            ),
+          ),
+        ],
+      ),
       body: servers.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ErrorView(

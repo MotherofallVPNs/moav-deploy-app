@@ -66,6 +66,27 @@ class SecureCredStore {
   Future<void> deleteInstallHandle(String serverId) =>
       _storage.delete(key: _installKey(serverId));
 
-  /// Device-seizure quick wipe: removes every server and secret.
-  Future<void> wipeAll() => _storage.deleteAll();
+  /// Every key currently held, for the wipe report and for tests.
+  Future<List<String>> listKeys() async => (await _storage.readAll()).keys.toList();
+
+  /// Device-seizure quick wipe: removes every server, secret and install
+  /// handle from the platform secure store.
+  ///
+  /// Deletes each key individually **and** calls `deleteAll`, then reads the
+  /// store back and refuses to report success while anything is left.
+  /// Returns the number of entries removed.
+  Future<int> wipeAll() async {
+    final before = await _storage.readAll();
+    for (final key in before.keys) {
+      await _storage.delete(key: key);
+    }
+    await _storage.deleteAll();
+    final after = await _storage.readAll();
+    if (after.isNotEmpty) {
+      throw StateError(
+        'Secure storage still holds ${after.length} item(s) after wipe',
+      );
+    }
+    return before.length;
+  }
 }

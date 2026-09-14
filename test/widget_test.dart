@@ -43,10 +43,17 @@ class _FakeCredStore implements SecureCredStore {
   Future<void> deleteInstallHandle(String id) async =>
       installHandles.remove(id);
   @override
-  Future<void> wipeAll() async {
+  Future<List<String>> listKeys() async => [
+        ...secrets.keys,
+        ...installHandles.keys,
+      ];
+  @override
+  Future<int> wipeAll() async {
+    final removed = profiles.length + secrets.length + installHandles.length;
     profiles = [];
     secrets.clear();
     installHandles.clear();
+    return removed;
   }
 }
 

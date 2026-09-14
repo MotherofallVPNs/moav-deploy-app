@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
 
+import '../features/wipe/wipe_dialog.dart';
+
 /// Wraps [LocalAuthentication] so it can be swapped in tests.
 class AppLockService {
   AppLockService([LocalAuthentication? auth])
@@ -56,8 +58,9 @@ final appLockProvider =
 
 /// Gate shown on launch and on resume from background.
 ///
-/// M1 stub: prompts once on launch and again whenever the app returns to the
-/// foreground. The wipe action lands in M5.
+/// Prompts once on launch and again whenever the app returns to the
+/// foreground. The emergency wipe is reachable **without** unlocking: under
+/// duress, destroying the keys must be faster than proving who you are.
 class AppLockGate extends ConsumerStatefulWidget {
   const AppLockGate({super.key, required this.child});
 
@@ -112,11 +115,21 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
             const SizedBox(height: 16),
             if (lock == LockState.unlocking)
               const CircularProgressIndicator()
-            else
+            else ...[
               FilledButton(
                 onPressed: () => ref.read(appLockProvider.notifier).unlock(),
                 child: const Text('Unlock'),
               ),
+              const SizedBox(height: 32),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error,
+                ),
+                onPressed: () => showWipeDialog(context, ref),
+                icon: const Icon(Icons.delete_forever_outlined),
+                label: const Text('Emergency wipe'),
+              ),
+            ],
           ],
         ),
       ),
