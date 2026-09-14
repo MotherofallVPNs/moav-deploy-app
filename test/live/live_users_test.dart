@@ -75,10 +75,15 @@ void main() {
           await controller.removeUser(testUser);
         }
       }
-      // Pre-existing users must be exactly as we found them once regen settles.
+      // Our test user must be gone; every pre-existing user must survive.
+      // (Other live test files may hold their own users concurrently, so this
+      // asserts a subset/absence invariant, not an exact set.)
       final after =
           await settleUsers((u) => !u.any((e) => e.name == testUser));
-      expect(after.map((u) => u.name).toSet(), before.map((u) => u.name).toSet());
+      final names = after.map((u) => u.name).toSet();
+      expect(names.contains(testUser), isFalse);
+      expect(names.containsAll(before.map((u) => u.name)), isTrue,
+          reason: 'a pre-existing user disappeared');
     } finally {
       controller.dispose();
     }
@@ -101,10 +106,10 @@ void main() {
     expect(added.bundleReady, isTrue,
         reason: 'moav user add should generate the bundle directory');
 
-    final listed = await settleUsers(
-        (u) => u.any((e) => e.name == testUser) && u.length == before.length + 1);
+    final listed = await settleUsers((u) => u.any((e) => e.name == testUser));
     expect(listed.map((u) => u.name), contains(testUser));
-    expect(listed.length, before.length + 1);
+    expect(listed.map((u) => u.name).toSet().containsAll(before.map((u) => u.name)),
+        isTrue);
 
     final bundle = await controller.getBundle(testUser);
     // ignore: avoid_print
@@ -127,10 +132,10 @@ void main() {
 
     await controller.removeUser(testUser);
     created = false;
-    final after = await settleUsers(
-        (u) => !u.any((e) => e.name == testUser) && u.length == before.length);
+    final after = await settleUsers((u) => !u.any((e) => e.name == testUser));
     expect(after.any((u) => u.name == testUser), isFalse);
-    expect(after.length, before.length);
+    expect(after.map((u) => u.name).toSet().containsAll(before.map((u) => u.name)),
+        isTrue, reason: 'a pre-existing user disappeared');
     await expectLater(controller.getBundle(testUser), throwsStateError);
   }, skip: skip, timeout: const Timeout(Duration(minutes: 8)));
 
