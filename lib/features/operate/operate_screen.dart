@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
+import '../../theme/moav_theme.dart';
 import '../../widgets/error_view.dart';
-import 'grafana_screen.dart';
+import 'analytics_view.dart';
 import 'operate_provider.dart';
 
 enum OperateTab { services, health, monitoring }
 
-/// Operate & monitor one server: service controls, doctor health, Grafana.
+/// Operate & monitor one server: service controls, doctor health, analytics.
 class OperateScreen extends ConsumerWidget {
   const OperateScreen({
     super.key,
@@ -31,19 +31,19 @@ class OperateScreen extends ConsumerWidget {
     return DefaultTabController(
       length: OperateTab.values.length,
       initialIndex: initialTab.index,
-      child: Scaffold(
+      child: MoavScaffold(
         appBar: AppBar(
-          title: Text('Operate · ${profile.label}'),
+          title: Text(profile.label),
           bottom: const TabBar(tabs: [
-            Tab(text: 'Services', icon: Icon(Icons.settings_outlined)),
-            Tab(text: 'Health', icon: Icon(Icons.monitor_heart_outlined)),
-            Tab(text: 'Monitoring', icon: Icon(Icons.insights_outlined)),
+            Tab(text: 'Services'),
+            Tab(text: 'Health'),
+            Tab(text: 'Analytics'),
           ]),
         ),
         body: TabBarView(children: [
           _ServicesTab(profile: profile),
           _HealthTab(profile: profile),
-          _MonitoringTab(profile: profile),
+          AnalyticsView(profile: profile),
         ]),
       ),
     );
@@ -93,23 +93,46 @@ class _ServicesTab extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: () => ref.refresh(statusProvider(profile.id).future),
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
           if (actions.busy)
-            ListTile(
-              leading: const SizedBox(
-                width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: MoavCard(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${ServiceActionsNotifier.describe(actions.running!)}…'),
+                          Text('This can take a minute', style: Theme.of(context).textTheme.bodySmall),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              title: Text('${ServiceActionsNotifier.describe(actions.running!)}…'),
-              subtitle: const Text('This can take a minute'),
             ),
+          status.when(
+            loading: () => const Center(child: Padding(
+              padding: EdgeInsets.all(24), child: CircularProgressIndicator())),
+            error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(statusProvider(profile.id))),
+            data: (s) => _SummaryCard(report: s),
+          ),
+          const SectionHeader('Actions', padding: EdgeInsets.only(top: 16, bottom: 8)),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
               FilledButton.tonalIcon(
                 onPressed: actions.busy ? null : () => confirmAndRun(ServiceAction.start),
-                icon: const Icon(Icons.play_arrow),
+                icon: const Icon(Icons.play_arrow, size: 18),
                 label: const Text('Start all'),
               ),
               FilledButton.tonalIcon(
@@ -120,7 +143,7 @@ class _ServicesTab extends ConsumerWidget {
                           warning: 'Every client will briefly disconnect while '
                               'services restart.',
                         ),
-                icon: const Icon(Icons.restart_alt),
+                icon: const Icon(Icons.restart_alt, size: 18),
                 label: const Text('Restart all'),
               ),
               FilledButton.tonalIcon(
@@ -131,7 +154,7 @@ class _ServicesTab extends ConsumerWidget {
                           warning: 'All VPN services stop and every client '
                               'loses connectivity until you start them again.',
                         ),
-                icon: const Icon(Icons.stop),
+                icon: const Icon(Icons.stop, size: 18),
                 label: const Text('Stop all'),
               ),
               OutlinedButton.icon(
@@ -143,41 +166,90 @@ class _ServicesTab extends ConsumerWidget {
                               '.env. Existing keys are kept; users may need to '
                               're-import configs if server settings changed.',
                         ),
-                icon: const Icon(Icons.autorenew),
+                icon: const Icon(Icons.autorenew, size: 18),
                 label: const Text('Regenerate users'),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          status.when(
-            loading: () => const Center(child: Padding(
-              padding: EdgeInsets.all(24), child: CircularProgressIndicator())),
-            error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(statusProvider(profile.id))),
-            data: (s) => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'MoaV ${s.version ?? ''} · ${s.runningCount} of ${s.services.length} running',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                if (s.defaultProfiles.isNotEmpty)
-                  Text('Profiles: ${s.defaultProfiles.join(', ')}',
-                      style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: 8),
-                for (final svc in s.services)
-                  _ServiceTile(
-                    service: svc,
-                    busy: actions.busy,
-                    onAction: (kind) => confirmAndRun(
-                      ServiceAction(kind, service: svc.name),
-                      warning: kind == ServiceActionKind.start
-                          ? null
-                          : '${svc.name} will ${kind == ServiceActionKind.stop ? 'stop' : 'restart'}. '
-                              'Clients on it will disconnect.',
+          if (status.hasValue) ...[
+            const SectionHeader('Services', padding: EdgeInsets.only(top: 20, bottom: 8)),
+            MoavCard(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  for (final (i, svc) in status.value!.services.indexed) ...[
+                    if (i > 0) const Divider(),
+                    _ServiceRow(
+                      service: svc,
+                      busy: actions.busy,
+                      onAction: (kind) => confirmAndRun(
+                        ServiceAction(kind, service: svc.name),
+                        warning: kind == ServiceActionKind.start
+                            ? null
+                            : '${svc.name} will ${kind == ServiceActionKind.stop ? 'stop' : 'restart'}. '
+                                'Clients on it will disconnect.',
+                      ),
                     ),
-                  ),
-              ],
+                  ],
+                ],
+              ),
             ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryCard extends StatelessWidget {
+  const _SummaryCard({required this.report});
+
+  final ServiceStatusReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = report;
+    final allUp = s.runningCount == s.services.length;
+    return MoavCard(
+      accent: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${s.runningCount} / ${s.services.length}',
+                style: moavMono(size: 30, weight: FontWeight.w600, height: 1),
+              ),
+              const SizedBox(width: 10),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Text('services running', style: moavLabel(size: 10)),
+              ),
+              const Spacer(),
+              StatusPill(
+                allUp ? 'all up' : '${s.services.length - s.runningCount} down',
+                tone: allUp ? StatusTone.pass : StatusTone.warn,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (s.version != null)
+                Text('MoaV v${s.version}', style: moavMono(size: 12, color: MoavColors.cyan)),
+              if (s.version != null && s.defaultProfiles.isNotEmpty)
+                Text('  ·  ', style: moavMono(size: 12, color: MoavColors.textMuted)),
+              if (s.defaultProfiles.isNotEmpty)
+                Expanded(
+                  child: Text(
+                    s.defaultProfiles.join(' '),
+                    style: moavMono(size: 12, weight: FontWeight.w400, color: MoavColors.textSecondary),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
           ),
         ],
       ),
@@ -185,8 +257,8 @@ class _ServicesTab extends ConsumerWidget {
   }
 }
 
-class _ServiceTile extends StatelessWidget {
-  const _ServiceTile({
+class _ServiceRow extends StatelessWidget {
+  const _ServiceRow({
     required this.service,
     required this.busy,
     required this.onAction,
@@ -198,32 +270,51 @@ class _ServiceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final (icon, color, label) = switch (service.state) {
-      ServiceState.running => (Icons.circle, Colors.green, 'running'),
-      ServiceState.exited => (Icons.circle_outlined, scheme.outline, 'exited'),
-      ServiceState.stopped => (Icons.circle, scheme.error, 'stopped'),
-      ServiceState.never => (Icons.remove, scheme.outline, 'never started'),
-      ServiceState.unknown => (Icons.help_outline, scheme.outline, 'unknown'),
+    final (tone, label) = switch (service.state) {
+      ServiceState.running => (StatusTone.pass, 'running'),
+      ServiceState.exited => (StatusTone.neutral, 'exited'),
+      ServiceState.stopped => (StatusTone.fail, 'stopped'),
+      ServiceState.never => (StatusTone.neutral, 'never'),
+      ServiceState.unknown => (StatusTone.warn, 'unknown'),
     };
-    final parts = [
-      label,
-      if (service.uptime != null) 'up ${service.uptime}',
-      if (service.ports.isNotEmpty) 'ports ${service.ports.join(', ')}',
-    ];
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, color: color, size: 16),
-      title: Text(service.name),
-      subtitle: Text(parts.join(' · ')),
-      trailing: PopupMenuButton<ServiceActionKind>(
-        enabled: !busy,
-        onSelected: onAction,
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: ServiceActionKind.restart, child: Text('Restart')),
-          PopupMenuItem(value: ServiceActionKind.stop, child: Text('Stop')),
-          PopupMenuItem(value: ServiceActionKind.start, child: Text('Start')),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 8, 2, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(service.name, style: moavMono(size: 13, weight: FontWeight.w600)),
+                if (service.ports.isNotEmpty)
+                  Text(
+                    service.ports.join(', '),
+                    style: moavMono(size: 10.5, weight: FontWeight.w400, color: MoavColors.textMuted),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          SizedBox(
+            width: 62,
+            child: Text(
+              service.uptime ?? '—',
+              textAlign: TextAlign.right,
+              style: moavMono(size: 11, weight: FontWeight.w400, color: MoavColors.textSecondary),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 10),
+          StatusPill(label, tone: tone),
+          PopupMenuButton<ServiceActionKind>(
+            enabled: !busy,
+            onSelected: onAction,
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: ServiceActionKind.restart, child: Text('Restart')),
+              PopupMenuItem(value: ServiceActionKind.stop, child: Text('Stop')),
+              PopupMenuItem(value: ServiceActionKind.start, child: Text('Start')),
+            ],
+          ),
         ],
       ),
     );
@@ -243,43 +334,112 @@ class _HealthTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final doctor = ref.watch(doctorProvider(profile.id));
     return doctor.when(
-      loading: () => const Center(
+      loading: () => Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 12),
-            Text('Running moav doctor… (about 30 s)'),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text('Running moav doctor… (about 30 s)', style: Theme.of(context).textTheme.bodyMedium),
           ],
         ),
       ),
       error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(doctorProvider(profile.id))),
       data: (r) {
+        final pass = r.checks.where((c) => c.result == CheckResult.pass).length;
         final fails = r.checks.where((c) => c.result == CheckResult.fail).length;
         final warns = r.checks.where((c) => c.result == CheckResult.warn).length;
         return RefreshIndicator(
           onRefresh: () => ref.refresh(doctorProvider(profile.id).future),
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
             children: [
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  r.healthy ? Icons.check_circle : Icons.error,
-                  color: r.healthy ? Colors.green : Theme.of(context).colorScheme.error,
-                  size: 32,
-                ),
-                title: Text(r.healthy ? 'Healthy' : '$fails check(s) failing'),
-                subtitle: Text(
-                  '${r.checks.length} checks · $warns warning(s) · '
-                  '${TimeOfDay.fromDateTime(r.collectedAt).format(context)}',
+              MoavCard(
+                accent: true,
+                glow: r.healthy,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            r.healthy
+                                ? (warns > 0
+                                    ? '$warns ${warns == 1 ? 'warning' : 'warnings'}, nothing failing'
+                                    : 'All checks passing')
+                                : '$fails ${fails == 1 ? 'check' : 'checks'} failing',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        StatusPill.result(
+                          r.healthy
+                              ? (warns > 0 ? CheckResult.warn : CheckResult.pass)
+                              : CheckResult.fail,
+                          label: r.healthy ? (warns > 0 ? 'degraded' : 'healthy') : 'unhealthy',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${r.checks.length} checks · moav doctor · '
+                      '${TimeOfDay.fromDateTime(r.collectedAt).format(context)}',
+                      style: moavMono(size: 11, weight: FontWeight.w400, color: MoavColors.textMuted),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        _Count('pass', pass, MoavColors.pass),
+                        _Count('warn', warns, MoavColors.warn),
+                        _Count('fail', fails, MoavColors.fail),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              for (final c in r.checks) _CheckTile(check: c),
+              const SectionHeader('Checks'),
+              MoavCard(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    for (final (i, c) in r.checks.indexed) ...[
+                      if (i > 0) const Divider(),
+                      _CheckTile(check: c),
+                    ],
+                  ],
+                ),
+              ),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _Count extends StatelessWidget {
+  const _Count(this.label, this.n, this.color);
+
+  final String label;
+  final int n;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Text('$n', style: moavMono(size: 20, weight: FontWeight.w600, color: n == 0 ? MoavColors.textMuted : MoavColors.text)),
+          const SizedBox(width: 6),
+          Text(label, style: moavLabel(size: 10, color: MoavColors.textMuted)),
+        ],
+      ),
     );
   }
 }
@@ -295,181 +455,22 @@ class _CheckTile extends StatelessWidget {
     final description = lines.isEmpty ? '' : lines.first;
     final body = lines.skip(1).join('\n');
     return ExpansionTile(
-      tilePadding: EdgeInsets.zero,
-      leading: ResultIcon(check.result),
-      title: Text(check.name),
-      subtitle: Text(description, maxLines: 1, overflow: TextOverflow.ellipsis),
+      tilePadding: const EdgeInsets.fromLTRB(14, 0, 8, 0),
+      leading: StatusPill.result(check.result),
+      title: Text(check.name, style: moavMono(size: 13, weight: FontWeight.w600)),
+      subtitle: Text(
+        description,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
       children: [
         if (body.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(left: 8, right: 8, bottom: 12),
-            child: SelectableText(
-              body,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
-            ),
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+            child: CodeBlock(body, size: 11),
           ),
       ],
-    );
-  }
-}
-
-/// Coloured pass/warn/fail/skip icon shared by health and test views.
-class ResultIcon extends StatelessWidget {
-  const ResultIcon(this.result, {super.key});
-
-  final CheckResult result;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return switch (result) {
-      CheckResult.pass => const Icon(Icons.check_circle, color: Colors.green),
-      CheckResult.warn => const Icon(Icons.warning_amber, color: Colors.orange),
-      CheckResult.fail => Icon(Icons.cancel, color: scheme.error),
-      CheckResult.skip => Icon(Icons.remove_circle_outline, color: scheme.outline),
-    };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Monitoring (Grafana)
-// ---------------------------------------------------------------------------
-
-class _MonitoringTab extends ConsumerWidget {
-  const _MonitoringTab({required this.profile});
-
-  final ServerProfile profile;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final mon = ref.watch(monitoringProvider(profile.id));
-    return mon.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(monitoringProvider(profile.id))),
-      data: (m) => RefreshIndicator(
-        onRefresh: () => ref.refresh(monitoringProvider(profile.id).future),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _GrafanaCard(monitoring: m),
-            if (m.metrics.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text('Headline metrics', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                childAspectRatio: 2.4,
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-                children: [for (final x in m.metrics) _MetricTile(metric: x)],
-              ),
-            ] else ...[
-              const SizedBox(height: 16),
-              const Text(
-                'No Prometheus metrics. Enable the monitoring profile '
-                '(moav start monitoring) to see headline numbers here.',
-              ),
-            ],
-            if (m.adminUrl != null) ...[
-              const SizedBox(height: 16),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.admin_panel_settings_outlined),
-                title: const Text('Admin dashboard'),
-                subtitle: Text(m.adminUrl.toString()),
-                trailing: const Icon(Icons.open_in_new),
-                onTap: () => launchUrl(m.adminUrl!, mode: LaunchMode.externalApplication),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GrafanaCard extends StatelessWidget {
-  const _GrafanaCard({required this.monitoring});
-
-  final Monitoring monitoring;
-
-  @override
-  Widget build(BuildContext context) {
-    final m = monitoring;
-    final url = m.grafanaUrl;
-    final (icon, text) = switch (m.grafanaHealthy) {
-      true => (const Icon(Icons.check_circle, color: Colors.green),
-          'Grafana ${m.grafanaVersion ?? ''} is up'),
-      false => (Icon(Icons.cancel, color: Theme.of(context).colorScheme.error),
-          'Grafana is not responding'),
-      null => (const Icon(Icons.help_outline), 'Grafana status unknown'),
-    };
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              icon,
-              const SizedBox(width: 8),
-              Expanded(child: Text(text.trim(), style: Theme.of(context).textTheme.titleMedium)),
-            ]),
-            if (url != null) ...[
-              const SizedBox(height: 4),
-              SelectableText(url.toString(), style: Theme.of(context).textTheme.bodySmall),
-            ],
-            if (m.grafanaCdnUrl != null)
-              SelectableText('via CDN: ${m.grafanaCdnUrl}',
-                  style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 12),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              FilledButton.icon(
-                onPressed: url == null
-                    ? null
-                    : () => Navigator.of(context).push(GrafanaScreen.route(url)),
-                icon: const Icon(Icons.dashboard_outlined),
-                label: const Text('Open Grafana'),
-              ),
-              OutlinedButton.icon(
-                onPressed: url == null
-                    ? null
-                    : () => launchUrl(url, mode: LaunchMode.externalApplication),
-                icon: const Icon(Icons.open_in_browser),
-                label: const Text('In browser'),
-              ),
-            ]),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MetricTile extends StatelessWidget {
-  const _MetricTile({required this.metric});
-
-  final Metric metric;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(metric.name, style: Theme.of(context).textTheme.bodySmall),
-            Text(
-              '${metric.value}${metric.unit ?? ''}',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

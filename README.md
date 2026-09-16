@@ -24,3 +24,20 @@ flutter analyze --fatal-infos
 flutter test                                   # unit + widget tests
 MOAV_TEST_SSH_KEY=~/.ssh/key MOAV_TEST_HOST=h MOAV_TEST_USER=root flutter test test/live   # live, additive-only checks
 ```
+
+### Design system
+`lib/theme/moav_theme.dart` holds the MoaV tokens (same values as the site's
+`blog.css`: `#0a0a0f` backgrounds, cyan `#00d4ff` → purple `#7b5cff` accent,
+Inter + JetBrains Mono) as a dark-only Material 3 `ThemeData`, plus the
+reusable pieces every screen is built from: `MoavScaffold` (radial glow),
+`MoavCard`, `SectionHeader`, `MetricTile`, `StatusPill`, `GradientButton`,
+`CodeBlock`. Fonts are bundled from `assets/fonts` — nothing is fetched at
+runtime.
+
+### Screenshot gallery
+`tool/screenshots.sh` drives the app on a booted iOS simulator with
+`integration_test` and writes PNGs to `shots/` (git-ignored; the curated set
+lives in [`docs/screenshots/`](docs/screenshots/)). By default it uses
+yorkschool-shaped fake data; with the `MOAV_TEST_*` variables above it talks
+to the real box, read-only except for one throwaway `zzmoavdeploytest*` user
+that is created for the bundle/QR shot and revoked afterwards.

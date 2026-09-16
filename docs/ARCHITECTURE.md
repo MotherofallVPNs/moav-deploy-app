@@ -96,6 +96,25 @@ seven headline numbers from Prometheus instant queries, and Grafana embedded
 in a webview (with open-in-browser for self-signed certificates). P2: richer
 native charts from the API.
 
+## Design system
+
+The app is dark-first and shares MoaV's visual language with the site:
+`lib/theme/moav_theme.dart` is the single source of tokens (backgrounds
+`#0a0a0f / #12121a / #15151f`, text ramp white → `#a0a0b0` → `#606070`,
+cyan `#00d4ff` / purple `#7b5cff` accent gradient, 12 / 8 px radii). Inter is
+the UI face; JetBrains Mono is used for anything that is a value — hosts,
+keys, metrics, service names, logs. Both are bundled under `assets/fonts`
+(no `google_fonts`; at-risk users must never trigger a font download).
+Screens only compose the theme's widgets (`MoavScaffold`, `MoavCard`,
+`SectionHeader`, `MetricTile`, `StatusPill`, `GradientButton`, `CodeBlock`)
+and never touch the `MoavController` seam for styling.
+
+The Analytics tab (`features/operate/analytics_view.dart`) turns the flat
+headline `Metric` list into tiles, derives per-protocol status from the
+`moav status` service table (`sing-box` → reality/trojan/hysteria2/…), and
+embeds Grafana inline through the same `GrafanaPanel` the full-screen view
+uses, keeping the open-in-browser fallback for self-signed certificates.
+
 ## Distribution
 
 App Store + Play, plus a sideloadable APK / TestFlight path, because users in

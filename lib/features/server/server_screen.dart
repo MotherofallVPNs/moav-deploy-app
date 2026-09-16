@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/server_profile.dart';
+import '../../theme/moav_theme.dart';
 import '../deploy/deploy_screen.dart';
 import '../operate/operate_screen.dart';
 import '../users/users_screen.dart';
@@ -16,16 +17,54 @@ class ServerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final auth = switch (profile.authMethod) {
+      SshAuthMethod.generatedKey => 'device key',
+      SshAuthMethod.importedKey => 'imported key',
+      SshAuthMethod.password => 'password',
+    };
+    return MoavScaffold(
       appBar: AppBar(title: Text(profile.label)),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: [
-          Text(
-            '${profile.username}@${profile.host}:${profile.port}',
-            style: Theme.of(context).textTheme.bodySmall,
+          MoavCard(
+            accent: true,
+            child: Row(
+              children: [
+                const IconBadge(Icons.dns_outlined, size: 46, gradient: true),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${profile.username}@${profile.host}',
+                        style: moavMono(size: 14, weight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'port ${profile.port} · ssh',
+                        style: moavMono(
+                          size: 12,
+                          weight: FontWeight.w400,
+                          color: MoavColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                StatusPill(
+                  auth,
+                  tone: profile.authMethod == SshAuthMethod.password
+                      ? StatusTone.warn
+                      : StatusTone.accent,
+                  dot: false,
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
+          const SectionHeader('Manage'),
           _HubTile(
             icon: Icons.people_outline,
             title: 'Users',
@@ -47,11 +86,12 @@ class ServerScreen extends StatelessWidget {
           ),
           _HubTile(
             icon: Icons.insights_outlined,
-            title: 'Monitoring',
-            subtitle: 'Grafana and headline metrics',
+            title: 'Analytics',
+            subtitle: 'Headline metrics, protocol status and Grafana',
             onTap: () => Navigator.of(context)
                 .push(OperateScreen.route(profile, tab: OperateTab.monitoring)),
           ),
+          const SectionHeader('Install'),
           _HubTile(
             icon: Icons.rocket_launch_outlined,
             title: 'Deploy',
@@ -79,13 +119,29 @@ class _HubTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: Icon(icon),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: MoavCard(
         onTap: onTap,
+        padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+        child: Row(
+          children: [
+            IconBadge(icon),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: theme.textTheme.bodySmall),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: MoavColors.textMuted),
+          ],
+        ),
       ),
     );
   }

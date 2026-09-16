@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../theme/moav_theme.dart';
+import '../../widgets/error_view.dart';
 import 'add_server_form.dart';
 import 'servers_provider.dart';
-import '../../widgets/error_view.dart';
 
 class AddServerScreen extends ConsumerWidget {
   const AddServerScreen({super.key});
@@ -16,11 +18,12 @@ class AddServerScreen extends ConsumerWidget {
     final form = ref.watch(addServerFormProvider);
     final notifier = ref.read(addServerFormProvider.notifier);
 
-    return Scaffold(
+    return MoavScaffold(
       appBar: AppBar(title: const Text('Add server')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
         children: [
+          const SectionHeader('Connection', padding: EdgeInsets.only(top: 4, bottom: 10)),
           TextField(
             decoration: const InputDecoration(
               labelText: 'Label (optional)',
@@ -36,6 +39,7 @@ class AddServerScreen extends ConsumerWidget {
               hintText: 'vpn.example.com or 203.0.113.7',
               errorText: form.host.isEmpty ? null : form.hostError,
             ),
+            style: moavMono(size: 14),
             keyboardType: TextInputType.url,
             autocorrect: false,
             textInputAction: TextInputAction.next,
@@ -51,6 +55,7 @@ class AddServerScreen extends ConsumerWidget {
                     labelText: 'Port',
                     errorText: form.portError,
                   ),
+                  style: moavMono(size: 14),
                   keyboardType: TextInputType.number,
                   onChanged: notifier.setPort,
                 ),
@@ -64,15 +69,14 @@ class AddServerScreen extends ConsumerWidget {
                     labelText: 'Username',
                     errorText: form.usernameError,
                   ),
+                  style: moavMono(size: 14),
                   autocorrect: false,
                   onChanged: notifier.setUsername,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          Text('Authentication', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
+          const SectionHeader('Authentication'),
           SegmentedButton<AuthChoice>(
             segments: const [
               ButtonSegment(
@@ -94,31 +98,39 @@ class AddServerScreen extends ConsumerWidget {
             selected: {form.authChoice},
             onSelectionChanged: (s) => notifier.setAuthChoice(s.first),
           ),
-          const SizedBox(height: 16),
-          _AuthSection(form: form, notifier: notifier),
+          const SizedBox(height: 12),
+          MoavCard(
+            accent: form.authChoice == AuthChoice.generateKey,
+            child: _AuthSection(form: form, notifier: notifier),
+          ),
           if (form.error != null) ...[
             const SizedBox(height: 16),
             ErrorBanner(error: form.error!),
           ],
           if (form.notice != null) ...[
             const SizedBox(height: 16),
-            Text(
-              form.notice!,
-              style: TextStyle(color: Theme.of(context).colorScheme.primary),
+            Row(
+              children: [
+                const Icon(Icons.check_circle, size: 18, color: MoavColors.pass),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    form.notice!,
+                    style: const TextStyle(color: MoavColors.pass),
+                  ),
+                ),
+              ],
             ),
           ],
           const SizedBox(height: 24),
-          FilledButton(
+          GradientButton(
             onPressed: form.isValid && !form.submitting
                 ? () => _submit(context, ref)
                 : null,
-            child: form.submitting
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Save server'),
+            busy: form.submitting,
+            expand: true,
+            icon: Icons.save_outlined,
+            label: 'Save server',
           ),
         ],
       ),
@@ -159,39 +171,72 @@ class _AuthSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     switch (form.authChoice) {
       case AuthChoice.generateKey:
         final key = form.generatedKey;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'An ed25519 key is generated on this device. The private key '
-              'never leaves the secure store; only the public key goes on '
-              'the server.',
+            Row(
+              children: [
+                const IconBadge(Icons.key, size: 32),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text('On-device ed25519 key', style: theme.textTheme.titleMedium),
+                ),
+                if (key != null)
+                  const StatusPill('generated', tone: StatusTone.pass, dot: false),
+              ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+            Text(
+              'The key pair is generated on this phone. The private key never '
+              'leaves the secure store; only the public key goes on the server.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 14),
             if (key == null)
-              OutlinedButton.icon(
+              GradientButton(
                 onPressed: notifier.generateKey,
-                icon: const Icon(Icons.autorenew),
-                label: const Text('Generate ed25519 key'),
+                icon: Icons.autorenew,
+                label: 'Generate ed25519 key',
               )
             else ...[
-              const Text('Public key:'),
-              const SizedBox(height: 4),
-              SelectableText(
-                key.publicKeyOpenSsh,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              Text('PUBLIC KEY', style: moavLabel(size: 10)),
+              const SizedBox(height: 6),
+              CodeBlock(key.publicKeyOpenSsh, size: 11.5),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: () async {
+                      await Clipboard.setData(
+                        ClipboardData(text: key.publicKeyOpenSsh),
+                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Public key copied')),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text('Copy'),
+                  ),
+                  TextButton.icon(
+                    onPressed: notifier.generateKey,
+                    icon: const Icon(Icons.autorenew, size: 16),
+                    label: const Text('Regenerate'),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               if (form.keyInstalled)
-                Row(
+                const Row(
                   children: [
-                    Icon(Icons.check_circle,
-                        color: Theme.of(context).colorScheme.primary),
-                    const SizedBox(width: 8),
-                    const Expanded(child: Text('Installed on the server')),
+                    Icon(Icons.check_circle, color: MoavColors.pass),
+                    SizedBox(width: 8),
+                    Expanded(child: Text('Installed on the server')),
                   ],
                 )
               else ...[
@@ -199,9 +244,9 @@ class _AuthSection extends StatelessWidget {
                   'Install it on the server now (uses the server password '
                   'once, never stored), or add the line above to '
                   '~/.ssh/authorized_keys yourself.',
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: theme.textTheme.bodySmall,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 TextField(
                   decoration: const InputDecoration(
                     labelText: 'Server password (one-time)',
@@ -211,7 +256,7 @@ class _AuthSection extends StatelessWidget {
                   enableSuggestions: false,
                   onChanged: notifier.setOneTimePassword,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 OutlinedButton.icon(
                   onPressed:
                       form.canInstallKey ? notifier.installKeyOnServer : null,
@@ -233,12 +278,11 @@ class _AuthSection extends StatelessWidget {
           decoration: const InputDecoration(
             labelText: 'Private key (OpenSSH / PEM, ed25519)',
             alignLabelWithHint: true,
-            border: OutlineInputBorder(),
           ),
           maxLines: 6,
           autocorrect: false,
           enableSuggestions: false,
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+          style: moavMono(size: 12, weight: FontWeight.w400),
           onChanged: notifier.setImportedKey,
         );
       case AuthChoice.password:
@@ -256,7 +300,7 @@ class _AuthSection extends StatelessWidget {
             Text(
               'Password auth is a fallback. Prefer a key so a seized device '
               'can be wiped without changing the server password.',
-              style: Theme.of(context).textTheme.bodySmall,
+              style: theme.textTheme.bodySmall,
             ),
           ],
         );
