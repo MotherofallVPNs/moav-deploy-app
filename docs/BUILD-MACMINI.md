@@ -27,14 +27,13 @@ source /Volumes/Beezhan/dev/env.sh
 - **CocoaPods** 1.17 (`brew install cocoapods`); cache → `CP_HOME_DIR`.
 - Xcode DerivedData default pointed at `/Volumes/Beezhan/dev/DerivedData`.
 
+## Xcode — DONE
+- **Xcode 27.0** installed at `/Volumes/Beezhan/applications/Xcode.app` (external SSD) and selected (`xcode-select -p` points there).
+- **iOS 27.0 Simulator runtime** downloaded (`xcodebuild -downloadPlatform iOS`, ~8 GB). Note: the runtime installs under the system `CoreSimulator` location, not the external SSD — that ~8 GB stays on the main disk (Apple doesn't support relocating it cleanly).
+- `flutter doctor` → **Xcode ✓**. Verified: `flutter build ios --simulator --debug` succeeds (`build/ios/iphonesimulator/Runner.app`).
+
 ## Still needed (manual — needs your hands)
-1. **Xcode** (full app, ~15 GB). Install via the App Store or `xcodes`, then:
-   ```bash
-   sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer   # or the external path if you move it
-   sudo xcodebuild -runFirstLaunch
-   ```
-   To keep it off the main disk, move `Xcode.app` to `/Volumes/Beezhan/dev/Xcode.app` and `xcode-select --switch` there (keep the SSD mounted during builds). Simulator runtimes under `~/Library/Developer/CoreSimulator` can be symlinked to the external SSD.
-2. **Signing accounts** (only for distribution, not local testing): Apple Developer Program ($99/yr; org enrollment needs a D-U-N-S), Google Play Console ($25 one-time).
+1. **Signing accounts** (only for distribution, not local testing): Apple Developer Program ($99/yr; org enrollment needs a D-U-N-S), Google Play Console ($25 one-time).
 
 ## What you can build today (no paid accounts)
 - **Android APK:** `flutter build apk --release` → sideload to any device/emulator.
