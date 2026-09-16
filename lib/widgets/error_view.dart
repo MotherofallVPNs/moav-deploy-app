@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/app_error.dart';
+import '../theme/moav_theme.dart';
 
 /// The one way errors are shown full-screen or in a tab: an icon that says
 /// what kind of failure it was, one sentence, a hint on what to do, the
@@ -23,7 +24,6 @@ class ErrorView extends StatelessWidget {
   Widget build(BuildContext context) {
     final e = AppError.from(error);
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -32,8 +32,12 @@ class ErrorView extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(iconFor(e.kind), size: 44, color: e.retryable ? scheme.outline : scheme.error),
-              const SizedBox(height: 12),
+              IconBadge(
+                iconFor(e.kind),
+                size: 56,
+                color: e.retryable ? MoavColors.warn : MoavColors.fail,
+              ),
+              const SizedBox(height: 16),
               Text(e.message, textAlign: TextAlign.center, style: theme.textTheme.titleMedium),
               if (e.hint != null) ...[
                 const SizedBox(height: 8),
@@ -45,16 +49,11 @@ class ErrorView extends StatelessWidget {
                   title: Text('Details', style: theme.textTheme.bodySmall),
                   tilePadding: EdgeInsets.zero,
                   childrenPadding: const EdgeInsets.only(bottom: 8),
-                  children: [
-                    SelectableText(
-                      e.detail!,
-                      style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
-                    ),
-                  ],
+                  children: [CodeBlock(e.detail!, size: 11)],
                 ),
               ],
               if (onRetry != null) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
                 FilledButton.tonalIcon(
                   onPressed: onRetry,
                   icon: const Icon(Icons.refresh),
@@ -92,17 +91,18 @@ class ErrorBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final e = AppError.from(error);
-    final scheme = Theme.of(context).colorScheme;
+    const c = MoavColors.fail;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: scheme.errorContainer,
-        borderRadius: BorderRadius.circular(8),
+        color: c.withValues(alpha: 0.10),
+        borderRadius: MoavRadius.control,
+        border: Border.all(color: c.withValues(alpha: 0.35)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(ErrorView.iconFor(e.kind), size: 20, color: scheme.onErrorContainer),
+          Icon(ErrorView.iconFor(e.kind), size: 20, color: c),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -110,10 +110,13 @@ class ErrorBanner extends StatelessWidget {
               children: [
                 Text(
                   trailing == null ? e.message : '${e.message} $trailing',
-                  style: TextStyle(color: scheme.onErrorContainer, fontWeight: FontWeight.w600),
+                  style: const TextStyle(color: MoavColors.text, fontWeight: FontWeight.w600),
                 ),
                 if (e.hint != null)
-                  Text(e.hint!, style: TextStyle(color: scheme.onErrorContainer, fontSize: 12)),
+                  Text(
+                    e.hint!,
+                    style: const TextStyle(color: MoavColors.textSecondary, fontSize: 12),
+                  ),
               ],
             ),
           ),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
 
 import '../features/wipe/wipe_dialog.dart';
+import '../theme/moav_theme.dart';
 
 /// Wraps [LocalAuthentication] so it can be swapped in tests.
 class AppLockService {
@@ -101,36 +102,41 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   Widget build(BuildContext context) {
     final lock = ref.watch(appLockProvider);
     if (lock == LockState.unlocked) return widget.child;
-    return Scaffold(
+    final theme = Theme.of(context);
+    return MoavScaffold(
       body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.lock_outline, size: 48),
-            const SizedBox(height: 16),
-            Text(
-              lock == LockState.failed ? 'Unlock failed' : 'MoaV Deploy is locked',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 16),
-            if (lock == LockState.unlocking)
-              const CircularProgressIndicator()
-            else ...[
-              FilledButton(
-                onPressed: () => ref.read(appLockProvider.notifier).unlock(),
-                child: const Text('Unlock'),
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const IconBadge(Icons.lock_outline, size: 72, gradient: true),
+              const SizedBox(height: 24),
+              const MoavWordmark(suffix: 'Deploy', size: 26),
+              const SizedBox(height: 8),
+              Text(
+                lock == LockState.failed ? 'Unlock failed' : 'Locked',
+                style: theme.textTheme.bodyMedium,
               ),
-              const SizedBox(height: 32),
-              TextButton.icon(
-                style: TextButton.styleFrom(
-                  foregroundColor: Theme.of(context).colorScheme.error,
+              const SizedBox(height: 28),
+              if (lock == LockState.unlocking)
+                const CircularProgressIndicator()
+              else ...[
+                GradientButton(
+                  onPressed: () => ref.read(appLockProvider.notifier).unlock(),
+                  icon: Icons.fingerprint,
+                  label: 'Unlock',
                 ),
-                onPressed: () => showWipeDialog(context, ref),
-                icon: const Icon(Icons.delete_forever_outlined),
-                label: const Text('Emergency wipe'),
-              ),
+                const SizedBox(height: 40),
+                TextButton.icon(
+                  style: TextButton.styleFrom(foregroundColor: MoavColors.fail),
+                  onPressed: () => showWipeDialog(context, ref),
+                  icon: const Icon(Icons.delete_forever_outlined),
+                  label: const Text('Emergency wipe'),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

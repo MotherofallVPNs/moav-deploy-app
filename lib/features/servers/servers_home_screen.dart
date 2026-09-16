@@ -3,13 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
+import '../../theme/moav_theme.dart';
+import '../../widgets/error_view.dart';
 import '../deploy/deploy_screen.dart';
 import '../server/server_screen.dart';
 import '../users/users_screen.dart';
 import '../wipe/wipe_dialog.dart';
 import 'add_server_screen.dart';
 import 'servers_provider.dart';
-import '../../widgets/error_view.dart';
 
 class ServersHomeScreen extends ConsumerWidget {
   const ServersHomeScreen({super.key});
@@ -18,9 +19,9 @@ class ServersHomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final servers = ref.watch(serversProvider);
 
-    return Scaffold(
+    return MoavScaffold(
       appBar: AppBar(
-        title: const Text('MoaV Deploy'),
+        title: const MoavWordmark(suffix: 'Deploy'),
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_forever_outlined),
@@ -40,44 +41,28 @@ class ServersHomeScreen extends ConsumerWidget {
           onRetry: () => ref.invalidate(serversProvider),
         ),
         data: (list) => list.isEmpty
-            ? const _EmptyState()
+            ? const EmptyState(
+                icon: Icons.dns_outlined,
+                title: 'No servers yet',
+                body: 'Add a server to install and manage MoaV on it. '
+                    'Credentials stay on this device.',
+              )
             : ListView.separated(
-                itemCount: list.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, i) => _ServerTile(profile: list[i]),
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
+                itemCount: list.length + 1,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, i) => i == 0
+                    ? SectionHeader(
+                        list.length == 1 ? '1 server' : '${list.length} servers',
+                        padding: const EdgeInsets.only(top: 4, bottom: 2),
+                      )
+                    : _ServerTile(profile: list[i - 1]),
               ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: MoavFab(
         onPressed: () => Navigator.of(context).push(AddServerScreen.route()),
-        icon: const Icon(Icons.add),
-        label: const Text('Add server'),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.dns_outlined, size: 56),
-            const SizedBox(height: 16),
-            Text('No servers yet', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            const Text(
-              'Add a server to install and manage MoaV on it. '
-              'Credentials stay on this device.',
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+        icon: Icons.add,
+        label: 'Add server',
       ),
     );
   }
@@ -92,52 +77,73 @@ class _ServerTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auth = switch (profile.authMethod) {
-      SshAuthMethod.generatedKey || SshAuthMethod.importedKey => 'key',
-      SshAuthMethod.password => 'password',
+    final (auth, tone) = switch (profile.authMethod) {
+      SshAuthMethod.generatedKey || SshAuthMethod.importedKey =>
+        ('key', StatusTone.accent),
+      SshAuthMethod.password => ('password', StatusTone.warn),
     };
-    return ListTile(
-      leading: const Icon(Icons.dns),
-      title: Text(profile.label),
-      subtitle: Text('${profile.username}@${profile.host}:${profile.port} · $auth'),
+    return MoavCard(
+      padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
       onTap: () => Navigator.of(context).push(ServerScreen.route(profile)),
-      trailing: PopupMenuButton<_TileAction>(
-        onSelected: (a) => switch (a) {
-          _TileAction.test => _testConnection(context, ref),
-          _TileAction.users =>
-            Navigator.of(context).push(UsersScreen.route(profile)),
-          _TileAction.deploy =>
-            Navigator.of(context).push(DeployScreen.route(profile)),
-          _TileAction.remove => _confirmRemove(context, ref),
-        },
-        itemBuilder: (_) => const [
-          PopupMenuItem(
-            value: _TileAction.test,
-            child: ListTile(
-              leading: Icon(Icons.network_check),
-              title: Text('Test connection'),
+      child: Row(
+        children: [
+          const IconBadge(Icons.dns_outlined),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(profile.label, style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 3),
+                Text(
+                  '${profile.username}@${profile.host}:${profile.port}',
+                  style: moavMono(size: 12, color: MoavColors.textSecondary),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
-          PopupMenuItem(
-            value: _TileAction.users,
-            child: ListTile(
-              leading: Icon(Icons.people_outline),
-              title: Text('Users'),
-            ),
-          ),
-          PopupMenuItem(
-            value: _TileAction.deploy,
-            child: ListTile(
-              leading: Icon(Icons.rocket_launch_outlined),
-              title: Text('Deploy MoaV'),
-            ),
-          ),
-          PopupMenuItem(
-            value: _TileAction.remove,
-            child: ListTile(
-              leading: Icon(Icons.delete_outline),
-              title: Text('Remove'),
-            ),
+          const SizedBox(width: 8),
+          StatusPill(auth, tone: tone, dot: false),
+          PopupMenuButton<_TileAction>(
+            onSelected: (a) => switch (a) {
+              _TileAction.test => _testConnection(context, ref),
+              _TileAction.users =>
+                Navigator.of(context).push(UsersScreen.route(profile)),
+              _TileAction.deploy =>
+                Navigator.of(context).push(DeployScreen.route(profile)),
+              _TileAction.remove => _confirmRemove(context, ref),
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: _TileAction.test,
+                child: ListTile(
+                  leading: Icon(Icons.network_check),
+                  title: Text('Test connection'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _TileAction.users,
+                child: ListTile(
+                  leading: Icon(Icons.people_outline),
+                  title: Text('Users'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _TileAction.deploy,
+                child: ListTile(
+                  leading: Icon(Icons.rocket_launch_outlined),
+                  title: Text('Deploy MoaV'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _TileAction.remove,
+                child: ListTile(
+                  leading: Icon(Icons.delete_outline),
+                  title: Text('Remove'),
+                ),
+              ),
+            ],
           ),
         ],
       ),

@@ -257,6 +257,19 @@ const _profile = ServerProfile(
   authMethod: SshAuthMethod.importedKey,
 );
 
+/// Scrolls the current page's ListView until [f] is on screen.
+Future<void> _scrollTo(WidgetTester tester, Finder f) async {
+  await tester.scrollUntilVisible(
+    f,
+    120,
+    scrollable: find
+        .descendant(of: find.byType(ListView).last, matching: find.byType(Scrollable))
+        .first,
+  );
+  // scrollUntilVisible ends with ensureVisible but no frame; lay it out.
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('home shows empty state and opens add-server form',
       (tester) async {
@@ -327,27 +340,23 @@ void main() {
     await tester.enterText(
         find.widgetWithText(TextField, 'Server password (one-time)'), 'wrong');
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Install key on server'));
-    await tester.pumpAndSettle();
+    await _scrollTo(tester, find.text('Install key on server'));
     await tester.tap(find.text('Install key on server'));
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(ListView), const Offset(0, -600));
-    await tester.pumpAndSettle();
+    await _scrollTo(tester, find.textContaining('Could not install key'));
     expect(find.textContaining('Could not install key'), findsOneWidget);
 
     await tester.enterText(
         find.widgetWithText(TextField, 'Server password (one-time)'), 'pw');
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Install key on server'));
-    await tester.pumpAndSettle();
+    await _scrollTo(tester, find.text('Install key on server'));
     await tester.tap(find.text('Install key on server'));
     await tester.pumpAndSettle();
 
     expect(find.text('Installed on the server'), findsOneWidget);
     expect(installs.single, startsWith('root@h.example:22 pw=pw key=ssh-ed25519 '));
 
-    await tester.ensureVisible(find.text('Save server'));
-    await tester.pumpAndSettle();
+    await _scrollTo(tester, find.text('Save server'));
     await tester.tap(find.text('Save server'));
     await tester.pumpAndSettle();
 
@@ -422,13 +431,13 @@ void main() {
 
     expect(controller.installedSpec?.domain, 'vpn.example.org');
     expect(store.installHandles['s1']?['jobId'], '4242');
-    expect(find.text('Running'), findsOneWidget);
+    expect(find.text('RUNNING'), findsOneWidget);
     expect(find.text('[moav-deploy] step 1/5: Preflight'), findsOneWidget);
 
     // Next poll reports completion and polling stops.
     await tester.pump(const Duration(seconds: 3));
     await tester.pump();
-    expect(find.text('Done'), findsOneWidget);
+    expect(find.text('DONE'), findsOneWidget);
     expect(find.text('[moav-deploy] exit=0'), findsOneWidget);
     expect(find.text('Start another install'), findsOneWidget);
     final callsAtDone = controller.statusCalls;
@@ -492,6 +501,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(QrImageView), findsOneWidget);
     expect(find.text('VLESS Reality'), findsOneWidget);
+    await _scrollTo(tester, find.text('TrustTunnel'));
     expect(find.text('TrustTunnel'), findsOneWidget);
     expect(controller.log, ['bundle alice']);
     await tester.pageBack();
@@ -545,9 +555,10 @@ void main() {
     await tester.tap(find.text('Services'));
     await tester.pumpAndSettle();
 
-    expect(find.text('MoaV 2.2.2 · 1 of 2 running'), findsOneWidget);
+    expect(find.text('1 / 2'), findsOneWidget);
+    expect(find.text('MoaV v2.2.2'), findsOneWidget);
     expect(find.text('sing-box'), findsOneWidget);
-    expect(find.textContaining('up 7 days'), findsOneWidget);
+    expect(find.text('7 days'), findsOneWidget);
 
     // Restart all asks first; cancel does nothing.
     await tester.tap(find.text('Restart all'));
@@ -576,20 +587,25 @@ void main() {
     // Health tab shows doctor checks with the failing one flagged.
     await tester.tap(find.text('Health'));
     await tester.pumpAndSettle();
-    expect(find.text('1 check(s) failing'), findsOneWidget);
+    expect(find.text('1 check failing'), findsOneWidget);
     expect(find.text('docker'), findsOneWidget);
     expect(find.byIcon(Icons.cancel), findsWidgets);
     await tester.tap(find.text('services'));
     await tester.pumpAndSettle();
     expect(find.textContaining('sing-box — not running'), findsOneWidget);
 
-    // Monitoring tab shows Grafana health, URL and metrics.
-    await tester.tap(find.text('Monitoring'));
+    // Analytics tab shows Grafana health, URL, metrics and protocol status.
+    await tester.tap(find.text('Analytics'));
     await tester.pumpAndSettle();
     expect(find.text('Grafana 13.1.3 is up'), findsOneWidget);
     expect(find.text('https://example.org:9444'), findsOneWidget);
-    expect(find.text('Load (1m)'), findsOneWidget);
+    expect(find.text('LOAD (1M)'), findsOneWidget);
     expect(find.text('33 B/s'), findsOneWidget);
+    // Protocol pills come from the status report (sing-box → reality etc.).
+    await _scrollTo(tester, find.text('REALITY'));
+    expect(find.text('HYSTERIA2'), findsOneWidget);
+    await _scrollTo(tester, find.text('Grafana preview is not available here'));
+    await _scrollTo(tester, find.text('Admin dashboard'));
     expect(find.text('Admin dashboard'), findsOneWidget);
   });
 

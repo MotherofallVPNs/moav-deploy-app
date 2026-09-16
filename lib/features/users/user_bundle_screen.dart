@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
+import '../../theme/moav_theme.dart';
 import '../../widgets/error_view.dart';
 import '../operate/user_test_screen.dart';
 import 'users_provider.dart';
@@ -26,9 +27,9 @@ class UserBundleScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final key = (serverId: profile.id, user: user);
     final bundle = ref.watch(bundleProvider(key));
-    return Scaffold(
+    return MoavScaffold(
       appBar: AppBar(
-        title: Text(user),
+        title: Text(user, style: moavMono(size: 17, weight: FontWeight.w600)),
         actions: [
           IconButton(
             icon: const Icon(Icons.network_check),
@@ -61,29 +62,69 @@ class _BundleView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final qr = bundle.withQr.toList();
     final other = bundle.entries.where((e) => e.qrPayload == null).toList();
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
       children: [
-        Text(
-          '${bundle.entries.length} configs · fetched over SFTP from ${bundle.path ?? 'the server'}',
-          style: Theme.of(context).textTheme.bodySmall,
+        MoavCard(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Row(
+            children: [
+              MoavAvatar(bundle.user, size: 40),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${bundle.entries.length} configs · ${qr.length} QR',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      bundle.path ?? 'fetched over SFTP',
+                      style: moavMono(
+                        size: 11,
+                        weight: FontWeight.w400,
+                        color: MoavColors.textMuted,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 8),
+        if (qr.isNotEmpty) const SectionHeader('Scan to import'),
         for (final e in qr) _QrCard(entry: e),
         if (other.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text('Other configs', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          for (final e in other)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.description_outlined),
-              title: Text(e.title),
-              subtitle: Text(e.fileName),
-              trailing: _ActionRow(entry: e),
+          const SectionHeader('Other configs'),
+          MoavCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                for (final (i, e) in other.indexed) ...[
+                  if (i > 0) const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.description_outlined, color: MoavColors.cyan),
+                    title: Text(e.title),
+                    subtitle: Text(
+                      e.fileName,
+                      style: moavMono(
+                        size: 11,
+                        weight: FontWeight.w400,
+                        color: MoavColors.textMuted,
+                      ),
+                    ),
+                    trailing: _ActionRow(entry: e),
+                  ),
+                ],
+              ],
             ),
+          ),
         ],
       ],
     );
@@ -98,10 +139,10 @@ class _QrCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final payload = entry.qrPayload!;
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: MoavCard(
+        accent: true,
         child: Column(
           children: [
             Row(
@@ -111,34 +152,51 @@ class _QrCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(entry.title, style: Theme.of(context).textTheme.titleMedium),
-                      Text(entry.fileName, style: Theme.of(context).textTheme.bodySmall),
+                      const SizedBox(height: 2),
+                      Text(
+                        entry.fileName,
+                        style: moavMono(
+                          size: 11,
+                          weight: FontWeight.w400,
+                          color: MoavColors.textMuted,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 _ActionRow(entry: entry),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Container(
-              color: Colors.white,
-              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: MoavRadius.card,
+                boxShadow: moavGlow(blur: 32, alpha: 0.12),
+              ),
+              padding: const EdgeInsets.all(10),
               child: QrImageView(
                 data: payload,
-                size: 220,
+                size: 216,
                 errorCorrectionLevel: QrErrorCorrectLevel.M,
                 errorStateBuilder: (_, _) => const SizedBox(
-                  width: 220,
-                  height: 220,
-                  child: Center(child: Text('Too large for a QR code')),
+                  width: 216,
+                  height: 216,
+                  child: Center(
+                    child: Text(
+                      'Too large for a QR code',
+                      style: TextStyle(color: MoavColors.bg),
+                    ),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              payload.length > 80 ? '${payload.substring(0, 80)}…' : payload,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+            const SizedBox(height: 12),
+            CodeBlock(
+              payload.length > 96 ? '${payload.substring(0, 96)}…' : payload,
+              selectable: false,
               maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+              size: 11,
             ),
           ],
         ),
@@ -159,7 +217,7 @@ class _ActionRow extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
-          icon: const Icon(Icons.copy),
+          icon: const Icon(Icons.copy, size: 20),
           tooltip: 'Copy',
           onPressed: () async {
             await Clipboard.setData(ClipboardData(text: text));
@@ -171,7 +229,7 @@ class _ActionRow extends StatelessWidget {
           },
         ),
         IconButton(
-          icon: const Icon(Icons.ios_share),
+          icon: const Icon(Icons.ios_share, size: 20),
           tooltip: 'Share',
           onPressed: () => SharePlus.instance.share(
             ShareParams(

@@ -33,3 +33,6 @@ android/app/.cxx/
 # orchestrator scratch files
 .worker-prompt-*.txt
 .worker.log.*
+
+# screenshot harness output (curated copies live in docs/screenshots/)
+shots/
