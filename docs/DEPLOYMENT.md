@@ -58,26 +58,35 @@ flutter build apk --release                # sideloadable APK
 flutter build appbundle --release          # Play Store AAB
 ```
 
-Release signing: create a keystore once and keep it **outside** the repo.
+Release signing is wired: `android/app/build.gradle.kts` reads a git-ignored
+`android/key.properties` and signs release builds with the upload keystore;
+if `key.properties` is absent (CI, fresh clones) it falls back to debug
+signing so builds still succeed.
+
+We use **Play App Signing**: Google holds the real app-signing key, we hold
+only the upload key. This keeps the Play upload key separate from the APK
+sideload trust path. The keystore must be PKCS12 and its store and key
+passwords must be identical (PKCS12 does not support per-entry passwords).
+
+Create the upload keystore once, outside the repo:
 
 ```
-keytool -genkey -v -keystore ~/keys/moav-deploy-upload.jks \
-  -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+keytool -genkeypair -v -keystore <path>/moav-deploy-upload.jks \
+  -storetype PKCS12 -keyalg RSA -keysize 2048 -validity 10000 -alias upload
 ```
 
-Then add `android/key.properties` (git-ignored):
+Then add `android/key.properties` (git-ignored) pointing at it:
 
 ```
 storePassword=…
-keyPassword=…
+keyPassword=…        # same as storePassword for PKCS12
 keyAlias=upload
-storeFile=/Users/you/keys/moav-deploy-upload.jks
+storeFile=<path>/moav-deploy-upload.jks
 ```
 
-and switch `buildTypes.release.signingConfig` in
-`android/app/build.gradle.kts` from the debug config to a `release` config
-that reads `key.properties` (standard Flutter recipe). Until that change
-lands, release builds are debug-signed and are fine for internal testing only.
+The maintained keystore + credentials live outside the repo on the build
+host; ask the owner for their location. Verify a built artifact with
+`jarsigner -verify build/app/outputs/bundle/release/app-release.aab`.
 
 ### iOS
 
