@@ -230,7 +230,9 @@ class _GalleryFactory extends MoavControllerFactory {
 
 class _MemoryCredStore implements SecureCredStore {
   List<ServerProfile> profiles = [];
+  List<StoredSshKey> sshKeys = [];
   final Map<String, String> secrets = {};
+  final Map<String, String> sshKeySecrets = {};
   final Map<String, Map<String, Object?>> installHandles = {};
 
   @override
@@ -244,6 +246,16 @@ class _MemoryCredStore implements SecureCredStore {
   @override
   Future<void> deleteSecret(String id) async => secrets.remove(id);
   @override
+  Future<List<StoredSshKey>> loadSshKeys() async => sshKeys;
+  @override
+  Future<void> saveSshKeys(List<StoredSshKey> keys) async => sshKeys = keys;
+  @override
+  Future<void> writeSshKeySecret(String id, String pem) async => sshKeySecrets[id] = pem;
+  @override
+  Future<String?> readSshKeySecret(String id) async => sshKeySecrets[id];
+  @override
+  Future<void> deleteSshKeySecret(String id) async => sshKeySecrets.remove(id);
+  @override
   Future<void> writeInstallHandle(String id, Map<String, Object?> json) async =>
       installHandles[id] = json;
   @override
@@ -252,13 +264,15 @@ class _MemoryCredStore implements SecureCredStore {
   @override
   Future<void> deleteInstallHandle(String id) async => installHandles.remove(id);
   @override
-  Future<List<String>> listKeys() async => [...secrets.keys, ...installHandles.keys];
+  Future<List<String>> listKeys() async => [...secrets.keys, ...installHandles.keys, ...sshKeySecrets.keys];
   @override
   Future<int> wipeAll() async {
     final n = profiles.length + secrets.length + installHandles.length;
     profiles = [];
     secrets.clear();
     installHandles.clear();
+    sshKeys = [];
+    sshKeySecrets.clear();
     return n;
   }
 }

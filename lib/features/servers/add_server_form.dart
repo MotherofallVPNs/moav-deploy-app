@@ -4,16 +4,19 @@ import '../../core/server_profile.dart';
 import '../../core/ssh_key_installer.dart';
 import '../../core/app_error.dart';
 import '../../security/key_service.dart';
+import '../../security/secure_cred_store.dart';
+import 'servers_provider.dart';
 
 /// Which credential the user chose on the add-server form.
-enum AuthChoice { generateKey, importKey, password }
+enum AuthChoice { savedKey, generateKey, importKey, password }
 
 extension AuthChoiceX on AuthChoice {
   SshAuthMethod get method => switch (this) {
-        AuthChoice.generateKey => SshAuthMethod.generatedKey,
-        AuthChoice.importKey => SshAuthMethod.importedKey,
-        AuthChoice.password => SshAuthMethod.password,
-      };
+    AuthChoice.savedKey => SshAuthMethod.importedKey,
+    AuthChoice.generateKey => SshAuthMethod.generatedKey,
+    AuthChoice.importKey => SshAuthMethod.importedKey,
+    AuthChoice.password => SshAuthMethod.password,
+  };
 }
 
 /// Immutable form state. Secrets are held here only until the form is
@@ -28,6 +31,8 @@ class AddServerFormState {
     this.importedKeyPem = '',
     this.password = '',
     this.generatedKey,
+    this.savedKey,
+    this.savedKeyPem,
     this.oneTimePassword = '',
     this.keyInstalled = false,
     this.installingKey = false,
@@ -44,6 +49,8 @@ class AddServerFormState {
   final String importedKeyPem;
   final String password;
   final Ed25519KeyMaterial? generatedKey;
+  final StoredSshKey? savedKey;
+  final String? savedKeyPem;
 
   /// Password used once by the "Install key on server" helper. Never saved.
   final String oneTimePassword;
@@ -64,6 +71,8 @@ class AddServerFormState {
     String? importedKeyPem,
     String? password,
     Ed25519KeyMaterial? generatedKey,
+    StoredSshKey? savedKey,
+    String? savedKeyPem,
     bool clearGeneratedKey = false,
     String? oneTimePassword,
     bool? keyInstalled,
@@ -73,24 +82,26 @@ class AddServerFormState {
     bool clearError = false,
     String? notice,
     bool clearNotice = false,
-  }) =>
-      AddServerFormState(
-        label: label ?? this.label,
-        host: host ?? this.host,
-        port: port ?? this.port,
-        username: username ?? this.username,
-        authChoice: authChoice ?? this.authChoice,
-        importedKeyPem: importedKeyPem ?? this.importedKeyPem,
-        password: password ?? this.password,
-        generatedKey:
-            clearGeneratedKey ? null : (generatedKey ?? this.generatedKey),
-        oneTimePassword: oneTimePassword ?? this.oneTimePassword,
-        keyInstalled: keyInstalled ?? this.keyInstalled,
-        installingKey: installingKey ?? this.installingKey,
-        submitting: submitting ?? this.submitting,
-        error: clearError ? null : (error ?? this.error),
-        notice: clearNotice ? null : (notice ?? this.notice),
-      );
+  }) => AddServerFormState(
+    label: label ?? this.label,
+    host: host ?? this.host,
+    port: port ?? this.port,
+    username: username ?? this.username,
+    authChoice: authChoice ?? this.authChoice,
+    importedKeyPem: importedKeyPem ?? this.importedKeyPem,
+    password: password ?? this.password,
+    generatedKey: clearGeneratedKey
+        ? null
+        : (generatedKey ?? this.generatedKey),
+    savedKey: savedKey ?? this.savedKey,
+    savedKeyPem: savedKeyPem ?? this.savedKeyPem,
+    oneTimePassword: oneTimePassword ?? this.oneTimePassword,
+    keyInstalled: keyInstalled ?? this.keyInstalled,
+    installingKey: installingKey ?? this.installingKey,
+    submitting: submitting ?? this.submitting,
+    error: clearError ? null : (error ?? this.error),
+    notice: clearNotice ? null : (notice ?? this.notice),
+  );
 
   int? get parsedPort {
     final p = int.tryParse(port.trim());
@@ -112,11 +123,12 @@ class AddServerFormState {
 
   /// The credential that will be persisted, or `null` if not ready.
   String? get secret => switch (authChoice) {
-        AuthChoice.generateKey => generatedKey?.privateKeyPem,
-        AuthChoice.importKey =>
-          importedKeyPem.trim().isEmpty ? null : importedKeyPem.trim(),
-        AuthChoice.password => password.isEmpty ? null : password,
-      };
+    AuthChoice.savedKey => savedKeyPem,
+    AuthChoice.generateKey => generatedKey?.privateKeyPem,
+    AuthChoice.importKey =>
+      importedKeyPem.trim().isEmpty ? null : importedKeyPem.trim(),
+    AuthChoice.password => password.isEmpty ? null : password,
+  };
 
   bool get connectionFieldsValid =>
       hostError == null && portError == null && usernameError == null;
@@ -131,19 +143,20 @@ class AddServerFormState {
       !installingKey;
 
   ServerProfile toProfile(String id) => ServerProfile(
-        id: id,
-        label: label.trim().isEmpty ? host.trim() : label.trim(),
-        host: host.trim(),
-        port: parsedPort ?? 22,
-        username: username.trim(),
-        authMethod: authChoice.method,
-      );
+    id: id,
+    label: label.trim().isEmpty ? host.trim() : label.trim(),
+    host: host.trim(),
+    port: parsedPort ?? 22,
+    username: username.trim(),
+    authMethod: authChoice.method,
+  );
 }
 
 final keyServiceProvider = Provider<KeyService>((_) => const KeyService());
 
-final keyInstallerProvider =
-    Provider<SshKeyInstaller>((_) => const SshKeyInstaller());
+final keyInstallerProvider = Provider<SshKeyInstaller>(
+  (_) => const SshKeyInstaller(),
+);
 
 class AddServerFormNotifier extends Notifier<AddServerFormState> {
   @override
@@ -161,8 +174,24 @@ class AddServerFormNotifier extends Notifier<AddServerFormState> {
   void setOneTimePassword(String v) =>
       state = state.copyWith(oneTimePassword: v, clearError: true);
 
-  void setAuthChoice(AuthChoice c) =>
-      state = state.copyWith(authChoice: c, clearError: true, clearNotice: true);
+  void setAuthChoice(AuthChoice c) => state = state.copyWith(
+    authChoice: c,
+    clearError: true,
+    clearNotice: true,
+  );
+
+  Future<void> selectSavedKey(StoredSshKey key) async {
+    final pem = await ref
+        .read(secureCredStoreProvider)
+        .readSshKeySecret(key.id);
+    if (pem == null) {
+      state = state.copyWith(
+        error: 'The private key is missing from secure storage',
+      );
+      return;
+    }
+    state = state.copyWith(savedKey: key, savedKeyPem: pem, clearError: true);
+  }
 
   Future<void> generateKey() async {
     try {
@@ -174,7 +203,9 @@ class AddServerFormNotifier extends Notifier<AddServerFormState> {
         clearNotice: true,
       );
     } on Object catch (e) {
-      state = state.copyWith(error: 'Could not generate key: ${AppError.from(e).message}');
+      state = state.copyWith(
+        error: 'Could not generate key: ${AppError.from(e).message}',
+      );
     }
   }
 
@@ -184,9 +215,15 @@ class AddServerFormNotifier extends Notifier<AddServerFormState> {
     final s = state;
     final key = s.generatedKey;
     if (key == null || !s.canInstallKey) return;
-    state = s.copyWith(installingKey: true, clearError: true, clearNotice: true);
+    state = s.copyWith(
+      installingKey: true,
+      clearError: true,
+      clearNotice: true,
+    );
     try {
-      await ref.read(keyInstallerProvider).install(
+      await ref
+          .read(keyInstallerProvider)
+          .install(
             host: s.host.trim(),
             port: s.parsedPort ?? 22,
             username: s.username.trim(),
@@ -203,7 +240,8 @@ class AddServerFormNotifier extends Notifier<AddServerFormState> {
     } on Object catch (e) {
       state = state.copyWith(
         installingKey: false,
-        error: 'Could not install key: ${AppError.from(e, host: s.host.trim(), port: s.parsedPort).summary}',
+        error:
+            'Could not install key: ${AppError.from(e, host: s.host.trim(), port: s.parsedPort).summary}',
       );
     }
   }
@@ -211,7 +249,9 @@ class AddServerFormNotifier extends Notifier<AddServerFormState> {
   /// Validates the imported key without connecting anywhere.
   String? importedKeyError() {
     if (state.authChoice != AuthChoice.importKey) return null;
-    return ref.read(keyServiceProvider).validatePrivateKeyPem(state.importedKeyPem);
+    return ref
+        .read(keyServiceProvider)
+        .validatePrivateKeyPem(state.importedKeyPem);
   }
 
   void setSubmitting(bool v) => state = state.copyWith(submitting: v);
@@ -219,5 +259,7 @@ class AddServerFormNotifier extends Notifier<AddServerFormState> {
       state = state.copyWith(error: message, submitting: false);
 }
 
-final addServerFormProvider = NotifierProvider.autoDispose<AddServerFormNotifier,
-    AddServerFormState>(AddServerFormNotifier.new);
+final addServerFormProvider =
+    NotifierProvider.autoDispose<AddServerFormNotifier, AddServerFormState>(
+      AddServerFormNotifier.new,
+    );
