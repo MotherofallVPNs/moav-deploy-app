@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../theme/moav_theme.dart';
 import '../../widgets/error_view.dart';
+import '../keys/keyring_provider.dart';
 import 'add_server_form.dart';
 import 'servers_provider.dart';
 
@@ -23,7 +24,10 @@ class AddServerScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
         children: [
-          const SectionHeader('Connection', padding: EdgeInsets.only(top: 4, bottom: 10)),
+          const SectionHeader(
+            'Connection',
+            padding: EdgeInsets.only(top: 4, bottom: 10),
+          ),
           TextField(
             decoration: const InputDecoration(
               labelText: 'Label (optional)',
@@ -80,6 +84,11 @@ class AddServerScreen extends ConsumerWidget {
           SegmentedButton<AuthChoice>(
             segments: const [
               ButtonSegment(
+                value: AuthChoice.savedKey,
+                label: Text('Saved'),
+                icon: Icon(Icons.key_outlined),
+              ),
+              ButtonSegment(
                 value: AuthChoice.generateKey,
                 label: Text('Generate key'),
                 icon: Icon(Icons.vpn_key),
@@ -111,7 +120,11 @@ class AddServerScreen extends ConsumerWidget {
             const SizedBox(height: 16),
             Row(
               children: [
-                const Icon(Icons.check_circle, size: 18, color: MoavColors.pass),
+                const Icon(
+                  Icons.check_circle,
+                  size: 18,
+                  color: MoavColors.pass,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -151,10 +164,20 @@ class AddServerScreen extends ConsumerWidget {
     notifier.setSubmitting(true);
     final id = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
     try {
-      await ref.read(serversProvider.notifier).add(
-            form.toProfile(id),
-            secret: secret,
-          );
+      if (form.authChoice == AuthChoice.generateKey ||
+          form.authChoice == AuthChoice.importKey) {
+        await ref
+            .read(keyringProvider.notifier)
+            .add(
+              label: form.label.trim().isEmpty
+                  ? 'MoaV device key'
+                  : '${form.label.trim()} key',
+              privateKeyPem: secret,
+            );
+      }
+      await ref
+          .read(serversProvider.notifier)
+          .add(form.toProfile(id), secret: secret);
     } on Object catch (e) {
       notifier.setError('Could not save: ${errorSummary(e)}');
       return;
@@ -163,16 +186,49 @@ class AddServerScreen extends ConsumerWidget {
   }
 }
 
-class _AuthSection extends StatelessWidget {
+class _AuthSection extends ConsumerWidget {
   const _AuthSection({required this.form, required this.notifier});
 
   final AddServerFormState form;
   final AddServerFormNotifier notifier;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     switch (form.authChoice) {
+      case AuthChoice.savedKey:
+        final keys = ref.watch(keyringProvider);
+        return keys.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) =>
+              Text('Could not load saved keys: ${errorSummary(e)}'),
+          data: (items) => items.isEmpty
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('No reusable keys yet.'),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Generate or import a key once and it will appear here for every server.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                )
+              : DropdownButtonFormField<String>(
+                  initialValue: form.savedKey?.id,
+                  decoration: const InputDecoration(labelText: 'Device key'),
+                  items: [
+                    for (final key in items)
+                      DropdownMenuItem(value: key.id, child: Text(key.label)),
+                  ],
+                  onChanged: (id) {
+                    if (id == null) return;
+                    notifier.selectSavedKey(
+                      items.firstWhere((k) => k.id == id),
+                    );
+                  },
+                ),
+        );
       case AuthChoice.generateKey:
         final key = form.generatedKey;
         return Column(
@@ -183,10 +239,17 @@ class _AuthSection extends StatelessWidget {
                 const IconBadge(Icons.key, size: 32),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text('On-device ed25519 key', style: theme.textTheme.titleMedium),
+                  child: Text(
+                    'On-device ed25519 key',
+                    style: theme.textTheme.titleMedium,
+                  ),
                 ),
                 if (key != null)
-                  const StatusPill('generated', tone: StatusTone.pass, dot: false),
+                  const StatusPill(
+                    'generated',
+                    tone: StatusTone.pass,
+                    dot: false,
+                  ),
               ],
             ),
             const SizedBox(height: 10),
@@ -258,8 +321,9 @@ class _AuthSection extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
-                  onPressed:
-                      form.canInstallKey ? notifier.installKeyOnServer : null,
+                  onPressed: form.canInstallKey
+                      ? notifier.installKeyOnServer
+                      : null,
                   icon: form.installingKey
                       ? const SizedBox(
                           height: 16,

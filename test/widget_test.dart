@@ -20,7 +20,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 /// In-memory stand-in so tests never touch platform channels.
 class _FakeCredStore implements SecureCredStore {
   List<ServerProfile> profiles = [];
+  List<StoredSshKey> sshKeys = [];
   final Map<String, String> secrets = {};
+  final Map<String, String> sshKeySecrets = {};
   final Map<String, Map<String, Object?>> installHandles = {};
 
   @override
@@ -34,6 +36,16 @@ class _FakeCredStore implements SecureCredStore {
   @override
   Future<void> deleteSecret(String id) async => secrets.remove(id);
   @override
+  Future<List<StoredSshKey>> loadSshKeys() async => sshKeys;
+  @override
+  Future<void> saveSshKeys(List<StoredSshKey> keys) async => sshKeys = keys;
+  @override
+  Future<void> writeSshKeySecret(String id, String pem) async => sshKeySecrets[id] = pem;
+  @override
+  Future<String?> readSshKeySecret(String id) async => sshKeySecrets[id];
+  @override
+  Future<void> deleteSshKeySecret(String id) async => sshKeySecrets.remove(id);
+  @override
   Future<void> writeInstallHandle(String id, Map<String, Object?> json) async =>
       installHandles[id] = json;
   @override
@@ -46,6 +58,7 @@ class _FakeCredStore implements SecureCredStore {
   Future<List<String>> listKeys() async => [
         ...secrets.keys,
         ...installHandles.keys,
+        ...sshKeySecrets.keys,
       ];
   @override
   Future<int> wipeAll() async {
@@ -53,6 +66,8 @@ class _FakeCredStore implements SecureCredStore {
     profiles = [];
     secrets.clear();
     installHandles.clear();
+    sshKeys = [];
+    sshKeySecrets.clear();
     return removed;
   }
 }
@@ -384,6 +399,26 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Connected. MoaV 2.2.2 is installed.'), findsOneWidget);
+  });
+
+  testWidgets('editing a server keeps its saved credential', (tester) async {
+    final store = _FakeCredStore()
+      ..profiles = [_profile]
+      ..secrets[_profile.id] = 'private-key';
+    await tester.pumpWidget(_app(store));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit server'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Host'), 'fixed.example');
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+
+    expect(store.profiles.single.host, 'fixed.example');
+    expect(store.secrets[_profile.id], 'private-key');
   });
 
   testWidgets('deploy screen starts a detached install and streams the log',

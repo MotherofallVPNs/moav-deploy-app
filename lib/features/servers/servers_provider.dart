@@ -5,8 +5,9 @@ import '../../core/moav_controller_factory.dart';
 import '../../core/server_profile.dart';
 import '../../security/secure_cred_store.dart';
 
-final secureCredStoreProvider =
-    Provider<SecureCredStore>((_) => SecureCredStore());
+final secureCredStoreProvider = Provider<SecureCredStore>(
+  (_) => SecureCredStore(),
+);
 
 final moavControllerFactoryProvider = Provider<MoavControllerFactory>((ref) {
   final store = ref.watch(secureCredStoreProvider);
@@ -18,8 +19,10 @@ final moavControllerFactoryProvider = Provider<MoavControllerFactory>((ref) {
 /// One long-lived [MoavController] per saved server, so an SSH session opened
 /// for a ping can be reused by the deploy screen. Keyed by profile id; the
 /// profile itself is read (not watched) so list updates don't drop sessions.
-final moavControllerProvider =
-    Provider.family<MoavController, String>((ref, serverId) {
+final moavControllerProvider = Provider.family<MoavController, String>((
+  ref,
+  serverId,
+) {
   final profiles = ref.read(serversProvider).value ?? const <ServerProfile>[];
   final profile = profiles.firstWhere(
     (p) => p.id == serverId,
@@ -54,9 +57,24 @@ class ServersNotifier extends AsyncNotifier<List<ServerProfile>> {
     ref.invalidate(moavControllerProvider(id));
     state = AsyncData(next);
   }
+
+  /// Updates connection details without touching the saved credential.
+  Future<void> updateProfile(ServerProfile profile) async {
+    final current = state.value ?? const <ServerProfile>[];
+    if (!current.any((p) => p.id == profile.id)) {
+      throw StateError('Unknown server ${profile.id}');
+    }
+    final next = [
+      for (final p in current)
+        if (p.id == profile.id) profile else p,
+    ];
+    await _store.saveProfiles(next);
+    ref.invalidate(moavControllerProvider(profile.id));
+    state = AsyncData(next);
+  }
 }
 
 final serversProvider =
     AsyncNotifierProvider<ServersNotifier, List<ServerProfile>>(
-  ServersNotifier.new,
-);
+      ServersNotifier.new,
+    );

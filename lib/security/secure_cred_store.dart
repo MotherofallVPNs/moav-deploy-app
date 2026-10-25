@@ -13,19 +13,22 @@ import '../core/server_profile.dart';
 /// shown without pulling secrets into memory.
 class SecureCredStore {
   SecureCredStore([FlutterSecureStorage? storage])
-      : _storage = storage ??
-            const FlutterSecureStorage(
-              aOptions: AndroidOptions(),
-              iOptions: IOSOptions(
-                accessibility: KeychainAccessibility.first_unlock_this_device,
-                synchronizable: false,
-              ),
-            );
+    : _storage =
+          storage ??
+          const FlutterSecureStorage(
+            aOptions: AndroidOptions(),
+            iOptions: IOSOptions(
+              accessibility: KeychainAccessibility.first_unlock_this_device,
+              synchronizable: false,
+            ),
+          );
 
   final FlutterSecureStorage _storage;
 
   static const _profilesKey = 'moav.servers.v1';
+  static const _sshKeysKey = 'moav.sshkeys.v1';
   static String _secretKey(String serverId) => 'moav.secret.v1.$serverId';
+  static String _sshKeySecret(String keyId) => 'moav.sshkey.v1.$keyId';
   static String _installKey(String serverId) => 'moav.install.v1.$serverId';
 
   Future<List<ServerProfile>> loadProfiles() async {
@@ -52,6 +55,28 @@ class SecureCredStore {
   Future<void> deleteSecret(String serverId) =>
       _storage.delete(key: _secretKey(serverId));
 
+  Future<List<StoredSshKey>> loadSshKeys() async {
+    final raw = await _storage.read(key: _sshKeysKey);
+    if (raw == null || raw.isEmpty) return const [];
+    return (jsonDecode(raw) as List<dynamic>)
+        .map((e) => StoredSshKey.fromJson(e as Map<String, Object?>))
+        .toList(growable: false);
+  }
+
+  Future<void> saveSshKeys(List<StoredSshKey> keys) => _storage.write(
+    key: _sshKeysKey,
+    value: jsonEncode(keys.map((k) => k.toJson()).toList()),
+  );
+
+  Future<void> writeSshKeySecret(String keyId, String privateKeyPem) =>
+      _storage.write(key: _sshKeySecret(keyId), value: privateKeyPem);
+
+  Future<String?> readSshKeySecret(String keyId) =>
+      _storage.read(key: _sshKeySecret(keyId));
+
+  Future<void> deleteSshKeySecret(String keyId) =>
+      _storage.delete(key: _sshKeySecret(keyId));
+
   /// Remembers a detached install job so it can be re-attached after the app
   /// was suspended or restarted. Stored as JSON (see `InstallHandle.toJson`).
   Future<void> writeInstallHandle(String serverId, Map<String, Object?> json) =>
@@ -67,7 +92,8 @@ class SecureCredStore {
       _storage.delete(key: _installKey(serverId));
 
   /// Every key currently held, for the wipe report and for tests.
-  Future<List<String>> listKeys() async => (await _storage.readAll()).keys.toList();
+  Future<List<String>> listKeys() async =>
+      (await _storage.readAll()).keys.toList();
 
   /// Device-seizure quick wipe: removes every server, secret and install
   /// handle from the platform secure store.
@@ -89,4 +115,39 @@ class SecureCredStore {
     }
     return before.length;
   }
+}
+
+class StoredSshKey {
+  const StoredSshKey({
+    required this.id,
+    required this.label,
+    required this.publicKey,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String label;
+  final String publicKey;
+  final DateTime createdAt;
+
+  StoredSshKey copyWith({String? label}) => StoredSshKey(
+    id: id,
+    label: label ?? this.label,
+    publicKey: publicKey,
+    createdAt: createdAt,
+  );
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'label': label,
+    'publicKey': publicKey,
+    'createdAt': createdAt.toIso8601String(),
+  };
+
+  factory StoredSshKey.fromJson(Map<String, Object?> json) => StoredSshKey(
+    id: json['id'] as String,
+    label: json['label'] as String,
+    publicKey: json['publicKey'] as String,
+    createdAt: DateTime.parse(json['createdAt'] as String),
+  );
 }

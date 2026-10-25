@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/error_view.dart';
 import '../deploy/deploy_screen.dart';
+import '../keys/keyring_screen.dart';
 import '../server/server_screen.dart';
 import '../users/users_screen.dart';
 import '../wipe/wipe_dialog.dart';
 import 'add_server_screen.dart';
+import 'edit_server_screen.dart';
 import 'servers_provider.dart';
 
 class ServersHomeScreen extends ConsumerWidget {
@@ -23,28 +26,69 @@ class ServersHomeScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const MoavWordmark(suffix: 'Deploy'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.delete_forever_outlined),
-            tooltip: 'Quick wipe',
-            onPressed: () => showWipeDialog(
-              context,
-              ref,
-              serverCount: servers.value?.length,
-            ),
+          PopupMenuButton<_HomeAction>(
+            tooltip: 'Menu',
+            icon: const Icon(Icons.menu),
+            onSelected: (action) =>
+                _handleHomeAction(context, ref, action, servers.value?.length),
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: _HomeAction.keys,
+                child: ListTile(
+                  leading: Icon(Icons.key_outlined),
+                  title: Text('SSH keys'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _HomeAction.website,
+                child: ListTile(
+                  leading: Icon(Icons.language),
+                  title: Text('Website & docs'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _HomeAction.github,
+                child: ListTile(
+                  leading: Icon(Icons.code),
+                  title: Text('GitHub'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _HomeAction.x,
+                child: ListTile(
+                  leading: Icon(Icons.alternate_email),
+                  title: Text('X'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _HomeAction.telegram,
+                child: ListTile(
+                  leading: Icon(Icons.send_outlined),
+                  title: Text('Telegram'),
+                ),
+              ),
+              PopupMenuDivider(),
+              PopupMenuItem(
+                value: _HomeAction.wipe,
+                child: ListTile(
+                  leading: Icon(Icons.delete_forever_outlined),
+                  title: Text('Emergency wipe'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
       body: servers.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => ErrorView(
-          error: e,
-          onRetry: () => ref.invalidate(serversProvider),
-        ),
+        error: (e, _) =>
+            ErrorView(error: e, onRetry: () => ref.invalidate(serversProvider)),
         data: (list) => list.isEmpty
             ? const EmptyState(
                 icon: Icons.dns_outlined,
                 title: 'No servers yet',
-                body: 'Add a server to install and manage MoaV on it. '
+                body:
+                    'Add a server to install and manage MoaV on it. '
                     'Credentials stay on this device.',
               )
             : ListView.separated(
@@ -53,7 +97,9 @@ class ServersHomeScreen extends ConsumerWidget {
                 separatorBuilder: (_, _) => const SizedBox(height: 10),
                 itemBuilder: (context, i) => i == 0
                     ? SectionHeader(
-                        list.length == 1 ? '1 server' : '${list.length} servers',
+                        list.length == 1
+                            ? '1 server'
+                            : '${list.length} servers',
                         padding: const EdgeInsets.only(top: 4, bottom: 2),
                       )
                     : _ServerTile(profile: list[i - 1]),
@@ -68,7 +114,49 @@ class ServersHomeScreen extends ConsumerWidget {
   }
 }
 
-enum _TileAction { test, users, deploy, remove }
+enum _HomeAction { keys, website, github, x, telegram, wipe }
+
+Future<void> _handleHomeAction(
+  BuildContext context,
+  WidgetRef ref,
+  _HomeAction action,
+  int? serverCount,
+) async {
+  switch (action) {
+    case _HomeAction.keys:
+      await Navigator.of(context).push(KeyringScreen.route());
+      return;
+    case _HomeAction.wipe:
+      await showWipeDialog(context, ref, serverCount: serverCount);
+      return;
+    case _HomeAction.website:
+      await launchUrl(
+        Uri.parse('https://moav.sh/docs'),
+        mode: LaunchMode.externalApplication,
+      );
+      return;
+    case _HomeAction.github:
+      await launchUrl(
+        Uri.parse('https://github.com/MotherofallVPNs'),
+        mode: LaunchMode.externalApplication,
+      );
+      return;
+    case _HomeAction.x:
+      await launchUrl(
+        Uri.parse('https://x.com/motherofallvpns'),
+        mode: LaunchMode.externalApplication,
+      );
+      return;
+    case _HomeAction.telegram:
+      await launchUrl(
+        Uri.parse('https://t.me/motherofallvpns'),
+        mode: LaunchMode.externalApplication,
+      );
+      return;
+  }
+}
+
+enum _TileAction { test, edit, users, deploy, remove }
 
 class _ServerTile extends ConsumerWidget {
   const _ServerTile({required this.profile});
@@ -78,8 +166,8 @@ class _ServerTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final (auth, tone) = switch (profile.authMethod) {
-      SshAuthMethod.generatedKey || SshAuthMethod.importedKey =>
-        ('key', StatusTone.accent),
+      SshAuthMethod.generatedKey ||
+      SshAuthMethod.importedKey => ('key', StatusTone.accent),
       SshAuthMethod.password => ('password', StatusTone.warn),
     };
     return MoavCard(
@@ -93,7 +181,10 @@ class _ServerTile extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(profile.label, style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  profile.label,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 3),
                 Text(
                   '${profile.username}@${profile.host}:${profile.port}',
@@ -108,13 +199,25 @@ class _ServerTile extends ConsumerWidget {
           PopupMenuButton<_TileAction>(
             onSelected: (a) => switch (a) {
               _TileAction.test => _testConnection(context, ref),
-              _TileAction.users =>
-                Navigator.of(context).push(UsersScreen.route(profile)),
-              _TileAction.deploy =>
-                Navigator.of(context).push(DeployScreen.route(profile)),
+              _TileAction.edit => Navigator.of(
+                context,
+              ).push(EditServerScreen.route(profile)),
+              _TileAction.users => Navigator.of(
+                context,
+              ).push(UsersScreen.route(profile)),
+              _TileAction.deploy => Navigator.of(
+                context,
+              ).push(DeployScreen.route(profile)),
               _TileAction.remove => _confirmRemove(context, ref),
             },
             itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: _TileAction.edit,
+                child: ListTile(
+                  leading: Icon(Icons.edit_outlined),
+                  title: Text('Edit server'),
+                ),
+              ),
               PopupMenuItem(
                 value: _TileAction.test,
                 child: ListTile(
@@ -155,16 +258,17 @@ class _ServerTile extends ConsumerWidget {
     messenger.showSnackBar(
       SnackBar(content: Text('Connecting to ${profile.label}…')),
     );
-    final ConnectionCheck check =
-        await ref.read(moavControllerProvider(profile.id)).ping();
+    final ConnectionCheck check = await ref
+        .read(moavControllerProvider(profile.id))
+        .ping();
     messenger.hideCurrentSnackBar();
     final text = !check.reachable
         ? 'Could not connect: ${check.error ?? 'unknown error'}'
         : check.moavInstalled == true
-            ? 'Connected. MoaV ${check.moavVersion ?? ''} is installed.'
-            : check.moavInstalled == false
-                ? 'Connected. MoaV is not installed yet.'
-                : 'Connected. ${check.error ?? ''}';
+        ? 'Connected. MoaV ${check.moavVersion ?? ''} is installed.'
+        : check.moavInstalled == false
+        ? 'Connected. MoaV is not installed yet.'
+        : 'Connected. ${check.error ?? ''}';
     messenger.showSnackBar(SnackBar(content: Text(text.trim())));
   }
 
