@@ -31,15 +31,15 @@ def report_changelog(version_code)
 end
 
 platform :android do
-  desc "Upload the signed AAB to the Play internal track with the metadata changelog"
-  lane :internal do
+  desc "Upload the signed AAB to the Play open testing track with the metadata changelog"
+  lane :open_testing do
     json_key = play_json_key
     UI.user_error!("AAB not found at #{AAB_PATH}; run `flutter build appbundle --release`") unless File.file?(AAB_PATH)
     report_changelog(pubspec_version_code)
 
     validate_play_store_json_key(json_key: json_key)
     upload_to_play_store(
-      track: "internal",
+      track: "beta",
       aab: AAB_PATH,
       json_key: json_key,
       metadata_path: METADATA_PATH,
@@ -57,7 +57,7 @@ platform :android do
     json_key = play_json_key
     validate_play_store_json_key(json_key: json_key)
     upload_to_play_store(
-      track: "internal",
+      track: "beta",
       track_promote_to: "production",
       track_promote_release_status: "completed",
       json_key: json_key,

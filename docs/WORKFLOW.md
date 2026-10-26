@@ -64,7 +64,7 @@ Full flow in [`docs/RELEASING.md`](RELEASING.md). In short:
    section with that same text (the PR template has the slot).
 3. Merge, then publish a GitHub Release tagged `vX.Y.Z`. CI builds and signs
    the AAB and APK, attaches them to the Release, appends the store release
-   notes to the Release body, and ships the AAB to the Play internal track.
+   notes to the Release body, and ships the AAB to the Play open testing track.
 4. Promote to production by hand (Play Console, or
    `fastlane android promote_production`).
 5. iOS is still manual: `flutter build ipa` then Transporter/App Store
