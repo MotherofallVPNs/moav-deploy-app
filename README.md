@@ -6,7 +6,7 @@
 
 **Install, manage and monitor your own [MoaV](https://github.com/MotherofallVPNs/MoaV) server from your phone.**
 
-[![CI](https://img.shields.io/github/actions/workflow/status/MotherofallVPNs/moav-deploy-app/ci.yml?branch=main&label=CI&logo=github&logoColor=white)](https://github.com/MotherofallVPNs/moav-deploy-app/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/MotherofallVPNs/moav-deploy-app?label=release&color=16a34a&logo=github&logoColor=white)](https://github.com/MotherofallVPNs/moav-deploy-app/releases/latest) [![Flutter](https://img.shields.io/badge/Flutter-3.32%2B-02569B.svg?logo=flutter&logoColor=white)](https://flutter.dev) [![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20iOS-0ea5e9.svg)](#get-the-app)
+[![CI](https://img.shields.io/github/actions/workflow/status/MotherofallVPNs/moav-deploy-app/ci.yml?branch=main&label=CI&logo=github&logoColor=white)](https://github.com/MotherofallVPNs/moav-deploy-app/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/MotherofallVPNs/moav-deploy-app?label=release&color=16a34a&logo=github&logoColor=white)](https://github.com/MotherofallVPNs/moav-deploy-app/releases/latest) [![Flutter](https://img.shields.io/badge/Flutter-3.32%2B-02569B.svg?logo=flutter&logoColor=white)](https://flutter.dev) [![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20iOS-0ea5e9.svg)](#get-the-app) [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e.svg)](LICENSE)
 
 [![Website](https://img.shields.io/badge/website-moav.sh-06b6d4.svg)](https://moav.sh) [![Docs](https://img.shields.io/badge/docs-moav.sh%2Fdocs-2563eb.svg)](https://moav.sh/docs/) [![MoaV](https://img.shields.io/badge/server-MoaV-8b5cf6.svg?logo=github&logoColor=white)](https://github.com/MotherofallVPNs/MoaV) [![Telegram](https://img.shields.io/badge/Telegram-motherofallvpns-2CA5E0.svg?logo=telegram)](https://t.me/motherofallvpns) [![X](https://img.shields.io/badge/X-@motherofallvpns-000000.svg?logo=x)](https://x.com/motherofallvpns)
 
@@ -145,3 +145,9 @@ several servers backed by a native MoaV control API; it is tracked in
 
 - [MoaV](https://github.com/MotherofallVPNs/MoaV): the server stack this app manages.
 - [moav-client](https://github.com/MotherofallVPNs/moav-client): the client side.
+
+## License
+
+MoaV Deploy is released under the [MIT License](LICENSE). The bundled Inter
+and JetBrains Mono fonts are under the SIL Open Font License; their license
+texts ship inside the app through Flutter's license registry.

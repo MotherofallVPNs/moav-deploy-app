@@ -6,9 +6,11 @@ weakness, please report it privately before discussing it anywhere public.
 ## Reporting a vulnerability
 
 Use GitHub's private vulnerability reporting on this repository: open the
-**Security** tab and choose **Report a vulnerability**. Include the app
-version, the platform, steps to reproduce, and what an attacker could gain.
-Do not include real server hostnames, SSH keys or bundle links.
+**Security** tab and choose **Report a vulnerability**. If that option is not
+available to you, or you prefer email, write to **info@moav.sh** with
+"security" in the subject line. Include the app version, the platform, steps
+to reproduce, and what an attacker could gain. Do not include real server
+hostnames, SSH keys or bundle links.
 
 You will get an acknowledgement, and a fix or a mitigation plan before any
 public disclosure. Please allow a reasonable window for that.
