@@ -52,10 +52,11 @@ first-class, not a fallback.
 
 ## Direct APK and sideload
 
-- Every GitHub Release carries the signed APK and AAB. Publish the SHA-256
-  alongside, and a minisign or GPG signature once a signing key is chosen,
-  with the public key in this README and on moav.sh so a mirrored APK can be
-  verified.
+- Every GitHub Release carries the signed APK and AAB plus a `SHA256SUMS`
+  file written by `release.yml`. A mirrored APK is checked with
+  `sha256sum -c SHA256SUMS` in the download directory. A minisign or GPG
+  signature is still to come once a signing key is chosen, with the public
+  key in this README and on moav.sh.
 - Keep the APK signing key separate from the Play upload key so a Play
   account compromise does not affect sideload trust.
 - An in-app About screen showing the version and the APK signature

@@ -47,7 +47,8 @@ the release flow. Push it deliberately with `fastlane android sync_listing`.
    `.github/workflows/release.yml`, which:
    - runs analyze and tests;
    - builds the signed AAB and APK (needs the `ANDROID_*` signing secrets);
-   - uploads both as workflow artifacts and attaches them to the Release;
+   - writes `SHA256SUMS` for both, uploads all three as workflow artifacts
+     and attaches them to the Release;
    - appends the `## Store release notes` block to the Release body;
    - uploads the AAB to the Play **open testing** track with the changelog
      (needs `PLAY_SERVICE_ACCOUNT_JSON`; skipped with a log line otherwise).
