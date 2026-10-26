@@ -1,0 +1,2 @@
+What is new in 0.2.4
+- Maintenance build for closed testing.

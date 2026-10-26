@@ -12,17 +12,8 @@ QUÉ PUEDES HACER
 MÁS OPCIONES FRENTE A LOS BLOQUEOS
 MoaV reúne más de 18 métodos de conexión, como VLESS/Reality, Hysteria2, Trojan, Shadowsocks, WireGuard y túneles DNS. Si una red bloquea uno, es posible que otros sigan funcionando. El resultado depende de la configuración del servidor y de la red.
 
-AYUDA A OTROS A SEGUIR CONECTADOS
-Un servidor MoaV también puede aportar ancho de banda a Psiphon Conduit y Tor Snowflake, y puedes donar las configuraciones que genera directamente a MahsaNet.
-
 PRIVACIDAD DESDE EL DISEÑO
 Sin cuenta de MoaV, anuncios, analíticas ni seguimiento. Los datos y las claves de acceso se guardan en el almacenamiento seguro del móvil. La aplicación se comunica directamente con los servidores que controlas.
 
 ANTES DE EMPEZAR
 Necesitas un servidor compatible propio, como un VPS. MoaV Deploy sirve para desplegar y administrar el servidor: no es un cliente VPN ni enruta el tráfico de tu móvil. Para conectarte, utiliza un cliente VPN/proxy compatible con las configuraciones generadas por tu servidor MoaV.
-
-ENLACES
-Sitio web: https://moav.sh
-Documentación: https://moav.sh/docs
-GitHub: https://github.com/MotherofallVPNs/MoaV
-Telegram: https://t.me/motherofallvpns
