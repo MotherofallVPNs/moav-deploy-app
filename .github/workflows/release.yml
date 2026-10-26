@@ -123,11 +123,11 @@ jobs:
         if: github.event_name != 'release' || env.HAS_SIGNING != 'true' || env.HAS_PLAY_KEY != 'true'
         run: |
           if [ "${{ github.event_name }}" != "release" ]; then
-            echo "Not a published release; skipping Play open testing upload."
+            echo "Not a published release; skipping Play closed testing upload."
           elif [ "$HAS_SIGNING" != "true" ]; then
-            echo "No signed AAB (ANDROID_KEYSTORE_BASE64 unset); skipping Play open testing upload."
+            echo "No signed AAB (ANDROID_KEYSTORE_BASE64 unset); skipping Play closed testing upload."
           else
-            echo "PLAY_SERVICE_ACCOUNT_JSON not set; skipping Play open testing upload."
+            echo "PLAY_SERVICE_ACCOUNT_JSON not set; skipping Play closed testing upload."
           fi
 
       - name: Set up Ruby
@@ -154,10 +154,10 @@ jobs:
           python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$key_path"
           echo "PLAY_SERVICE_ACCOUNT_JSON_PATH=$key_path" >> "$GITHUB_ENV"
 
-      - name: Upload to Play open testing track
+      - name: Upload to Play closed testing track
         if: github.event_name == 'release' && env.HAS_SIGNING == 'true' && env.HAS_PLAY_KEY == 'true'
         working-directory: android
-        run: bundle exec fastlane android open_testing
+        run: bundle exec fastlane android closed_testing
 
       - name: Remove Play service-account key
         if: always()

@@ -9,7 +9,7 @@ first-class, not a fallback.
 
 | Channel | Who it serves | Artifact | Status |
 |---|---|---|---|
-| Google Play | Android users with store access | `.aab` | Open testing track, uploaded by CI on each release |
+| Google Play | Android users with store access | `.aab` | Closed testing track, uploaded by CI on each release; promoted to open testing and production by hand |
 | GitHub Releases | Censored regions, de-Googled phones | signed `.apk` and `.aab` | Attached by CI on each release |
 | Apple App Store | iOS users with store access | `.ipa` via App Store Connect | Not yet published |
 | TestFlight (public link) | iOS beta, and regions where a listing may be pulled | same build | Not yet set up |
@@ -20,7 +20,7 @@ first-class, not a fallback.
 
 - Data safety form: no data collected or shared.
 - Permissions: `INTERNET` and `USE_BIOMETRIC` only.
-- Track flow: open testing, then production. Promotion to production is a
+- Track flow: closed testing, then open testing, then production. Promotion to production is a
   manual step; see [RELEASING.md](RELEASING.md).
 - The listing may be geo-blocked in some countries by Google. The APK path
   covers those users.
