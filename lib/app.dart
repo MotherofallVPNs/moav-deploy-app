@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'features/servers/servers_home_screen.dart';
 import 'security/app_lock.dart';
+import 'security/onboarding.dart';
 import 'theme/moav_theme.dart';
 
 class MoavDeployApp extends StatelessWidget {
@@ -21,7 +22,9 @@ class MoavDeployApp extends StatelessWidget {
       darkTheme: theme,
       themeMode: ThemeMode.dark,
       debugShowCheckedModeBanner: false,
-      home: lockEnabled ? const AppLockGate(child: home) : home,
+      home: lockEnabled
+          ? const FirstRunGate(child: AppLockGate(child: home))
+          : home,
     );
   }
 }
