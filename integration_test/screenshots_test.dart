@@ -13,8 +13,9 @@ import 'package:moav_deploy/core/moav_controller_factory.dart';
 import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/core/ssh_moav_controller.dart';
 import 'package:moav_deploy/features/servers/servers_provider.dart';
-import 'package:moav_deploy/security/secure_cred_store.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+
+import '../test/support/memory_cred_store.dart';
 
 const _host = String.fromEnvironment('MOAV_TEST_HOST');
 const _user = String.fromEnvironment('MOAV_TEST_USER', defaultValue: 'root');
@@ -46,7 +47,7 @@ void main() {
   testWidgets(
     'demo gallery',
     (tester) async {
-      final store = _MemoryCredStore()
+      final store = MemoryCredStore()
         ..profiles = [demo, frankfurt]
         ..secrets['demo'] = live ? utf8.decode(base64Decode(_keyB64)) : 'x'
         ..secrets['fra'] = 'x';
@@ -214,55 +215,6 @@ class _GalleryFactory extends MoavControllerFactory {
   @override
   MoavController forServer(ServerProfile profile) =>
       profile.id == demo.id ? primary : other;
-}
-
-class _MemoryCredStore implements SecureCredStore {
-  List<ServerProfile> profiles = [];
-  List<StoredSshKey> sshKeys = [];
-  final Map<String, String> secrets = {};
-  final Map<String, String> sshKeySecrets = {};
-  final Map<String, Map<String, Object?>> installHandles = {};
-
-  @override
-  Future<List<ServerProfile>> loadProfiles() async => profiles;
-  @override
-  Future<void> saveProfiles(List<ServerProfile> p) async => profiles = p;
-  @override
-  Future<void> writeSecret(String id, String s) async => secrets[id] = s;
-  @override
-  Future<String?> readSecret(String id) async => secrets[id];
-  @override
-  Future<void> deleteSecret(String id) async => secrets.remove(id);
-  @override
-  Future<List<StoredSshKey>> loadSshKeys() async => sshKeys;
-  @override
-  Future<void> saveSshKeys(List<StoredSshKey> keys) async => sshKeys = keys;
-  @override
-  Future<void> writeSshKeySecret(String id, String pem) async => sshKeySecrets[id] = pem;
-  @override
-  Future<String?> readSshKeySecret(String id) async => sshKeySecrets[id];
-  @override
-  Future<void> deleteSshKeySecret(String id) async => sshKeySecrets.remove(id);
-  @override
-  Future<void> writeInstallHandle(String id, Map<String, Object?> json) async =>
-      installHandles[id] = json;
-  @override
-  Future<Map<String, Object?>?> readInstallHandle(String id) async =>
-      installHandles[id];
-  @override
-  Future<void> deleteInstallHandle(String id) async => installHandles.remove(id);
-  @override
-  Future<List<String>> listKeys() async => [...secrets.keys, ...installHandles.keys, ...sshKeySecrets.keys];
-  @override
-  Future<int> wipeAll() async {
-    final n = profiles.length + secrets.length + installHandles.length;
-    profiles = [];
-    secrets.clear();
-    installHandles.clear();
-    sshKeys = [];
-    sshKeySecrets.clear();
-    return n;
-  }
 }
 
 /// Demo data shaped like a real server: MoaV v2.2.2, 27/29 services, Grafana 13.1.3.

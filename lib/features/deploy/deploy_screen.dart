@@ -313,7 +313,7 @@ class _JobViewState extends State<_JobView> {
                   ),
           ),
         ),
-        if (status?.isTerminal ?? false || phase == InstallPhase.unknown)
+        if ((status?.isTerminal ?? false) || phase == InstallPhase.unknown)
           SafeArea(
             top: false,
             child: Padding(

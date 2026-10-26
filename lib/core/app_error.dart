@@ -6,6 +6,11 @@ import 'package:dartssh2/dartssh2.dart';
 import '../security/redactor.dart';
 import 'ssh_connection.dart';
 
+/// The MoaV CLI release line the text parsers in `moav_cli.dart` were
+/// verified against. Shown to users when the server answers in an unexpected
+/// format; bump it here when the parsers are re-verified against a newer CLI.
+const testedMoavVersion = 'v2.2.x';
+
 /// What went wrong, in terms the UI can act on.
 enum AppErrorKind {
   /// This device has no usable network.
@@ -161,7 +166,7 @@ class AppError implements Exception {
         AppErrorKind.unexpectedOutput,
         'The server answered in a format this app does not understand.',
         hint: 'The moav version on the server may be newer or older than '
-            'this app was tested with (v2.2.x).',
+            'this app was tested with ($testedMoavVersion).',
         detail: _clip(e.message),
         cause: e,
       );
