@@ -56,13 +56,20 @@ milestone. Rules, because `yorkschool.xyz` is a real box with real users:
 
 ## Releases
 
-1. Bump `version:` in `pubspec.yaml` (`X.Y.Z+N`).
-2. Tag `vX.Y.Z` on `main`; write the GitHub Release from the PR summaries.
-3. Build and upload: iOS via `flutter build ipa` → Transporter/App Store
-   Connect (TestFlight first); Android via `flutter build appbundle` → Play
-   internal track, plus `flutter build apk --split-per-abi` attached to the
-   Release with SHA-256 and signature (see `docs/APP-STORES.md`).
-4. Announce in the MoaV Telegram channel with the APK hash.
+Full flow in [`docs/RELEASING.md`](RELEASING.md). In short:
+
+1. Bump `version:` in `pubspec.yaml` (`X.Y.Z+N`) and update the store
+   release notes in `fastlane/metadata/android/en-US/changelogs/default.txt`.
+2. Open the release PR. Its body must contain a `## Store release notes`
+   section with that same text (the PR template has the slot).
+3. Merge, then publish a GitHub Release tagged `vX.Y.Z`. CI builds and signs
+   the AAB and APK, attaches them to the Release, appends the store release
+   notes to the Release body, and ships the AAB to the Play internal track.
+4. Promote to production by hand (Play Console, or
+   `fastlane android promote_production`).
+5. iOS is still manual: `flutter build ipa` then Transporter/App Store
+   Connect (TestFlight first).
+6. Announce in the MoaV Telegram channel with the APK hash.
 
 ## Upstream coordination (MoaV CLI)
 

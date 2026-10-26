@@ -1,0 +1,7 @@
+What's new in 0.2.0
+- New app icon.
+- Friendlier first launch: a quick setup screen helps you turn on the app lock, instead of hitting it cold.
+- Reusable key book: generate a key once, label it, reuse it across servers.
+- Encrypted backup and restore of your keys.
+- Edit a server's details without recreating it or re-adding its key.
+- Cleaner menu with links to the site, docs and socials; emergency wipe moved into the menu.

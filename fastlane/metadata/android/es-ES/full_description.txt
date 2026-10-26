@@ -1,0 +1,19 @@
+Instala y administra desde tu móvil tu propio servidor para acceder a un internet más abierto. MoaV Deploy te permite poner en marcha Mother of all VPNs (MoaV), una plataforma autoalojada con más de 18 protocolos para sortear bloqueos de red y rutas alternativas de conexión.
+
+Úsalo para ti o comparte el acceso con personas de confianza. Tú controlas el servidor y los usuarios, sin depender de la terminal para las tareas habituales.
+
+QUÉ PUEDES HACER
+• Instalar MoaV en tu propio servidor mediante una guía paso a paso y actualizarlo desde el móvil.
+• Añadir o eliminar usuarios y compartir paquetes de configuración listos para conectarse.
+• Consultar el estado del servidor, los servicios y los protocolos, con métricas en tiempo real.
+• Administrar varios servidores MoaV desde una sola aplicación.
+• Proteger la app con huella dactilar o reconocimiento facial.
+
+MÁS OPCIONES FRENTE A LOS BLOQUEOS
+MoaV reúne más de 18 métodos de conexión, como VLESS/Reality, Hysteria2, Trojan, Shadowsocks, WireGuard y túneles DNS. Si una red bloquea uno, es posible que otros sigan funcionando. El resultado depende de la configuración del servidor y de la red.
+
+PRIVACIDAD DESDE EL DISEÑO
+Sin cuenta de MoaV, anuncios, analíticas ni seguimiento. Los datos y las claves de acceso se guardan en el almacenamiento seguro del móvil. La aplicación se comunica directamente con los servidores que controlas.
+
+ANTES DE EMPEZAR
+Necesitas un servidor compatible propio, como un VPS. MoaV Deploy sirve para desplegar y administrar el servidor: no es un cliente VPN ni enruta el tráfico de tu móvil. Para conectarte, utiliza un cliente VPN/proxy compatible con las configuraciones generadas por tu servidor MoaV.
