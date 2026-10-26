@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Captures the demo screenshot gallery on a booted iOS simulator into shots/.
 #
-# Fake data (yorkschool-shaped) by default. To drive the real box instead:
-#   MOAV_TEST_SSH_KEY=~/.ssh/moav_deploy_app_ed25519 MOAV_TEST_HOST=yorkschool.xyz \
+# Built-in demo data by default. To drive a real server instead:
+#   MOAV_TEST_SSH_KEY=~/.ssh/key MOAV_TEST_HOST=your.server \
 #   MOAV_TEST_USER=root tool/screenshots.sh
 # The live run is read-only except for one throwaway zzmoavdeploytest* user
 # that is created for the bundle/QR shot and revoked afterwards.

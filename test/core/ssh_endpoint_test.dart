@@ -4,26 +4,26 @@ import 'package:moav_deploy/core/ssh_endpoint.dart';
 void main() {
   group('SshEndpoint.tryParse', () {
     test('bare hostname passes through lower-cased', () {
-      final e = SshEndpoint.tryParse('BitChat.Center')!;
-      expect(e.host, 'bitchat.center');
+      final e = SshEndpoint.tryParse('Example.Org')!;
+      expect(e.host, 'example.org');
       expect(e.port, isNull);
       expect(e.username, isNull);
     });
 
     test('surrounding whitespace and a trailing slash are dropped', () {
       expect(
-        SshEndpoint.tryParse('  bitchat.center/ \n')!.host,
-        'bitchat.center',
+        SshEndpoint.tryParse('  example.org/ \n')!.host,
+        'example.org',
       );
-      expect(SshEndpoint.normalizeHost(' bitchat.center '), 'bitchat.center');
+      expect(SshEndpoint.normalizeHost(' example.org '), 'example.org');
     });
 
     test('ssh:// scheme, user@ prefix and :port are peeled off', () {
-      final e = SshEndpoint.tryParse('ssh://root@bitchat.center:2222')!;
-      expect(e.host, 'bitchat.center');
+      final e = SshEndpoint.tryParse('ssh://root@example.org:2222')!;
+      expect(e.host, 'example.org');
       expect(e.port, 2222);
       expect(e.username, 'root');
-      expect(e.toString(), 'root@bitchat.center:2222');
+      expect(e.toString(), 'root@example.org:2222');
     });
 
     test('IPv4 literal with port', () {
@@ -48,7 +48,7 @@ void main() {
     test('rejects empty, inner whitespace, bad port and junk', () {
       expect(SshEndpoint.tryParse(''), isNull);
       expect(SshEndpoint.tryParse('   '), isNull);
-      expect(SshEndpoint.tryParse('bit chat.center'), isNull);
+      expect(SshEndpoint.tryParse('exam ple.org'), isNull);
       expect(SshEndpoint.tryParse('host:99999'), isNull);
       expect(SshEndpoint.tryParse('host:abc'), isNull);
       expect(SshEndpoint.tryParse('[2001:db8::1'), isNull);

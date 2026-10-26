@@ -16,7 +16,7 @@ import 'ssh_connection.dart';
 /// and stays trivially testable.
 typedef SecretResolver = Future<String?> Function(ServerProfile profile);
 
-/// Phase 1 [MoavController]: drives the `moav` CLI over SSH using dartssh2.
+/// [MoavController] that drives the `moav` CLI over SSH using dartssh2.
 ///
 /// Every method documents the exact CLI invocation it runs. Output parsing
 /// prefers JSON (`--json`) where the CLI supports it; where it does not, the
@@ -36,9 +36,6 @@ class SshMoavController implements MoavController {
   final Duration connectTimeout;
 
   SSHClient? _client;
-
-  /// Where the detached installer writes its log on the server.
-  static const deployLogPath = InstallScript.logPath;
 
   /// Opens an SSH session and runs `echo __ok__; moav --version` to report
   /// reachability, whether auth works, and the installed MoaV version.
@@ -356,9 +353,8 @@ class SshMoavController implements MoavController {
     } on SshCommandException {
       rethrow; // the session is fine; the command just failed
     } on Object catch (e) {
-      // Timeouts, socket errors and SSH transport errors all leave the
-      // cached client in an unknown state; drop it so the next call
-      // reconnects instead of failing again on a dead session.
+      // Timeouts, socket and transport errors leave the cached client in an
+      // unknown state; drop it so the next call reconnects.
       _dropClient();
       throw AppError.from(e, host: profile.host, port: profile.port);
     }

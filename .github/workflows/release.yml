@@ -58,6 +58,19 @@ jobs:
           flutter build appbundle --release
           flutter build apk --release
 
+      # Checksums let sideloaders verify a mirrored APK:
+      #   sha256sum -c SHA256SUMS
+      # The file lists bare filenames so it works in any download directory.
+      - name: Write SHA256SUMS
+        if: env.HAS_SIGNING == 'true'
+        run: |
+          set -euo pipefail
+          {
+            (cd build/app/outputs/bundle/release && sha256sum app-release.aab)
+            (cd build/app/outputs/flutter-apk && sha256sum app-release.apk)
+          } > build/SHA256SUMS
+          cat build/SHA256SUMS
+
       - name: Skip signed build
         if: env.HAS_SIGNING != 'true'
         run: echo "ANDROID_KEYSTORE_BASE64 not set; skipping signed build."
@@ -74,6 +87,7 @@ jobs:
           path: |
             build/app/outputs/bundle/release/app-release.aab
             build/app/outputs/flutter-apk/app-release.apk
+            build/SHA256SUMS
           if-no-files-found: error
 
       - name: Attach to GitHub Release
@@ -83,6 +97,7 @@ jobs:
           files: |
             build/app/outputs/bundle/release/app-release.aab
             build/app/outputs/flutter-apk/app-release.apk
+            build/SHA256SUMS
 
       # Release notes come from fastlane/metadata (single source of truth for
       # Play, the GitHub release and the PR body). Idempotent on re-runs.

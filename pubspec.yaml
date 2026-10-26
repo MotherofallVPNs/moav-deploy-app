@@ -1,7 +1,7 @@
 name: moav_deploy
 description: Deploy, manage, and monitor MoaV servers from your phone.
 publish_to: "none"
-version: 0.2.1+4
+version: 0.2.2+5
 
 environment:
   sdk: ^3.8.0
@@ -44,6 +44,12 @@ flutter_launcher_icons:
 
 flutter:
   uses-material-design: true
+
+  # Font license texts travel with the binary (SIL OFL requires it) and are
+  # registered with LicenseRegistry in lib/main.dart.
+  assets:
+    - assets/fonts/LICENSE-Inter.txt
+    - assets/fonts/LICENSE-JetBrainsMono.txt
 
   # Fonts are bundled offline (no runtime font fetching: at-risk users must
   # never trigger a network request just to render text).

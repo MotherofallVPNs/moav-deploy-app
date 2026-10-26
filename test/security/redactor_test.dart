@@ -7,9 +7,9 @@ void main() {
   group('Redactor', () {
     test('removes a real OpenSSH private key, keeps surrounding text', () async {
       final key = await const KeyService().generateEd25519();
-      final text = 'Could not save: ${key.privateKeyPem} (server york)';
+      final text = 'Could not save: ${key.privateKeyPem} (server alpha)';
       final out = Redactor.scrub(text);
-      expect(out, 'Could not save: ${Redactor.keyMarker} (server york)');
+      expect(out, 'Could not save: ${Redactor.keyMarker} (server alpha)');
       // Neither the header nor any 40-char slice of the key body survives.
       final body = key.privateKeyPem.split('\n').where((l) => !l.startsWith('-----')).join();
       for (var i = 0; i + 40 <= body.length; i += 40) {
@@ -45,7 +45,7 @@ void main() {
 
     test('redacts share links and subscription URLs from bundles', () {
       const links = [
-        'vless://11111111-2222-3333-4444-555555555555@203.0.113.7:443?security=reality#york',
+        'vless://11111111-2222-3333-4444-555555555555@203.0.113.7:443?security=reality#alpha',
         'hysteria2://pw@203.0.113.7:443/?sni=example.org',
         'trojan://pw@203.0.113.7:8443',
         'ss://YWVzLTI1Ni1nY206cGFzcw@203.0.113.7:8388#tag',
@@ -63,7 +63,7 @@ void main() {
     });
 
     test('leaves ordinary error text and public keys alone', () {
-      const plain = 'Authentication failed for root@york.example:22 (exit 255)';
+      const plain = 'Authentication failed for root@alpha.example:22 (exit 255)';
       expect(Redactor.scrub(plain), plain);
       const pub = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGxvbmdlbm91Z2hwdWJsaWNrZXlibG9i moav-deploy';
       expect(Redactor.scrub(pub), pub);

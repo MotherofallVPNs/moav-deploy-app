@@ -1,43 +1,153 @@
+<div align="center">
+
+<img src="assets/icon/icon-1024.png" alt="MoaV Deploy logo" width="130">
+
 # MoaV Deploy
 
-A Flutter mobile app (iOS + Android) to **deploy, manage, and monitor [MoaV](https://github.com/MotherofallVPNs/moav) servers** from your phone.
+**Install, manage and monitor your own [MoaV](https://github.com/MotherofallVPNs/MoaV) server from your phone.**
 
-- **Phase 1** — single server: connect over SSH, install MoaV, manage users, hand out bundles/QR, restart services, view health and Grafana.
-- **Phase 2** — fleet: multi-server registry, cross-server user management, multi-server redundancy bundles, and a native MoaV control API replacing SSH.
+[![CI](https://img.shields.io/github/actions/workflow/status/MotherofallVPNs/moav-deploy-app/ci.yml?branch=main&label=CI&logo=github&logoColor=white)](https://github.com/MotherofallVPNs/moav-deploy-app/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/MotherofallVPNs/moav-deploy-app?label=release&color=16a34a&logo=github&logoColor=white)](https://github.com/MotherofallVPNs/moav-deploy-app/releases/latest) [![Flutter](https://img.shields.io/badge/Flutter-3.32%2B-02569B.svg?logo=flutter&logoColor=white)](https://flutter.dev) [![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20iOS-0ea5e9.svg)](#get-the-app) [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e.svg)](LICENSE)
 
-## Design stance
-- **Self-custody, no middleman.** The app talks directly to *your* server. No central backend ever holds your SSH keys or your users. This matches MoaV's no-telemetry ethos.
-- **API-ready from day one.** All server operations go through a `MoavController` interface. P1 ships an `SshMoavController` (drives the `moav` CLI over SSH); P2 adds an `ApiMoavController` (talks to the MoaV control API) with zero UI rewrite.
-- **Threat-modelled for at-risk users.** Keys in Secure Enclave / Keystore, biometric lock, nothing sensitive at rest in plaintext.
+[![Website](https://img.shields.io/badge/website-moav.sh-06b6d4.svg)](https://moav.sh) [![Docs](https://img.shields.io/badge/docs-moav.sh%2Fdocs-2563eb.svg)](https://moav.sh/docs/) [![MoaV](https://img.shields.io/badge/server-MoaV-8b5cf6.svg?logo=github&logoColor=white)](https://github.com/MotherofallVPNs/MoaV) [![Telegram](https://img.shields.io/badge/Telegram-motherofallvpns-2CA5E0.svg?logo=telegram)](https://t.me/motherofallvpns) [![X](https://img.shields.io/badge/X-@motherofallvpns-000000.svg?logo=x)](https://x.com/motherofallvpns)
 
-See [`docs/PLAN.md`](docs/PLAN.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+<a href="https://play.google.com/store/apps/details?id=org.motherofallvpns.moavdeploy"><img src="https://img.shields.io/badge/Google_Play-open_testing-34A853.svg?style=for-the-badge&logo=googleplay&logoColor=white" alt="Get it on Google Play" height="36"></a>&nbsp;&nbsp;<img src="https://img.shields.io/badge/App_Store-coming_soon-6b7280.svg?style=for-the-badge&logo=apple&logoColor=white" alt="App Store: coming soon" height="36">
 
-## Status
-M0–M4 done (scaffold, connect & credentials, detached idempotent deploy, users + bundles/QR, operate & monitor). M5 (harden & ship) next. Test server: `yorkschool.xyz`.
+Built and maintained by the **[MoaV](https://github.com/MotherofallVPNs)** community.
 
-More docs: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), [`docs/APP-STORES.md`](docs/APP-STORES.md), [`docs/WORKFLOW.md`](docs/WORKFLOW.md), [`docs/RELEASING.md`](docs/RELEASING.md), [`docs/MOAV-CLI-GAPS.md`](docs/MOAV-CLI-GAPS.md).
+</div>
+
+---
+
+## What it is
+
+MoaV Deploy is a Flutter app for Android and iOS that turns a plain VPS into a
+running [MoaV](https://github.com/MotherofallVPNs/MoaV) server and then keeps it
+running. It connects to your server over SSH, drives the `moav` CLI, and gives
+you a phone-sized control panel for the things you do every week: add a user,
+hand out a bundle as a QR code, restart a service, check health, glance at
+Grafana.
+
+It is a **server administration** app, not a VPN client. It never routes your
+phone's traffic. To connect to a MoaV server, use any compatible client with
+the bundles this app produces.
+
+## Features
+
+- **Deploy** MoaV onto a fresh server with a guided, resumable install. The
+  install job runs detached on the server, so the app can be backgrounded or
+  closed and will reattach to the running job.
+- **Users and bundles.** Add and revoke users, pull a user's bundle over SFTP,
+  and show every phone link (Reality, Hysteria2, Trojan, Shadowsocks, XHTTP,
+  WireGuard, AmneziaWG, MTProxy) as a QR code with copy and share.
+- **Operate.** Start, stop and restart services, run `moav doctor`, read the
+  live service table, and run per-user connectivity tests.
+- **Monitor.** Headline metrics from Prometheus and Grafana embedded in the
+  app, with an open-in-browser fallback for self-signed certificates.
+- **Keys and servers.** On-device ed25519 key generation, a reusable keyring,
+  one-time password login to install your key, and multiple server profiles.
+- **Built for at-risk users.** Biometric app lock, secrets only in the
+  platform secure store, scrubbed logs, no telemetry, no backend, and an
+  emergency wipe that clears every stored server and key.
+
+## Get the app
+
+| Channel | Status |
+|---|---|
+| [Google Play](https://play.google.com/store/apps/details?id=org.motherofallvpns.moavdeploy) | Open testing |
+| [GitHub Releases](https://github.com/MotherofallVPNs/moav-deploy-app/releases) | Signed APK and AAB attached to every release |
+| App Store | Not yet published |
+
+You need your own server with SSH access. MoaV itself is free and open source;
+see the [MoaV docs](https://moav.sh/docs/) for server requirements.
+
+## How it works
+
+Every server operation goes through one `MoavController` interface. Today the
+only implementation drives the `moav` CLI over SSH (`SshMoavController`); a
+future implementation can talk to a native MoaV control API without touching
+the UI. The design, the install job, and the parsing strategy are described in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Places where the CLI still forces
+text scraping are tracked in [docs/MOAV-CLI-GAPS.md](docs/MOAV-CLI-GAPS.md).
 
 ## Development
+
+Requirements: Flutter 3.32 or newer on the stable channel, Xcode for iOS,
+Android SDK with JDK 17 for Android. Full setup, signing and live-test details
+are in [docs/BUILDING.md](docs/BUILDING.md).
+
 ```
 flutter pub get
 flutter analyze --fatal-infos
-flutter test                                   # unit + widget tests
-MOAV_TEST_SSH_KEY=~/.ssh/key MOAV_TEST_HOST=h MOAV_TEST_USER=root flutter test test/live   # live, additive-only checks
+flutter test
+flutter run -d <device>
+```
+
+Tests tagged `live` under `test/live/` talk to a real MoaV server and are
+skipped unless the `MOAV_TEST_*` variables are set. They are additive only and
+never run in CI.
+
+```
+MOAV_TEST_SSH_KEY=~/.ssh/key MOAV_TEST_HOST=your.server MOAV_TEST_USER=root flutter test test/live
+```
+
+### Repository layout
+
+```
+lib/
+  core/        MoavController interface, SSH transport, CLI parsers, install job
+  features/    One folder per screen group: servers, keys, deploy, users, operate, wipe
+  security/    App lock, onboarding, secure store, key services, redaction, wipe
+  theme/       MoaV design tokens and the shared widget set
+test/          Unit and widget tests; test/live/ needs a real server
+integration_test/, test_driver/, tool/screenshots.sh
+               Screenshot gallery harness for a booted iOS simulator
+android/, ios/ Platform projects; android/fastlane holds the Play lanes
+fastlane/metadata/android/
+               Store listing text and release notes (source of truth)
+scripts/       Release helpers used by CI
+docs/          Architecture, building, releasing, distribution, CLI gaps
+.github/       CI and release workflows, PR template
 ```
 
 ### Design system
-`lib/theme/moav_theme.dart` holds the MoaV tokens (same values as the site's
-`blog.css`: `#0a0a0f` backgrounds, cyan `#00d4ff` → purple `#7b5cff` accent,
-Inter + JetBrains Mono) as a dark-only Material 3 `ThemeData`, plus the
-reusable pieces every screen is built from: `MoavScaffold` (radial glow),
-`MoavCard`, `SectionHeader`, `MetricTile`, `StatusPill`, `GradientButton`,
-`CodeBlock`. Fonts are bundled from `assets/fonts` — nothing is fetched at
-runtime.
 
-### Screenshot gallery
-`tool/screenshots.sh` drives the app on a booted iOS simulator with
-`integration_test` and writes PNGs to `shots/` (git-ignored; the curated set
-lives in [`docs/screenshots/`](docs/screenshots/)). By default it uses
-yorkschool-shaped fake data; with the `MOAV_TEST_*` variables above it talks
-to the real box, read-only except for one throwaway `zzmoavdeploytest*` user
-that is created for the bundle/QR shot and revoked afterwards.
+`lib/theme/moav_theme.dart` holds the MoaV tokens (dark backgrounds, cyan to
+purple accent, Inter for UI, JetBrains Mono for values) as a dark-only Material
+3 theme plus the widgets every screen is composed from. Fonts are bundled under
+`assets/fonts`; nothing is fetched at runtime.
+
+## Documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the controller seam, the
+  detached install job, parsing, security model.
+- [docs/BUILDING.md](docs/BUILDING.md): toolchain, running locally, signing,
+  live tests, server-side requirements.
+- [docs/RELEASING.md](docs/RELEASING.md): version bump, release notes, GitHub
+  Release, Play delivery, required secrets.
+- [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md): store, sideload and TestFlight
+  channels and what each one needs.
+- [docs/MOAV-CLI-GAPS.md](docs/MOAV-CLI-GAPS.md): upstream CLI gaps the app
+  works around.
+
+## Contributing
+
+Pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the
+branch and PR conventions, and the rules for the live test suite. Security
+issues go through [SECURITY.md](SECURITY.md), not the public tracker.
+
+## Roadmap
+
+Phase 1 (single server over SSH) has shipped. Phase 2 is a fleet view across
+several servers backed by a native MoaV control API; it is tracked in
+[issue #7](https://github.com/MotherofallVPNs/moav-deploy-app/issues/7).
+
+## Related projects
+
+- [MoaV](https://github.com/MotherofallVPNs/MoaV): the server stack this app manages.
+- [moav-client](https://github.com/MotherofallVPNs/moav-client): the client side.
+
+## License
+
+MoaV Deploy is released under the [MIT License](LICENSE). The bundled Inter
+and JetBrains Mono fonts are under the SIL Open Font License; their license
+texts ship inside the app through Flutter's license registry.

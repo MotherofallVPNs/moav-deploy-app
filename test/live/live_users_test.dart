@@ -8,7 +8,7 @@ import 'package:moav_deploy/core/moav_controller.dart';
 import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/core/ssh_moav_controller.dart';
 
-/// M3 live checks: user lifecycle + bundle fetch against a real MoaV box.
+/// Live checks: user lifecycle and bundle fetch against a real MoaV box.
 ///
 /// Additive only: creates one user named `zzmoavdeploytest<pid>`, reads its
 /// bundle, then revokes it. Pre-existing users are never touched; a
@@ -33,9 +33,8 @@ void main() {
   late final List<MoavUser> before;
   var created = false;
 
-  // `moav user add/revoke` kicks off an async service regeneration, so a busy
-  // box briefly reports an inconsistent user list. Poll until it settles
-  // rather than asserting on the first read. See docs/MOAV-CLI-GAPS.md.
+  // add/revoke trigger async regeneration, so the list is briefly inconsistent
+  // on a busy box; poll until it settles (see docs/MOAV-CLI-GAPS.md).
   Future<List<MoavUser>> settleUsers(
     bool Function(List<MoavUser>) done, {
     Duration timeout = const Duration(seconds: 90),
@@ -75,9 +74,8 @@ void main() {
           await controller.removeUser(testUser);
         }
       }
-      // Our test user must be gone; every pre-existing user must survive.
-      // (Other live test files may hold their own users concurrently, so this
-      // asserts a subset/absence invariant, not an exact set.)
+      // Test user gone, every pre-existing user still present. Other live files
+      // may hold their own users, so this is a subset check, not an exact set.
       final after =
           await settleUsers((u) => !u.any((e) => e.name == testUser));
       final names = after.map((u) => u.name).toSet();

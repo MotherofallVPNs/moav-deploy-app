@@ -18,60 +18,7 @@ import 'package:moav_deploy/features/servers/servers_provider.dart';
 import 'package:moav_deploy/security/secure_cred_store.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-/// In-memory stand-in so tests never touch platform channels.
-class _FakeCredStore implements SecureCredStore {
-  List<ServerProfile> profiles = [];
-  List<StoredSshKey> sshKeys = [];
-  final Map<String, String> secrets = {};
-  final Map<String, String> sshKeySecrets = {};
-  final Map<String, Map<String, Object?>> installHandles = {};
-
-  @override
-  Future<List<ServerProfile>> loadProfiles() async => profiles;
-  @override
-  Future<void> saveProfiles(List<ServerProfile> p) async => profiles = p;
-  @override
-  Future<void> writeSecret(String id, String s) async => secrets[id] = s;
-  @override
-  Future<String?> readSecret(String id) async => secrets[id];
-  @override
-  Future<void> deleteSecret(String id) async => secrets.remove(id);
-  @override
-  Future<List<StoredSshKey>> loadSshKeys() async => sshKeys;
-  @override
-  Future<void> saveSshKeys(List<StoredSshKey> keys) async => sshKeys = keys;
-  @override
-  Future<void> writeSshKeySecret(String id, String pem) async => sshKeySecrets[id] = pem;
-  @override
-  Future<String?> readSshKeySecret(String id) async => sshKeySecrets[id];
-  @override
-  Future<void> deleteSshKeySecret(String id) async => sshKeySecrets.remove(id);
-  @override
-  Future<void> writeInstallHandle(String id, Map<String, Object?> json) async =>
-      installHandles[id] = json;
-  @override
-  Future<Map<String, Object?>?> readInstallHandle(String id) async =>
-      installHandles[id];
-  @override
-  Future<void> deleteInstallHandle(String id) async =>
-      installHandles.remove(id);
-  @override
-  Future<List<String>> listKeys() async => [
-        ...secrets.keys,
-        ...installHandles.keys,
-        ...sshKeySecrets.keys,
-      ];
-  @override
-  Future<int> wipeAll() async {
-    final removed = profiles.length + secrets.length + installHandles.length;
-    profiles = [];
-    secrets.clear();
-    installHandles.clear();
-    sshKeys = [];
-    sshKeySecrets.clear();
-    return removed;
-  }
-}
+import 'support/memory_cred_store.dart';
 
 class _FakeKeyInstaller extends SshKeyInstaller {
   const _FakeKeyInstaller(this.log);
@@ -189,9 +136,9 @@ class _FakeController implements MoavController {
   Future<DoctorReport> doctor() async => DoctorReport(
         collectedAt: DateTime(2026, 9, 14, 8),
         checks: const [
-          DoctorCheck(name: 'docker', result: CheckResult.pass, detail: 'Check Docker\n✓ Docker 29 — running'),
+          DoctorCheck(name: 'docker', result: CheckResult.pass, detail: 'Check Docker\n✓ Docker 29 - running'),
           DoctorCheck(name: 'host', result: CheckResult.warn, detail: 'Check CPU load\n! 929 MiB swapped out'),
-          DoctorCheck(name: 'services', result: CheckResult.fail, detail: 'Check services\n✗ sing-box — not running'),
+          DoctorCheck(name: 'services', result: CheckResult.fail, detail: 'Check services\n✗ sing-box - not running'),
         ],
       );
 
@@ -258,7 +205,7 @@ class _FakeFactory extends MoavControllerFactory {
   MoavController forServer(ServerProfile profile) => controller;
 }
 
-Widget _app(_FakeCredStore store, {List<Override> overrides = const []}) =>
+Widget _app(MemoryCredStore store, {List<Override> overrides = const []}) =>
     ProviderScope(
       retry: noProviderRetry,
       overrides: [
@@ -270,8 +217,8 @@ Widget _app(_FakeCredStore store, {List<Override> overrides = const []}) =>
 
 const _profile = ServerProfile(
   id: 's1',
-  label: 'York',
-  host: 'yorkschool.example',
+  label: 'Demo',
+  host: 'demo.example.org',
   port: 22,
   username: 'root',
   authMethod: SshAuthMethod.importedKey,
@@ -293,7 +240,7 @@ Future<void> _scrollTo(WidgetTester tester, Finder f) async {
 void main() {
   testWidgets('home shows empty state and opens add-server form',
       (tester) async {
-    await tester.pumpWidget(_app(_FakeCredStore()));
+    await tester.pumpWidget(_app(MemoryCredStore()));
     await tester.pumpAndSettle();
 
     expect(find.text('No servers yet'), findsOneWidget);
@@ -307,7 +254,7 @@ void main() {
 
   testWidgets('saving a password-auth server lists it and stores the secret',
       (tester) async {
-    final store = _FakeCredStore();
+    final store = MemoryCredStore();
     await tester.pumpWidget(_app(store));
     await tester.pumpAndSettle();
 
@@ -333,7 +280,7 @@ void main() {
 
   testWidgets('generate key, install it with a one-time password, save',
       (tester) async {
-    final store = _FakeCredStore();
+    final store = MemoryCredStore();
     final installs = <String>[];
     await tester.pumpWidget(_app(
       store,
@@ -392,7 +339,7 @@ void main() {
   });
 
   testWidgets('test connection reports the MoaV version', (tester) async {
-    final store = _FakeCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [_profile];
     final controller = _FakeController(const []);
     await tester.pumpWidget(_app(
       store,
@@ -411,7 +358,7 @@ void main() {
   });
 
   testWidgets('editing a server keeps its saved credential', (tester) async {
-    final store = _FakeCredStore()
+    final store = MemoryCredStore()
       ..profiles = [_profile]
       ..secrets[_profile.id] = 'private-key';
     await tester.pumpWidget(_app(store));
@@ -432,7 +379,7 @@ void main() {
 
   testWidgets('deploy screen starts a detached install and streams the log',
       (tester) async {
-    final store = _FakeCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [_profile];
     final controller = _FakeController(const [
       InstallStatus(
         phase: InstallPhase.running,
@@ -459,7 +406,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
     expect(find.text('Users'), findsOneWidget);
     await _scrollTo(tester, find.text('Deploy'));
@@ -497,7 +444,7 @@ void main() {
 
   testWidgets('deploy screen re-attaches to a saved job on open',
       (tester) async {
-    final store = _FakeCredStore()
+    final store = MemoryCredStore()
       ..profiles = [_profile]
       ..installHandles['s1'] = {'jobId': '4242', 'logPath': 'x'};
     final controller = _FakeController(const [
@@ -510,7 +457,7 @@ void main() {
       ],
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
     await _scrollTo(tester, find.text('Deploy'));
     await tester.tap(find.text('Deploy'));
@@ -521,9 +468,40 @@ void main() {
     expect(find.text('Start install'), findsNothing);
   });
 
+  // Regression: `a ?? b || c` groups as `a ?? (b || c)`, so with a non-null
+  // status the unknown-phase branch was never reached and the user had no
+  // way to start over after the server-side job vanished.
+  testWidgets('deploy screen offers a new install when the job phase is unknown',
+      (tester) async {
+    final store = MemoryCredStore()
+      ..profiles = [_profile]
+      ..installHandles['s1'] = {'jobId': '4242', 'logPath': 'x'};
+    final controller = _FakeController(const [
+      InstallStatus(
+        phase: InstallPhase.unknown,
+        message: 'No job with that id on the server',
+      ),
+    ]);
+    await tester.pumpWidget(_app(
+      store,
+      overrides: [
+        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+      ],
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Demo'));
+    await tester.pumpAndSettle();
+    await _scrollTo(tester, find.text('Deploy'));
+    await tester.tap(find.text('Deploy'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Start another install'), findsOneWidget);
+  });
+
   testWidgets('users: list, open bundle with QR, add and revoke',
       (tester) async {
-    final store = _FakeCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [_profile];
     final controller = _FakeController(const []);
     await tester.pumpWidget(_app(
       store,
@@ -533,7 +511,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Users'));
     await tester.pumpAndSettle();
@@ -587,7 +565,7 @@ void main() {
 
   testWidgets('operate: services with confirmed restart, health, monitoring',
       (tester) async {
-    final store = _FakeCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [_profile];
     final controller = _FakeController(const []);
     await tester.pumpWidget(_app(
       store,
@@ -596,7 +574,7 @@ void main() {
       ],
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Services'));
     await tester.pumpAndSettle();
@@ -638,7 +616,7 @@ void main() {
     expect(find.byIcon(Icons.cancel), findsWidgets);
     await tester.tap(find.text('services'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('sing-box — not running'), findsOneWidget);
+    expect(find.textContaining('sing-box - not running'), findsOneWidget);
 
     // Analytics tab shows Grafana health, URL, metrics and protocol status.
     await tester.tap(find.text('Analytics'));
@@ -657,7 +635,7 @@ void main() {
 
   testWidgets('user connectivity test shows the protocol matrix',
       (tester) async {
-    final store = _FakeCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [_profile];
     final controller = _FakeController(const []);
     await tester.pumpWidget(_app(
       store,
@@ -666,7 +644,7 @@ void main() {
       ],
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Users'));
     await tester.pumpAndSettle();
@@ -684,7 +662,7 @@ void main() {
 
   testWidgets('users screen: timeout shows a hint and Retry recovers',
       (tester) async {
-    final store = _FakeCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [_profile];
     final controller = _FakeController(const [])
       ..nextError = TimeoutException('listUsers');
     await tester.pumpWidget(_app(
@@ -694,7 +672,7 @@ void main() {
       ],
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Users'));
     await tester.pumpAndSettle();
@@ -712,7 +690,7 @@ void main() {
 
   testWidgets('bundle screen: failed command shows exit code, never the secret',
       (tester) async {
-    final store = _FakeCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [_profile];
     final controller = _FakeController(const []);
     await tester.pumpWidget(_app(
       store,
@@ -721,7 +699,7 @@ void main() {
       ],
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Users'));
     await tester.pumpAndSettle();
@@ -750,7 +728,7 @@ void main() {
 
   testWidgets('services tab: unreachable host shows Retry; deploy shows a banner',
       (tester) async {
-    final store = _FakeCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [_profile];
     final controller = _FakeController(const [])
       ..nextError = const SocketException(
         'Connection failed',
@@ -763,7 +741,7 @@ void main() {
       ],
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Services'));
     await tester.pumpAndSettle();
@@ -791,7 +769,7 @@ void main() {
 
   testWidgets('add server defaults to Saved key and preselects the newest key',
       (tester) async {
-    final store = _FakeCredStore()
+    final store = MemoryCredStore()
       ..sshKeys = [
         StoredSshKey(
           id: 'k-old',
@@ -826,21 +804,21 @@ void main() {
 
     // Host plus the preselected key is enough to save.
     await tester.enterText(
-        find.widgetWithText(TextField, 'Host'), ' ssh://root@BitChat.Center:22/ ');
+        find.widgetWithText(TextField, 'Host'), ' ssh://root@Example.Org:22/ ');
     await tester.pumpAndSettle();
     await _scrollTo(tester, find.text('Save server'));
     await tester.tap(find.text('Save server'));
     await tester.pumpAndSettle();
 
     final saved = store.profiles.single;
-    expect(saved.host, 'bitchat.center');
-    expect(saved.label, 'bitchat.center');
+    expect(saved.host, 'example.org');
+    expect(saved.label, 'example.org');
     expect(store.secrets[saved.id], 'pem-new');
   });
 
   testWidgets('add server with an empty keyring offers to generate instead',
       (tester) async {
-    await tester.pumpWidget(_app(_FakeCredStore()));
+    await tester.pumpWidget(_app(MemoryCredStore()));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add server'));
     await tester.pumpAndSettle();
@@ -859,17 +837,17 @@ void main() {
 
   testWidgets('test connection failure names the cause in a quiet snackbar',
       (tester) async {
-    final store = _FakeCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [_profile];
     final controller = _FakeController(const [])
       ..pingResult = ConnectionCheck(
         reachable: false,
-        error: 'Could not find yorkschool.example:22.',
+        error: 'Could not find demo.example.org:22.',
         failure: AppError.from(
           const SocketException(
             'Failed host lookup',
             osError: OSError('No address associated with hostname', 7),
           ),
-          host: 'yorkschool.example',
+          host: 'demo.example.org',
           port: 22,
         ),
       );
@@ -886,7 +864,7 @@ void main() {
     await tester.tap(find.text('Test connection'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Could not connect. Could not find yorkschool.example:22.'),
+    expect(find.text('Could not connect. Could not find demo.example.org:22.'),
         findsOneWidget);
     expect(find.textContaining('Check the hostname'), findsOneWidget);
     expect(find.byIcon(Icons.cloud_off), findsOneWidget);
@@ -894,7 +872,7 @@ void main() {
 
   testWidgets('server hub: Check connection shows the cause inline',
       (tester) async {
-    final store = _FakeCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [_profile];
     final controller = _FakeController(const [])
       ..pingResult = ConnectionCheck(
         reachable: false,
@@ -908,7 +886,7 @@ void main() {
       ],
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
 
     expect(find.text('Not checked yet'), findsOneWidget);
@@ -926,13 +904,13 @@ void main() {
 
   test('form normalises pasted connect strings before dialling', () {
     const pasted = AddServerFormState(
-      host: ' ssh://root@BitChat.Center:22/ ',
+      host: ' ssh://root@Example.Org:22/ ',
       authChoice: AuthChoice.password,
       password: 'p',
     );
     expect(pasted.hostError, isNull);
-    expect(pasted.normalizedHost, 'bitchat.center');
-    expect(pasted.toProfile('x').host, 'bitchat.center');
+    expect(pasted.normalizedHost, 'example.org');
+    expect(pasted.toProfile('x').host, 'example.org');
 
     const junk = AddServerFormState(host: 'not a host', authChoice: AuthChoice.password, password: 'p');
     expect(junk.hostError, isNotNull);
