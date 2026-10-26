@@ -14,6 +14,7 @@ jobs:
     timeout-minutes: 40
     env:
       HAS_SIGNING: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+      HAS_PLAY_KEY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -82,3 +83,67 @@ jobs:
           files: |
             build/app/outputs/bundle/release/app-release.aab
             build/app/outputs/flutter-apk/app-release.apk
+
+      # Release notes come from fastlane/metadata (single source of truth for
+      # Play, the GitHub release and the PR body). Idempotent on re-runs.
+      - name: Append store release notes to GitHub Release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          body="$(gh release view "$TAG" --json body -q .body)"
+          if grep -q '^## Store release notes' <<<"$body"; then
+            echo "Release body already has store release notes; leaving as is."
+            exit 0
+          fi
+          notes="$(scripts/release-notes.sh)"
+          printf '%s\n\n%s\n' "$body" "$notes" > /tmp/release-body.md
+          gh release edit "$TAG" --notes-file /tmp/release-body.md
+
+      # Play delivery: only on a published release, only when the service
+      # account secret exists. Manual builds and forks skip with a log line.
+      - name: Skip Play upload
+        if: github.event_name != 'release' || env.HAS_SIGNING != 'true' || env.HAS_PLAY_KEY != 'true'
+        run: |
+          if [ "${{ github.event_name }}" != "release" ]; then
+            echo "Not a published release; skipping Play internal upload."
+          elif [ "$HAS_SIGNING" != "true" ]; then
+            echo "No signed AAB (ANDROID_KEYSTORE_BASE64 unset); skipping Play internal upload."
+          else
+            echo "PLAY_SERVICE_ACCOUNT_JSON not set; skipping Play internal upload."
+          fi
+
+      - name: Set up Ruby
+        if: github.event_name == 'release' && env.HAS_SIGNING == 'true' && env.HAS_PLAY_KEY == 'true'
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+
+      - name: Write Play service-account key
+        if: github.event_name == 'release' && env.HAS_SIGNING == 'true' && env.HAS_PLAY_KEY == 'true'
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          key_path="$RUNNER_TEMP/play-service-account.json"
+          umask 077
+          # Accept the secret either as raw JSON or base64-encoded JSON.
+          if [[ "$PLAY_SERVICE_ACCOUNT_JSON" == \{* ]]; then
+            printf '%s' "$PLAY_SERVICE_ACCOUNT_JSON" > "$key_path"
+          else
+            printf '%s' "$PLAY_SERVICE_ACCOUNT_JSON" | base64 -d > "$key_path"
+          fi
+          python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$key_path"
+          echo "PLAY_SERVICE_ACCOUNT_JSON_PATH=$key_path" >> "$GITHUB_ENV"
+
+      - name: Upload to Play internal track
+        if: github.event_name == 'release' && env.HAS_SIGNING == 'true' && env.HAS_PLAY_KEY == 'true'
+        working-directory: android
+        run: bundle exec fastlane android internal
+
+      - name: Remove Play service-account key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/play-service-account.json"

@@ -15,7 +15,7 @@ See [`docs/PLAN.md`](docs/PLAN.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTUR
 ## Status
 M0–M4 done (scaffold, connect & credentials, detached idempotent deploy, users + bundles/QR, operate & monitor). M5 (harden & ship) next. Test server: `yorkschool.xyz`.
 
-More docs: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), [`docs/APP-STORES.md`](docs/APP-STORES.md), [`docs/WORKFLOW.md`](docs/WORKFLOW.md), [`docs/MOAV-CLI-GAPS.md`](docs/MOAV-CLI-GAPS.md).
+More docs: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), [`docs/APP-STORES.md`](docs/APP-STORES.md), [`docs/WORKFLOW.md`](docs/WORKFLOW.md), [`docs/RELEASING.md`](docs/RELEASING.md), [`docs/MOAV-CLI-GAPS.md`](docs/MOAV-CLI-GAPS.md).
 
 ## Development
 ```

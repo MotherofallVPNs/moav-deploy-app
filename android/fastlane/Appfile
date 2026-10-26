@@ -1,0 +1,4 @@
+package_name "org.motherofallvpns.moavdeploy"
+
+# Path to the Play service-account JSON; CI writes it from PLAY_SERVICE_ACCOUNT_JSON.
+json_key_file ENV["PLAY_SERVICE_ACCOUNT_JSON_PATH"]

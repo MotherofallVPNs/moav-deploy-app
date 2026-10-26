@@ -1,0 +1,96 @@
+default_platform(:android)
+
+# Paths are anchored to this file so lanes behave the same from any cwd.
+REPO_ROOT = File.expand_path("../..", __dir__)
+AAB_PATH = File.join(REPO_ROOT, "build/app/outputs/bundle/release/app-release.aab")
+METADATA_PATH = File.join(REPO_ROOT, "fastlane/metadata/android")
+
+def play_json_key
+  path = ENV["PLAY_SERVICE_ACCOUNT_JSON_PATH"].to_s
+  UI.user_error!("PLAY_SERVICE_ACCOUNT_JSON_PATH is not set") if path.empty?
+  UI.user_error!("No service-account JSON at #{path}") unless File.file?(path)
+  path
+end
+
+def pubspec_version_code
+  pubspec = File.read(File.join(REPO_ROOT, "pubspec.yaml"))
+  match = pubspec.match(/^version:\s*\S+\+(\d+)\s*$/)
+  UI.user_error!("Could not read versionCode from pubspec.yaml") unless match
+  match[1]
+end
+
+# supply prefers <versionCode>.txt and falls back to default.txt; log which applies.
+def report_changelog(version_code)
+  dir = File.join(METADATA_PATH, "en-US/changelogs")
+  specific = File.join(dir, "#{version_code}.txt")
+  default = File.join(dir, "default.txt")
+  chosen = File.file?(specific) ? specific : default
+  UI.user_error!("No changelog at #{chosen}") unless File.file?(chosen)
+  UI.message("Play release notes (en-US) from #{chosen}:")
+  UI.message(File.read(chosen).strip)
+end
+
+platform :android do
+  desc "Upload the signed AAB to the Play internal track with the metadata changelog"
+  lane :internal do
+    json_key = play_json_key
+    UI.user_error!("AAB not found at #{AAB_PATH}; run `flutter build appbundle --release`") unless File.file?(AAB_PATH)
+    report_changelog(pubspec_version_code)
+
+    validate_play_store_json_key(json_key: json_key)
+    upload_to_play_store(
+      track: "internal",
+      aab: AAB_PATH,
+      json_key: json_key,
+      metadata_path: METADATA_PATH,
+      release_status: "completed",
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: false
+    )
+  end
+
+  desc "Promote the current internal build to production (manual use only)"
+  lane :promote_production do
+    json_key = play_json_key
+    validate_play_store_json_key(json_key: json_key)
+    upload_to_play_store(
+      track: "internal",
+      track_promote_to: "production",
+      track_promote_release_status: "completed",
+      json_key: json_key,
+      metadata_path: METADATA_PATH,
+      skip_upload_aab: true,
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: true
+    )
+  end
+
+  desc "Push the store listing text (title, descriptions) for all locales (manual use only)"
+  lane :sync_listing do
+    json_key = play_json_key
+    validate_play_store_json_key(json_key: json_key)
+    upload_to_play_store(
+      json_key: json_key,
+      metadata_path: METADATA_PATH,
+      skip_upload_aab: true,
+      skip_upload_apk: true,
+      skip_upload_metadata: false,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: true
+    )
+  end
+end
+
+platform :ios do
+  desc "Stub: TestFlight upload is not wired yet (pending Apple account setup)"
+  lane :beta do
+    UI.important("iOS delivery is not configured yet. Build and upload via Xcode for now.")
+  end
+end

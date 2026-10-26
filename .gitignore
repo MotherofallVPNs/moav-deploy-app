@@ -36,3 +36,9 @@ android/app/.cxx/
 
 # screenshot harness output (curated copies live in docs/screenshots/)
 shots/
+
+# fastlane / bundler
+vendor/bundle/
+.bundle/
+**/fastlane/report.xml
+**/fastlane/README.md
