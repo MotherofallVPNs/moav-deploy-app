@@ -12,17 +12,8 @@
 多种连接方式，应对网络封锁
 MoaV 集成 18+ 种连接及备用方案，包括 VLESS/Reality、Hysteria2、Trojan、Shadowsocks、WireGuard 和 DNS 隧道。当某种协议被封锁时，其他方式仍可能可用。实际效果取决于服务器配置和网络环境。
 
-帮助更多人保持连接
-MoaV 服务器还可以为 Psiphon Conduit 和 Tor Snowflake 贡献带宽，你也可以把它生成的配置直接捐赠给 MahsaNet。
-
 隐私由你掌控
 无需注册 MoaV 账户；无广告、无使用行为分析、无追踪。服务器信息和访问密钥保存在手机的安全存储空间，应用只直接连接到你控制的服务器。
 
 使用前须知
 你需要自备兼容的服务器（例如 VPS）。MoaV Deploy 是服务器部署与管理工具，不是 VPN 客户端，也不会将手机流量通过 VPN 转发。要使用服务器连接网络，请在兼容的 VPN/代理客户端中导入 MoaV 生成的配置。
-
-相关链接
-官网：https://moav.sh
-文档：https://moav.sh/docs
-GitHub：https://github.com/MotherofallVPNs/MoaV
-Telegram：https://t.me/motherofallvpns

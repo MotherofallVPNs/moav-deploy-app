@@ -1,2 +1,2 @@
-What's new in 0.2.3
-- More reliable server status, diagnostics and user management: the app now reads MoaV's structured output, with an automatic fallback for older servers.
+What is new in 0.2.4
+- Maintenance build for closed testing.
