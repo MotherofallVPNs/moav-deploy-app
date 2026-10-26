@@ -1,0 +1,7 @@
+{
+  "ok": true,
+  "action": "remove",
+  "users": [
+    {"user": "dave", "ok": true}
+  ]
+}

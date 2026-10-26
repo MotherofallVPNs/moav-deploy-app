@@ -1,0 +1,7 @@
+{
+  "ok": true,
+  "action": "add",
+  "users": [
+    {"user": "dave", "ok": true, "bundle_dir": "outputs/bundles/dave"}
+  ]
+}

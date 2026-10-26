@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "action": "remove",
+  "users": [
+    {"user": "nobody", "ok": false, "error": "not found or revoke failed (exit 1)"}
+  ]
+}

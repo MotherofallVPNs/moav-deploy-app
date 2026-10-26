@@ -336,7 +336,18 @@ class Monitoring {
   final DateTime? collectedAt;
 }
 
-enum ServiceState { running, exited, stopped, never, unknown }
+enum ServiceState {
+  running,
+  unhealthy,
+  starting,
+  exited,
+  stopped,
+  never,
+  unknown;
+
+  /// The container is up (healthy or not); `moav status --json` splits these.
+  bool get isUp => this == running || this == unhealthy || this == starting;
+}
 
 /// One row of `moav status`.
 class ServiceStatus {
@@ -376,6 +387,5 @@ class ServiceStatusReport {
   final Uri? grafanaCdnUrl;
   final List<String> defaultProfiles;
 
-  int get runningCount =>
-      services.where((s) => s.state == ServiceState.running).length;
+  int get runningCount => services.where((s) => s.state.isUp).length;
 }

@@ -313,6 +313,7 @@ List<({String protocol, String service, ServiceState state})> protocolRows(
 
 StatusTone toneForService(ServiceState s) => switch (s) {
       ServiceState.running => StatusTone.pass,
+      ServiceState.unhealthy || ServiceState.starting => StatusTone.warn,
       ServiceState.exited || ServiceState.stopped => StatusTone.fail,
       ServiceState.never => StatusTone.neutral,
       ServiceState.unknown => StatusTone.warn,
@@ -326,7 +327,7 @@ class _ProtocolMatrix extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rows = protocolRows(report);
-    final up = rows.where((r) => r.state == ServiceState.running).length;
+    final up = rows.where((r) => r.state.isUp).length;
     if (rows.isEmpty) {
       return const MoavCard(child: Text('No protocol services listed by moav status.'));
     }
