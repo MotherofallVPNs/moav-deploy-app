@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
@@ -116,8 +117,12 @@ class _FakeController implements MoavController {
   ];
   final log = <String>[];
 
+  /// Returned by [ping] when set; otherwise a healthy MoaV 2.2.2 box.
+  ConnectionCheck? pingResult;
+
   @override
   Future<ConnectionCheck> ping() async =>
+      pingResult ??
       const ConnectionCheck(reachable: true, moavInstalled: true, moavVersion: '2.2.2');
 
   @override
@@ -317,6 +322,7 @@ void main() {
         find.widgetWithText(TextField, 'Password'), 'hunter2');
     await tester.pumpAndSettle();
 
+    await _scrollTo(tester, find.text('Save server'));
     await tester.tap(find.text('Save server'));
     await tester.pumpAndSettle();
 
@@ -340,6 +346,9 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(find.widgetWithText(TextField, 'Host'), 'h.example');
+    await tester.tap(find.text('Generate key'));
+    await tester.pumpAndSettle();
+    await _scrollTo(tester, find.text('Generate ed25519 key'));
     await tester.tap(find.text('Generate ed25519 key'));
     await tester.pumpAndSettle();
 
@@ -453,6 +462,7 @@ void main() {
     await tester.tap(find.text('York'));
     await tester.pumpAndSettle();
     expect(find.text('Users'), findsOneWidget);
+    await _scrollTo(tester, find.text('Deploy'));
     await tester.tap(find.text('Deploy'));
     await tester.pumpAndSettle();
     expect(find.text('Start install'), findsOneWidget);
@@ -502,6 +512,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('York'));
     await tester.pumpAndSettle();
+    await _scrollTo(tester, find.text('Deploy'));
     await tester.tap(find.text('Deploy'));
     await tester.pump();
     await tester.pump();
@@ -768,6 +779,7 @@ void main() {
       'Failed host lookup',
       osError: OSError('nodename nor servname provided, or not known', 8),
     );
+    await _scrollTo(tester, find.text('Deploy'));
     await tester.tap(find.text('Deploy'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start install'));
@@ -775,6 +787,155 @@ void main() {
     expect(find.text('Could not find the server.'), findsOneWidget);
     expect(find.textContaining('Check the hostname'), findsOneWidget);
     expect(find.text('Start install'), findsOneWidget); // form stays, can retry
+  });
+
+  testWidgets('add server defaults to Saved key and preselects the newest key',
+      (tester) async {
+    final store = _FakeCredStore()
+      ..sshKeys = [
+        StoredSshKey(
+          id: 'k-old',
+          label: 'Old laptop key',
+          publicKey: 'ssh-ed25519 AAAAOLD old',
+          createdAt: DateTime.utc(2026, 1, 1),
+        ),
+        StoredSshKey(
+          id: 'k-new',
+          label: 'Phone key',
+          publicKey: 'ssh-ed25519 AAAANEW phone',
+          createdAt: DateTime.utc(2026, 10, 1),
+        ),
+      ]
+      ..sshKeySecrets['k-old'] = 'pem-old'
+      ..sshKeySecrets['k-new'] = 'pem-new';
+    await tester.pumpWidget(_app(store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add server'));
+    await tester.pumpAndSettle();
+
+    // Four cards, one selected, and it is Saved key.
+    expect(find.text('Saved key'), findsOneWidget);
+    expect(find.text('Generate key'), findsOneWidget);
+    expect(find.text('Import key'), findsOneWidget);
+    expect(find.text('Password'), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    expect(find.byIcon(Icons.radio_button_unchecked), findsNWidgets(3));
+    expect(find.text('Device key'), findsOneWidget);
+    expect(find.text('Phone key'), findsOneWidget);
+    expect(find.textContaining('AAAANEW'), findsOneWidget);
+
+    // Host plus the preselected key is enough to save.
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Host'), ' ssh://root@BitChat.Center:22/ ');
+    await tester.pumpAndSettle();
+    await _scrollTo(tester, find.text('Save server'));
+    await tester.tap(find.text('Save server'));
+    await tester.pumpAndSettle();
+
+    final saved = store.profiles.single;
+    expect(saved.host, 'bitchat.center');
+    expect(saved.label, 'bitchat.center');
+    expect(store.secrets[saved.id], 'pem-new');
+  });
+
+  testWidgets('add server with an empty keyring offers to generate instead',
+      (tester) async {
+    await tester.pumpWidget(_app(_FakeCredStore()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add server'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No reusable keys yet.'), findsOneWidget);
+    await _scrollTo(tester, find.text('Generate a key instead'));
+    await tester.tap(find.text('Generate a key instead'));
+    await tester.pumpAndSettle();
+    expect(find.text('Generate ed25519 key'), findsOneWidget);
+
+    await tester.tap(find.text('Password'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(TextField, 'Password'), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle), findsOneWidget);
+  });
+
+  testWidgets('test connection failure names the cause in a quiet snackbar',
+      (tester) async {
+    final store = _FakeCredStore()..profiles = [_profile];
+    final controller = _FakeController(const [])
+      ..pingResult = ConnectionCheck(
+        reachable: false,
+        error: 'Could not find yorkschool.example:22.',
+        failure: AppError.from(
+          const SocketException(
+            'Failed host lookup',
+            osError: OSError('No address associated with hostname', 7),
+          ),
+          host: 'yorkschool.example',
+          port: 22,
+        ),
+      );
+    await tester.pumpWidget(_app(
+      store,
+      overrides: [
+        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+      ],
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Test connection'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not connect. Could not find yorkschool.example:22.'),
+        findsOneWidget);
+    expect(find.textContaining('Check the hostname'), findsOneWidget);
+    expect(find.byIcon(Icons.cloud_off), findsOneWidget);
+  });
+
+  testWidgets('server hub: Check connection shows the cause inline',
+      (tester) async {
+    final store = _FakeCredStore()..profiles = [_profile];
+    final controller = _FakeController(const [])
+      ..pingResult = ConnectionCheck(
+        reachable: false,
+        error: 'Authentication failed.',
+        failure: AppError.from(SSHAuthFailError('rejected')),
+      );
+    await tester.pumpWidget(_app(
+      store,
+      overrides: [
+        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+      ],
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('York'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Not checked yet'), findsOneWidget);
+    await tester.tap(find.text('Check connection'));
+    await tester.pumpAndSettle();
+    expect(find.text('Authentication failed.'), findsOneWidget);
+    expect(find.textContaining('rejected the key or password'), findsOneWidget);
+    expect(find.byIcon(Icons.key_off), findsOneWidget);
+
+    controller.pingResult = null;
+    await tester.tap(find.text('Check connection'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connected. MoaV 2.2.2 is installed.'), findsOneWidget);
+  });
+
+  test('form normalises pasted connect strings before dialling', () {
+    const pasted = AddServerFormState(
+      host: ' ssh://root@BitChat.Center:22/ ',
+      authChoice: AuthChoice.password,
+      password: 'p',
+    );
+    expect(pasted.hostError, isNull);
+    expect(pasted.normalizedHost, 'bitchat.center');
+    expect(pasted.toProfile('x').host, 'bitchat.center');
+
+    const junk = AddServerFormState(host: 'not a host', authChoice: AuthChoice.password, password: 'p');
+    expect(junk.hostError, isNotNull);
   });
 
   test('form validation', () {

@@ -55,9 +55,11 @@ class SshMoavController implements MoavController {
       return parsePing(out.combined);
     } on Object catch (e) {
       _dropClient();
+      final failure = AppError.from(e, host: profile.host, port: profile.port);
       return ConnectionCheck(
         reachable: false,
-        error: AppError.from(e, host: profile.host, port: profile.port).summary,
+        error: failure.summary,
+        failure: failure,
       );
     }
   }

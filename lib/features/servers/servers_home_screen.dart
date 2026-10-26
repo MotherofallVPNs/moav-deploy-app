@@ -262,9 +262,15 @@ class _ServerTile extends ConsumerWidget {
         .read(moavControllerProvider(profile.id))
         .ping();
     messenger.hideCurrentSnackBar();
-    final text = !check.reachable
-        ? 'Could not connect: ${check.error ?? 'unknown error'}'
-        : check.moavInstalled == true
+    if (!check.reachable) {
+      showErrorSnackBar(
+        messenger,
+        check.failure ?? check.error ?? 'Could not connect.',
+        prefix: 'Could not connect.',
+      );
+      return;
+    }
+    final text = check.moavInstalled == true
         ? 'Connected. MoaV ${check.moavVersion ?? ''} is installed.'
         : check.moavInstalled == false
         ? 'Connected. MoaV is not installed yet.'

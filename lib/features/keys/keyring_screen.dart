@@ -126,9 +126,7 @@ class KeyringScreen extends ConsumerWidget {
           .add(label: decoded.label, privateKeyPem: decoded.privateKeyPem);
     } on Object catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(errorSummary(e))));
+        showErrorSnackBar(ScaffoldMessenger.of(context), e);
       }
     } finally {
       bundle.dispose();
@@ -222,9 +220,7 @@ class _KeyCard extends ConsumerWidget {
       );
     } on Object catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(errorSummary(e))));
+        showErrorSnackBar(ScaffoldMessenger.of(context), e);
       }
     }
   }

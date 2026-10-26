@@ -91,7 +91,9 @@ class ErrorBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final e = AppError.from(error);
-    const c = MoavColors.fail;
+    // Retryable failures (network, timeout) get the calm warn tone; only a
+    // rejected key or password is red.
+    final c = e.retryable ? MoavColors.warn : MoavColors.fail;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -128,3 +130,107 @@ class ErrorBanner extends StatelessWidget {
 
 /// Snackbar text for a failed action: sentence + hint, scrubbed.
 String errorSummary(Object e) => AppError.from(e).summary;
+
+/// Compact inline status for a failed connection attempt: icon for the kind,
+/// one sentence, one hint. Sits under a form field or in a card header.
+class ConnectionNotice extends StatelessWidget {
+  const ConnectionNotice({super.key, required this.error, this.prefix});
+
+  final Object error;
+
+  /// Short lead-in such as "Could not connect." shown before the sentence.
+  final String? prefix;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = AppError.from(error);
+    final c = e.retryable ? MoavColors.warn : MoavColors.fail;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(ErrorView.iconFor(e.kind), size: 16, color: c),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                prefix == null ? e.message : '$prefix ${e.message}',
+                style: const TextStyle(
+                  color: MoavColors.text,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              if (e.hint != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    e.hint!,
+                    style: const TextStyle(
+                      color: MoavColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Shows a failed action as a quiet snackbar: kind icon, sentence, hint.
+/// Replaces the current snackbar so a "Connecting…" notice never lingers.
+void showErrorSnackBar(
+  ScaffoldMessengerState messenger,
+  Object error, {
+  String? prefix,
+  Duration duration = const Duration(seconds: 6),
+}) {
+  final e = AppError.from(error);
+  messenger.hideCurrentSnackBar();
+  messenger.showSnackBar(
+    SnackBar(
+      duration: duration,
+      content: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+              ErrorView.iconFor(e.kind),
+              size: 18,
+              color: e.retryable ? MoavColors.warn : MoavColors.fail,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  prefix == null ? e.message : '$prefix ${e.message}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                if (e.hint != null)
+                  Text(
+                    e.hint!,
+                    style: const TextStyle(
+                      color: MoavColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}

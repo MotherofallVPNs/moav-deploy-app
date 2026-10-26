@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/server_profile.dart';
+import '../../core/ssh_endpoint.dart';
 import '../../core/ssh_key_installer.dart';
 import '../../core/app_error.dart';
 import '../../security/key_service.dart';
@@ -27,7 +28,7 @@ class AddServerFormState {
     this.host = '',
     this.port = '22',
     this.username = 'root',
-    this.authChoice = AuthChoice.generateKey,
+    this.authChoice = AuthChoice.savedKey,
     this.importedKeyPem = '',
     this.password = '',
     this.generatedKey,
@@ -109,10 +110,16 @@ class AddServerFormState {
     return p;
   }
 
+  /// Host as it will be dialled: scheme, user@ and :port stripped.
+  String get normalizedHost => SshEndpoint.normalizeHost(host);
+
   String? get hostError {
     final h = host.trim();
     if (h.isEmpty) return 'Host is required';
     if (h.contains(RegExp(r'\s'))) return 'Host cannot contain spaces';
+    if (SshEndpoint.tryParse(h) == null) {
+      return 'Enter a hostname or IP address';
+    }
     return null;
   }
 
@@ -144,8 +151,8 @@ class AddServerFormState {
 
   ServerProfile toProfile(String id) => ServerProfile(
     id: id,
-    label: label.trim().isEmpty ? host.trim() : label.trim(),
-    host: host.trim(),
+    label: label.trim().isEmpty ? normalizedHost : label.trim(),
+    host: normalizedHost,
     port: parsedPort ?? 22,
     username: username.trim(),
     authMethod: authChoice.method,
@@ -224,7 +231,7 @@ class AddServerFormNotifier extends Notifier<AddServerFormState> {
       await ref
           .read(keyInstallerProvider)
           .install(
-            host: s.host.trim(),
+            host: s.normalizedHost,
             port: s.parsedPort ?? 22,
             username: s.username.trim(),
             password: s.oneTimePassword,
@@ -241,7 +248,7 @@ class AddServerFormNotifier extends Notifier<AddServerFormState> {
       state = state.copyWith(
         installingKey: false,
         error:
-            'Could not install key: ${AppError.from(e, host: s.host.trim(), port: s.parsedPort).summary}',
+            'Could not install key: ${AppError.from(e, host: s.normalizedHost, port: s.parsedPort).summary}',
       );
     }
   }

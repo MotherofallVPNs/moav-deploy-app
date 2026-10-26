@@ -81,35 +81,13 @@ class AddServerScreen extends ConsumerWidget {
             ],
           ),
           const SectionHeader('Authentication'),
-          SegmentedButton<AuthChoice>(
-            segments: const [
-              ButtonSegment(
-                value: AuthChoice.savedKey,
-                label: Text('Saved'),
-                icon: Icon(Icons.key_outlined),
-              ),
-              ButtonSegment(
-                value: AuthChoice.generateKey,
-                label: Text('Generate key'),
-                icon: Icon(Icons.vpn_key),
-              ),
-              ButtonSegment(
-                value: AuthChoice.importKey,
-                label: Text('Import key'),
-                icon: Icon(Icons.file_upload),
-              ),
-              ButtonSegment(
-                value: AuthChoice.password,
-                label: Text('Password'),
-                icon: Icon(Icons.password),
-              ),
-            ],
-            selected: {form.authChoice},
-            onSelectionChanged: (s) => notifier.setAuthChoice(s.first),
+          _AuthChoiceGrid(
+            selected: form.authChoice,
+            onChanged: notifier.setAuthChoice,
           ),
           const SizedBox(height: 12),
           MoavCard(
-            accent: form.authChoice == AuthChoice.generateKey,
+            accent: form.authChoice != AuthChoice.password,
             child: _AuthSection(form: form, notifier: notifier),
           ),
           if (form.error != null) ...[
@@ -202,19 +180,40 @@ class _AuthSection extends ConsumerWidget {
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) =>
               Text('Could not load saved keys: ${errorSummary(e)}'),
-          data: (items) => items.isEmpty
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('No reusable keys yet.'),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Generate or import a key once and it will appear here for every server.',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ],
-                )
-              : DropdownButtonFormField<String>(
+          data: (items) {
+            if (items.isEmpty) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('No reusable keys yet.'),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Generate or import a key once and it will appear here for every server.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        notifier.setAuthChoice(AuthChoice.generateKey),
+                    icon: const Icon(Icons.autorenew, size: 16),
+                    label: const Text('Generate a key instead'),
+                  ),
+                ],
+              );
+            }
+            // Most connects reuse one device key: preselect the newest.
+            if (form.savedKey == null) {
+              final newest = items.reduce(
+                (a, b) => a.createdAt.isAfter(b.createdAt) ? a : b,
+              );
+              WidgetsBinding.instance.addPostFrameCallback(
+                (_) => notifier.selectSavedKey(newest),
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DropdownButtonFormField<String>(
                   initialValue: form.savedKey?.id,
                   decoration: const InputDecoration(labelText: 'Device key'),
                   items: [
@@ -228,6 +227,20 @@ class _AuthSection extends ConsumerWidget {
                     );
                   },
                 ),
+                if (form.savedKey != null) ...[
+                  const SizedBox(height: 10),
+                  Text('PUBLIC KEY', style: moavLabel(size: 10)),
+                  const SizedBox(height: 6),
+                  CodeBlock(form.savedKey!.publicKey, size: 11.5),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Make sure this line is in ~/.ssh/authorized_keys on the server.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ],
+            );
+          },
         );
       case AuthChoice.generateKey:
         final key = form.generatedKey;
@@ -369,5 +382,163 @@ class _AuthSection extends ConsumerWidget {
           ],
         );
     }
+  }
+}
+
+/// One card per credential type: icon, label, one-line hint. A 2x2 grid
+/// keeps every label on a single line at phone widths.
+class _AuthChoiceGrid extends StatelessWidget {
+  const _AuthChoiceGrid({required this.selected, required this.onChanged});
+
+  final AuthChoice selected;
+  final ValueChanged<AuthChoice> onChanged;
+
+  static const _options = [
+    (
+      AuthChoice.savedKey,
+      Icons.key_outlined,
+      'Saved key',
+      'Reuse a key from this phone',
+    ),
+    (
+      AuthChoice.generateKey,
+      Icons.autorenew,
+      'Generate key',
+      'New ed25519 key, made on-device',
+    ),
+    (
+      AuthChoice.importKey,
+      Icons.file_upload_outlined,
+      'Import key',
+      'Paste an existing private key',
+    ),
+    (
+      AuthChoice.password,
+      Icons.password,
+      'Password',
+      'Fallback when no key is possible',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    Widget tile((AuthChoice, IconData, String, String) o) => _AuthChoiceCard(
+      icon: o.$2,
+      label: o.$3,
+      hint: o.$4,
+      selected: o.$1 == selected,
+      onTap: () => onChanged(o.$1),
+    );
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(child: tile(_options[0])),
+            const SizedBox(width: 10),
+            Expanded(child: tile(_options[1])),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(child: tile(_options[2])),
+            const SizedBox(width: 10),
+            Expanded(child: tile(_options[3])),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _AuthChoiceCard extends StatelessWidget {
+  const _AuthChoiceCard({
+    required this.icon,
+    required this.label,
+    required this.hint,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String hint;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = selected ? MoavColors.cyan : MoavColors.textMuted;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        decoration: BoxDecoration(
+          color: selected
+              ? MoavColors.cyan.withValues(alpha: 0.08)
+              : MoavColors.card,
+          borderRadius: MoavRadius.control,
+          border: Border.all(
+            color: selected
+                ? MoavColors.cyan.withValues(alpha: 0.6)
+                : MoavColors.border,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: MoavRadius.control,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(icon, size: 18, color: accent),
+                      const Spacer(),
+                      Icon(
+                        selected
+                            ? Icons.check_circle
+                            : Icons.radio_button_unchecked,
+                        size: 16,
+                        color: accent,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: selected
+                          ? MoavColors.text
+                          : MoavColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    hint,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: MoavColors.textMuted,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -5,6 +5,8 @@
 /// UI changes. See docs/ARCHITECTURE.md.
 library;
 
+import 'app_error.dart';
+
 /// Every server operation the app can perform, expressed once.
 abstract class MoavController {
   /// Is the server reachable, and is `moav` installed on it?
@@ -54,6 +56,7 @@ class ConnectionCheck {
     this.moavInstalled,
     this.moavVersion,
     this.error,
+    this.failure,
   });
 
   /// TCP/SSH reachability.
@@ -66,6 +69,9 @@ class ConnectionCheck {
 
   /// Human-readable failure reason, if any.
   final String? error;
+
+  /// The classified failure behind [error], when the connection failed.
+  final AppError? failure;
 
   @override
   String toString() =>

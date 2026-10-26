@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:local_auth_android/local_auth_android.dart';
+import 'package:local_auth_darwin/local_auth_darwin.dart';
 
 import '../features/wipe/wipe_dialog.dart';
 import '../theme/moav_theme.dart';
@@ -28,6 +30,17 @@ class AppLockService {
     try {
       return await _auth.authenticate(
         localizedReason: 'Unlock MoaV Deploy',
+        authMessages: const [
+          AndroidAuthMessages(
+            signInTitle: 'MoaV Deploy',
+            signInHint: 'Unlock with your fingerprint, face or screen lock',
+            cancelButton: 'Not now',
+          ),
+          IOSAuthMessages(
+            cancelButton: 'Not now',
+            localizedFallbackTitle: 'Use passcode',
+          ),
+        ],
         persistAcrossBackgrounding: true,
       );
     } on Object catch (_) {

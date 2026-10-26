@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
+import '../../widgets/error_view.dart';
 import '../deploy/deploy_screen.dart';
 import '../operate/operate_screen.dart';
+import '../servers/servers_provider.dart';
 import '../users/users_screen.dart';
 
 /// Hub for one server: everything the app can do with it.
@@ -29,38 +33,51 @@ class ServerScreen extends StatelessWidget {
         children: [
           MoavCard(
             accent: true,
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const IconBadge(Icons.dns_outlined, size: 46, gradient: true),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${profile.username}@${profile.host}',
-                        style: moavMono(size: 14, weight: FontWeight.w600),
-                        overflow: TextOverflow.ellipsis,
+                Row(
+                  children: [
+                    const IconBadge(
+                      Icons.dns_outlined,
+                      size: 46,
+                      gradient: true,
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${profile.username}@${profile.host}',
+                            style: moavMono(size: 14, weight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'port ${profile.port} · ssh',
+                            style: moavMono(
+                              size: 12,
+                              weight: FontWeight.w400,
+                              color: MoavColors.textSecondary,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'port ${profile.port} · ssh',
-                        style: moavMono(
-                          size: 12,
-                          weight: FontWeight.w400,
-                          color: MoavColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                    StatusPill(
+                      auth,
+                      tone: profile.authMethod == SshAuthMethod.password
+                          ? StatusTone.warn
+                          : StatusTone.accent,
+                      dot: false,
+                    ),
+                  ],
                 ),
-                StatusPill(
-                  auth,
-                  tone: profile.authMethod == SshAuthMethod.password
-                      ? StatusTone.warn
-                      : StatusTone.accent,
-                  dot: false,
-                ),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 4),
+                _ConnectionRow(profile: profile),
               ],
             ),
           ),
@@ -143,6 +160,97 @@ class _HubTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// "Check connection" with the result shown inline: a green pill when the
+/// server answers, a quiet notice stating the cause when it does not.
+class _ConnectionRow extends ConsumerStatefulWidget {
+  const _ConnectionRow({required this.profile});
+
+  final ServerProfile profile;
+
+  @override
+  ConsumerState<_ConnectionRow> createState() => _ConnectionRowState();
+}
+
+class _ConnectionRowState extends ConsumerState<_ConnectionRow> {
+  bool _checking = false;
+  ConnectionCheck? _result;
+
+  Future<void> _check() async {
+    setState(() {
+      _checking = true;
+      _result = null;
+    });
+    final check = await ref
+        .read(moavControllerProvider(widget.profile.id))
+        .ping();
+    if (!mounted) return;
+    setState(() {
+      _checking = false;
+      _result = check;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = _result;
+    final Widget status;
+    if (_checking) {
+      status = Row(
+        children: [
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 10),
+          Text('Connecting…', style: Theme.of(context).textTheme.bodySmall),
+        ],
+      );
+    } else if (r == null) {
+      status = Text(
+        'Not checked yet',
+        style: Theme.of(context).textTheme.bodySmall,
+      );
+    } else if (!r.reachable) {
+      status = ConnectionNotice(
+        error: r.failure ?? r.error ?? 'Could not connect.',
+      );
+    } else {
+      final label = r.moavInstalled == true
+          ? 'Connected. MoaV ${r.moavVersion ?? ''} is installed.'
+          : r.moavInstalled == false
+          ? 'Connected. MoaV is not installed yet.'
+          : 'Connected.';
+      status = Row(
+        children: [
+          const Icon(Icons.check_circle, size: 16, color: MoavColors.pass),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label.replaceAll('  ', ' '),
+              style: const TextStyle(color: MoavColors.text, fontSize: 13),
+            ),
+          ),
+        ],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Padding(padding: const EdgeInsets.only(top: 8), child: status),
+        ),
+        const SizedBox(width: 8),
+        TextButton.icon(
+          onPressed: _checking ? null : _check,
+          icon: const Icon(Icons.network_check, size: 16),
+          label: const Text('Check connection'),
+        ),
+      ],
     );
   }
 }
