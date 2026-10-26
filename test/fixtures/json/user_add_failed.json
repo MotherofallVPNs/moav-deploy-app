@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "action": "add",
+  "users": [
+    {"user": "badguy", "ok": false, "error": "user-add.sh exited 1"}
+  ]
+}

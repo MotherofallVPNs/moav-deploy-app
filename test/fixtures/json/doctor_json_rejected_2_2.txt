@@ -1,0 +1,18 @@
+[0;31m✗[0m Unknown doctor check: --json
+
+Usage: moav doctor [check]
+
+Run MoaV diagnostic checks.
+
+Checks:
+  docker       Check Docker and prerequisites
+  memory       Check available RAM
+  dns          Check DNS records for enabled protocols
+  services     Check running services vs enabled config
+  ports        Check required ports are available
+  host         Check CPU load, swap pressure and zombie processes
+  updates      Check for MoaV updates
+
+Examples:
+  moav doctor
+  moav doctor dns

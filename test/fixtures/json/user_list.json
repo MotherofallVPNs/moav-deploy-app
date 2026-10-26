@@ -1,0 +1,5 @@
+[
+  {"user": "alice", "services": ["amneziawg", "sing-box", "telemt", "wireguard", "xray"], "bundle": true},
+  {"user": "bob", "services": ["sing-box", "trusttunnel", "xray"], "bundle": false},
+  {"user": "carol", "services": ["wireguard"], "bundle": false}
+]

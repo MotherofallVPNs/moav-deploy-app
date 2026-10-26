@@ -7,6 +7,8 @@ import 'package:moav_deploy/core/moav_controller.dart';
 String fixture(String name) => File('test/fixtures/$name').readAsStringSync();
 
 void main() {
+  jsonMain();
+
   group('parseUserList', () {
     test('merges sections into distinct users with bundle flag', () {
       final users = MoavCli.parseUserList(fixture('user_list.txt'));
@@ -205,5 +207,198 @@ __END__
     expect(MoavCli.service(ServiceAction.regenerateUsers),
         endsWith('regenerate-users 2>&1'));
     expect(MoavCli.userAdd("a'b"), contains("'a'\\''b'"));
+  });
+}
+
+String jsonFixture(String name) =>
+    File('test/fixtures/json/$name').readAsStringSync();
+
+void jsonMain() {
+  group('decodeJsonDocument', () {
+    test('decodes 2.3.x documents', () {
+      expect(MoavCli.decodeJsonDocument(jsonFixture('status.json')), isA<Map>());
+      expect(MoavCli.decodeJsonDocument(jsonFixture('user_list.json')),
+          isA<List>());
+      expect(MoavCli.decodeJsonDocument('\x1b[0m\n{"ok": true}\n'),
+          {'ok': true});
+    });
+
+    test('returns null for 2.2.x text output', () {
+      for (final f in ['status.txt', 'doctor.txt', 'user_list.txt']) {
+        expect(MoavCli.decodeJsonDocument(fixture(f)), isNull, reason: f);
+      }
+      expect(
+        MoavCli.decodeJsonDocument(jsonFixture('doctor_json_rejected_2_2.txt')),
+        isNull,
+      );
+      expect(MoavCli.decodeJsonDocument(''), isNull);
+      expect(MoavCli.decodeJsonDocument('{not json'), isNull);
+    });
+  });
+
+  group('parseStatusJson', () {
+    test('parses the 2.3.1 document', () {
+      final s = MoavCli.parseStatusJson(jsonFixture('status.json'))!;
+      expect(s.version, '2.3.1');
+      expect(s.services.map((x) => x.name),
+          ['sing-box', 'admin', 'certbot', 'grafana', 'gooserelay', 'wireguard']);
+      expect(s.services[0].state, ServiceState.running);
+      expect(s.services[0].uptime, '7 days');
+      expect(s.services[0].ports, ['443', '8443']);
+      expect(s.services[1].uptime, '~1 hour');
+      expect(s.services[2].state, ServiceState.exited);
+      expect(s.services[2].uptime, isNull);
+      expect(s.services[2].ports, isEmpty);
+      expect(s.services[3].state, ServiceState.unhealthy);
+      expect(s.services[4].state, ServiceState.never);
+      expect(s.runningCount, 3); // running + running + unhealthy
+      expect(s.adminUrl.toString(), 'https://vpn.example.com:9443');
+      expect(s.grafanaUrl.toString(), 'https://vpn.example.com:9444');
+      expect(s.grafanaCdnUrl, isNull);
+      expect(s.defaultProfiles, ['proxy', 'wireguard', 'admin', 'monitoring']);
+    });
+
+    test('null URLs on a domainless box and raw compose states', () {
+      final s = MoavCli.parseStatusJson(
+        '{"version":"2.3.1","admin_url":null,"grafana_url":null,'
+        '"admin_port":9443,"grafana_port":9444,"default_profiles":[],'
+        '"services":[{"name":"a","state":"starting","uptime":"","ports":[]},'
+        '{"name":"b","state":"created","uptime":"","ports":[]},'
+        '{"name":"c","state":"paused","uptime":"","ports":[]}]}',
+      )!;
+      expect(s.adminUrl, isNull);
+      expect(s.grafanaUrl, isNull);
+      expect(s.services.map((x) => x.state),
+          [ServiceState.starting, ServiceState.stopped, ServiceState.unknown]);
+      expect(s.runningCount, 1);
+    });
+
+    test('parseStatusAny picks json or text', () {
+      final j = MoavCli.parseStatusAny(jsonFixture('status.json'));
+      expect(j.format, CliFormat.json);
+      expect(j.report.version, '2.3.1');
+      final t = MoavCli.parseStatusAny(fixture('status.txt'));
+      expect(t.format, CliFormat.text);
+      expect(t.report.version, '2.2.2');
+      expect(t.report.services.length, 5);
+      expect(MoavCli.parseStatusJson('{"version":"x"}'), isNull);
+      expect(MoavCli.parseStatusJson(fixture('status.txt')), isNull);
+    });
+  });
+
+  group('parseDoctorJson', () {
+    test('parses the 2.3.1 document with a description line', () {
+      final r = MoavCli.parseDoctorJson(jsonFixture('doctor_env.json'))!;
+      expect(r.checks.single.name, 'env');
+      expect(r.checks.single.result, CheckResult.pass);
+      final lines = r.checks.single.detail!.split('\n');
+      expect(lines.first, MoavCli.doctorDescriptions['env']);
+      expect(lines[1], startsWith('○ 129 of 136 variables'));
+      expect(r.healthy, isTrue);
+    });
+
+    test('pass/warn/fail statuses and unknown ids', () {
+      final r = MoavCli.parseDoctorJson(
+        '[\n'
+        '  {"id": "docker", "status": "pass", "detail": "✓ Docker running; ✓ Compose v2"},\n'
+        '  {"id": "host", "status": "warn", "detail": "○ swap in use"},\n'
+        '  {"id": "services", "status": "fail", "detail": "✗ grafana down"},\n'
+        '  {"id": "newcheck", "status": "pass", "detail": ""}\n'
+        ']\n',
+      )!;
+      final byName = {for (final c in r.checks) c.name: c};
+      expect(byName['docker']!.result, CheckResult.pass);
+      expect(byName['docker']!.detail!.split('\n'),
+          [MoavCli.doctorDescriptions['docker'], '✓ Docker running', '✓ Compose v2']);
+      expect(byName['host']!.result, CheckResult.warn);
+      expect(byName['services']!.result, CheckResult.fail);
+      expect(byName['newcheck']!.detail, 'newcheck');
+      expect(r.healthy, isFalse);
+    });
+
+    test('2.2.x rejection text and plain doctor text are not documents', () {
+      expect(MoavCli.parseDoctorJson(jsonFixture('doctor_json_rejected_2_2.txt')),
+          isNull);
+      expect(MoavCli.parseDoctorJson(fixture('doctor.txt')), isNull);
+      expect(MoavCli.parseDoctor(fixture('doctor.txt')).checks, isNotEmpty);
+    });
+  });
+
+  group('parseUserListJson', () {
+    test('parses the 2.3.1 document and aliases telemt', () {
+      final users = MoavCli.parseUserListJson(jsonFixture('user_list.json'))!;
+      expect(users.map((u) => u.name), ['alice', 'bob', 'carol']);
+      expect(users[0].bundleReady, isTrue);
+      expect(users[0].protocols,
+          ['amneziawg', 'sing-box', 'telegram', 'wireguard', 'xray']);
+      expect(users[1].bundleReady, isFalse);
+      expect(users[1].protocols, ['sing-box', 'trusttunnel', 'xray']);
+      expect(users[2].protocols, ['wireguard']);
+    });
+
+    test('empty document and text fallback', () {
+      expect(MoavCli.parseUserListJson('[\n]\n'), isEmpty);
+      expect(MoavCli.parseUserListJson(fixture('user_list.txt')), isNull);
+      final any = MoavCli.parseUserListAny(fixture('user_list.txt'));
+      expect(any.format, CliFormat.text);
+      expect(any.users.map((u) => u.name), ['alice', 'bob', 'carol']);
+      expect(MoavCli.parseUserListAny(jsonFixture('user_list.json')).format,
+          CliFormat.json);
+      expect(MoavCli.looksLikeUserListText(fixture('user_list.txt')), isTrue);
+      expect(MoavCli.looksLikeUserListText('Unknown option: --json'), isFalse);
+    });
+  });
+
+  group('parseUserAction', () {
+    test('add: success, duplicate, failure, invalid name', () {
+      final ok = MoavCli.parseUserAction(jsonFixture('user_add.json'), user: 'dave')!;
+      expect(ok.ok, isTrue);
+      expect(ok.action, 'add');
+      expect(ok.bundleDir, 'outputs/bundles/dave');
+      expect(ok.error, isNull);
+
+      final dup = MoavCli.parseUserAction(jsonFixture('user_add_dup.json'), user: 'dave')!;
+      expect(dup.ok, isFalse);
+      expect(dup.alreadyExists, isTrue);
+
+      final failed = MoavCli.parseUserAction(jsonFixture('user_add_failed.json'), user: 'badguy')!;
+      expect(failed.ok, isFalse);
+      expect(failed.error, 'user-add.sh exited 1');
+      expect(failed.alreadyExists, isFalse);
+
+      final invalid = MoavCli.parseUserAction(jsonFixture('user_add_invalid.json'), user: 'bad name!')!;
+      expect(invalid.ok, isFalse);
+      expect(invalid.error, startsWith('Invalid username'));
+    });
+
+    test('remove: success and unknown user', () {
+      final ok = MoavCli.parseUserAction(jsonFixture('user_remove.json'), user: 'dave')!;
+      expect(ok.ok, isTrue);
+      expect(ok.action, 'remove');
+      final unknown = MoavCli.parseUserAction(jsonFixture('user_remove_unknown.json'), user: 'nobody')!;
+      expect(unknown.ok, isFalse);
+      expect(unknown.error, contains('not found'));
+    });
+
+    test('text output is not a result; a missing entry is an error', () {
+      expect(MoavCli.parseUserAction('Unknown option: --json\n', user: 'x'), isNull);
+      expect(MoavCli.parseUserAction("[INFO] Adding user 'x'\n", user: 'x'), isNull);
+      final other = MoavCli.parseUserAction(jsonFixture('user_add.json'), user: 'erin')!;
+      expect(other.ok, isTrue); // document ok, no per-user entry
+      expect(other.error, isNull);
+    });
+  });
+
+  test('json command strings', () {
+    expect(MoavCli.statusJson, endsWith('status --json'));
+    expect(MoavCli.doctorJson, endsWith('doctor --json'));
+    expect(MoavCli.userListJson, endsWith('user list --json'));
+    expect(MoavCli.userAddJson("a'b"), endsWith("user add 'a'\\''b' --json"));
+    expect(MoavCli.userRemoveJson('x'), endsWith("user remove 'x' --json"));
+    expect(MoavCli.test('x'), contains("test 'x' --json"));
+    // JSON commands must not merge stderr into the document.
+    for (final c in [MoavCli.statusJson, MoavCli.doctorJson, MoavCli.userListJson]) {
+      expect(c, isNot(contains('2>&1')));
+    }
   });
 }

@@ -3,12 +3,33 @@ import 'dart:convert';
 import 'moav_controller.dart';
 import 'ssh_connection.dart';
 
+/// Which CLI output format a parser consumed.
+enum CliFormat { json, text }
+
+/// Result of `moav user add|remove NAME --json` for one user.
+class UserActionResult {
+  const UserActionResult({
+    required this.ok,
+    required this.action,
+    this.error,
+    this.bundleDir,
+  });
+
+  final bool ok;
+  final String action;
+  final String? error;
+  final String? bundleDir;
+
+  /// The JSON path reports an existing user as an error; the app treats it as
+  /// done, matching the text path.
+  bool get alreadyExists => error == 'already exists';
+}
+
 /// The exact `moav` CLI invocations the SSH controller runs, plus the parsers
 /// that turn their output into models.
 ///
-/// Verified against MoaV v2.2.2. Every text parser here is a stop-gap until
-/// the CLI grows `--json` (tracked in docs/MOAV-CLI-GAPS.md); `moav test`
-/// already has it.
+/// JSON parsers follow the MoaV 2.3.x `--json` schemas (verified on v2.3.1);
+/// the text parsers remain as the 2.2.x fallback. See docs/MOAV-CLI-GAPS.md.
 class MoavCli {
   MoavCli._();
 
@@ -20,16 +41,31 @@ class MoavCli {
   static const prelude = 'cd $root 2>/dev/null; '
       'M="\$(command -v moav 2>/dev/null || echo $root/moav.sh)"; ';
 
+  // JSON commands keep stderr separate so stdout is exactly one document.
+  static const statusJson = '$prelude"\$M" status --json';
+  static const doctorJson = '$prelude"\$M" doctor --json';
+  static const userListJson = '$prelude"\$M" user list --json';
+  static String userAddJson(String name) =>
+      '$prelude"\$M" user add ${SshConnection.shellQuote(name)} --json';
+  static String userRemoveJson(String name) =>
+      '$prelude"\$M" user remove ${SshConnection.shellQuote(name)} --json';
+  static String test(String name) =>
+      '$prelude"\$M" test ${SshConnection.shellQuote(name)} --json 2>/dev/null';
+
+  // Text commands: the 2.2.x fallback for the JSON ones above.
   static const userList = '$prelude"\$M" user list 2>&1';
   static String userAdd(String name) =>
       '$prelude"\$M" user add ${SshConnection.shellQuote(name)} 2>&1';
-  static String userRevoke(String name) =>
-      '$prelude"\$M" user revoke ${SshConnection.shellQuote(name)} 2>&1';
-  static String test(String name) =>
-      '$prelude"\$M" test ${SshConnection.shellQuote(name)} --json 2>/dev/null';
   static const doctor = '$prelude"\$M" doctor 2>&1';
   static const status = '$prelude"\$M" status 2>&1';
 
+  // TODO(#8): text path of `user revoke` exits 0 even for an unknown user;
+  // only the `--json` form above reports failure.
+  static String userRevoke(String name) =>
+      '$prelude"\$M" user revoke ${SshConnection.shellQuote(name)} 2>&1';
+
+  // TODO(#8): `start|stop|restart|regenerate-users` have no `--json`; the
+  // app relies on the exit code and re-reads `moav status` afterwards.
   static String service(ServiceAction a) {
     final verb = switch (a.kind) {
       ServiceActionKind.start => 'start',
@@ -47,6 +83,7 @@ class MoavCli {
   /// `get_grafana_url` in `lib/common.sh`, the Grafana `/api/health` body, and
   /// one Prometheus instant query per headline metric (via `docker exec`, as
   /// Prometheus is not published on the host).
+  // TODO(#8): no `moav metrics` upstream; this shell snippet is the text path.
   static const monitoring = '''
 cd $root 2>/dev/null || exit 0
 ev() { grep -E "^\$1=" .env 2>/dev/null | head -1 | cut -d= -f2- | sed -E 's/[[:space:]]+#.*\$//; s/^"//; s/"\$//; s/^'"'"'//; s/'"'"'\$//' | tr -d '[:space:]'; }
@@ -75,8 +112,77 @@ echo "__END__"
 ''';
 
   // ---------------------------------------------------------------------------
+  // JSON documents (MoaV >= 2.3.0)
+  // ---------------------------------------------------------------------------
+
+  /// Decodes stdout as one JSON document (object or array). Returns `null`
+  /// when the output is not JSON, which is how a 2.2.x box answers `--json`.
+  static Object? decodeJsonDocument(String raw) {
+    final text = SshConnection.stripAnsi(raw).trim();
+    if (text.isEmpty) return null;
+    // Line-anchored so usage text such as `doctor [check]` is never a document.
+    final start = text.indexOf(RegExp(r'^[\[{]', multiLine: true));
+    if (start < 0) return null;
+    final end = text.lastIndexOf(text[start] == '[' ? ']' : '}');
+    if (end <= start) return null;
+    try {
+      final v = jsonDecode(text.substring(start, end + 1));
+      return v is Map || v is List ? v : null;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static Map<String, Object?>? _asMap(Object? v) =>
+      v is Map ? v.cast<String, Object?>() : null;
+
+  static List<String> _stringList(Object? v) =>
+      v is List ? [for (final e in v) e.toString()] : const [];
+
+  // ---------------------------------------------------------------------------
   // moav user list
   // ---------------------------------------------------------------------------
+
+  /// Upstream calls the MTProxy store `telemt`; the text sections and the app
+  /// call it `telegram`, so both paths yield the same protocol names.
+  static const _serviceAliases = {'telemt': 'telegram'};
+
+  /// `moav user list --json`: `[{user, services: [...], bundle: bool}]`.
+  /// Returns `null` when [raw] is not that document.
+  static List<MoavUser>? parseUserListJson(String raw) {
+    final doc = decodeJsonDocument(raw);
+    if (doc is! List) return null;
+    final users = <MoavUser>[];
+    for (final e in doc) {
+      final m = _asMap(e);
+      final name = m?['user']?.toString();
+      if (m == null || name == null || name.isEmpty) continue;
+      final services = _stringList(m['services'])
+          .map((s) => _serviceAliases[s] ?? s)
+          .toSet()
+          .toList()
+        ..sort();
+      users.add(MoavUser(
+        name: name,
+        bundleReady: m['bundle'] == true,
+        protocols: services,
+      ));
+    }
+    users.sort((a, b) => a.name.compareTo(b.name));
+    return users;
+  }
+
+  /// Prefers the JSON document, else parses the 2.2.x sectioned text.
+  static ({List<MoavUser> users, CliFormat format}) parseUserListAny(
+      String raw) {
+    final json = parseUserListJson(raw);
+    if (json != null) return (users: json, format: CliFormat.json);
+    return (users: parseUserList(raw), format: CliFormat.text);
+  }
+
+  /// Whether [raw] looks like the 2.2.x text listing (so no re-run is needed).
+  static bool looksLikeUserListText(String raw) =>
+      SshConnection.stripAnsi(raw).split('\n').any(_sectionRe.hasMatch);
 
   static const _sectionNames = <String, String>{
     'sing-box': 'sing-box',
@@ -136,6 +242,37 @@ echo "__END__"
           protocols: protocols[n]!.toList()..sort(),
         ),
     ];
+  }
+
+  // ---------------------------------------------------------------------------
+  // moav user add|remove NAME --json
+  // ---------------------------------------------------------------------------
+
+  /// `{ok, action, users: [{user, ok, error?, bundle_dir?}]}` or a top-level
+  /// `{ok: false, action, error}`. Returns `null` when not JSON (2.2.x).
+  static UserActionResult? parseUserAction(String raw, {required String user}) {
+    final doc = _asMap(decodeJsonDocument(raw));
+    if (doc == null || doc['ok'] is! bool) return null;
+    final action = doc['action']?.toString() ?? '';
+    final users = doc['users'];
+    if (users is List) {
+      for (final e in users) {
+        final m = _asMap(e);
+        if (m == null || m['user']?.toString() != user) continue;
+        return UserActionResult(
+          ok: m['ok'] == true,
+          action: action,
+          error: m['error']?.toString(),
+          bundleDir: m['bundle_dir']?.toString(),
+        );
+      }
+    }
+    return UserActionResult(
+      ok: doc['ok'] == true,
+      action: action,
+      error: doc['error']?.toString() ??
+          (doc['ok'] == true ? null : 'no result for $user'),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -282,6 +419,49 @@ echo "__END__"
   // moav doctor
   // ---------------------------------------------------------------------------
 
+  /// Descriptions from upstream `DOCTOR_CHECKS`; the JSON document carries
+  /// only ids, and the UI shows the first detail line as the description.
+  static const doctorDescriptions = <String, String>{
+    'docker': 'Check Docker and prerequisites',
+    'memory': 'Check available RAM',
+    'disk': 'Check available disk space',
+    'logs': 'Check container log file sizes',
+    'dns': 'Check DNS records for enabled protocols',
+    'services': 'Check running services vs enabled config',
+    'config': 'Check config files and keys from bootstrap',
+    'ports': 'Check required ports are available',
+    'conflicts': 'Check for conflicting services',
+    'reality': 'Check Reality fallback targets resolve and are reachable',
+    'net': 'Check BBR/sysctl tuning, packet drops, PMTU, CGNAT and MTU',
+    'host': 'Check CPU load, swap pressure and zombie processes',
+    'peers': 'Check for duplicate WireGuard/AmneziaWG peer addresses',
+    'env': 'Compare .env with .env.example for missing vars',
+    'updates': 'Check for MoaV updates',
+  };
+
+  /// `moav doctor --json`: `[{id, status: pass|warn|fail, detail}]` where
+  /// `detail` joins the check's lines with `; `. Returns `null` if not JSON.
+  static DoctorReport? parseDoctorJson(String raw, {DateTime? now}) {
+    final doc = decodeJsonDocument(raw);
+    if (doc is! List) return null;
+    final checks = <DoctorCheck>[];
+    for (final e in doc) {
+      final m = _asMap(e);
+      final id = m?['id']?.toString();
+      if (m == null || id == null || id.isEmpty) continue;
+      final detail = m['detail']?.toString() ?? '';
+      checks.add(DoctorCheck(
+        name: id,
+        result: checkResultFrom(m['status']?.toString()),
+        detail: [
+          doctorDescriptions[id] ?? id,
+          ...detail.split('; ').where((l) => l.isNotEmpty),
+        ].join('\n'),
+      ));
+    }
+    return DoctorReport(checks: checks, collectedAt: now ?? DateTime.now());
+  }
+
   static final _doctorHeaderRe = RegExp(r'^([a-z][a-z0-9_-]*) - (.+)$');
 
   /// Groups `moav doctor` output by check (`name - description` headers).
@@ -336,6 +516,61 @@ echo "__END__"
   // moav status
   // ---------------------------------------------------------------------------
 
+  /// `moav status --json`: `{version, admin_url, grafana_url, admin_port,
+  /// grafana_port, default_profiles, services: [{name, state, uptime, ports}]}`.
+  static ServiceStatusReport? parseStatusJson(String raw, {DateTime? now}) {
+    final doc = _asMap(decodeJsonDocument(raw));
+    final list = doc?['services'];
+    if (doc == null || list is! List) return null;
+    final services = <ServiceStatus>[];
+    for (final e in list) {
+      final m = _asMap(e);
+      final name = m?['name']?.toString();
+      if (m == null || name == null || name.isEmpty) continue;
+      final uptime = m['uptime']?.toString() ?? '';
+      services.add(ServiceStatus(
+        name: name,
+        state: serviceStateFrom(m['state']?.toString()),
+        uptime: uptime.isEmpty ? null : uptime,
+        ports: _stringList(m['ports']),
+      ));
+    }
+    Uri? uri(Object? v) => v is String && v.isNotEmpty ? Uri.tryParse(v) : null;
+    return ServiceStatusReport(
+      services: services,
+      collectedAt: now ?? DateTime.now(),
+      version: doc['version']?.toString(),
+      adminUrl: uri(doc['admin_url']),
+      grafanaUrl: uri(doc['grafana_url']),
+      defaultProfiles: _stringList(doc['default_profiles']),
+    );
+  }
+
+  /// JSON `state` is `running|unhealthy|starting|never` or a raw compose
+  /// state; the text table only ever shows the words matched here.
+  static ServiceState serviceStateFrom(String? s) {
+    final t = (s ?? '').toLowerCase();
+    if (t.contains('unhealthy')) return ServiceState.unhealthy;
+    if (t.contains('starting')) return ServiceState.starting;
+    if (t.contains('running')) return ServiceState.running;
+    if (t.contains('exited')) return ServiceState.exited;
+    if (t.contains('never')) return ServiceState.never;
+    if (t.contains('stopped') || t.contains('created')) {
+      return ServiceState.stopped;
+    }
+    return ServiceState.unknown;
+  }
+
+  /// Prefers the JSON document, else parses the 2.2.x box-drawn table.
+  static ({ServiceStatusReport report, CliFormat format}) parseStatusAny(
+    String raw, {
+    DateTime? now,
+  }) {
+    final json = parseStatusJson(raw, now: now);
+    if (json != null) return (report: json, format: CliFormat.json);
+    return (report: parseStatus(raw, now: now), format: CliFormat.text);
+  }
+
   static final _statusRowRe = RegExp(r'^\s*│\s*(.+?)\s*│\s*(.+?)\s*│\s*(.+?)\s*│\s*(.+?)\s*│\s*(.+?)\s*│\s*$');
   static final _versionRe = RegExp(r'MoaV\s+v?([0-9][^\s)]*)');
   static final _urlLineRe = RegExp(r'^\s*(Admin Dashboard|Grafana \(CDN\)|Grafana):\s*(\S+)');
@@ -354,16 +589,7 @@ echo "__END__"
       if (rm != null) {
         final name = rm.group(1)!;
         if (name == 'Service') continue; // header row
-        final stateText = rm.group(2)!.toLowerCase();
-        final state = stateText.contains('running')
-            ? ServiceState.running
-            : stateText.contains('exited')
-                ? ServiceState.exited
-                : stateText.contains('never')
-                    ? ServiceState.never
-                    : stateText.contains('stopped') || stateText.contains('created')
-                        ? ServiceState.stopped
-                        : ServiceState.unknown;
+        final state = serviceStateFrom(rm.group(2));
         String? dash(String s) => s == '-' ? null : s;
         final ports = rm.group(5)!;
         services.add(ServiceStatus(

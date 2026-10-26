@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "action": "add",
+  "users": [
+    {"user": "dave", "ok": false, "error": "already exists"}
+  ]
+}

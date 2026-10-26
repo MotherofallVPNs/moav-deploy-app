@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
 import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/core/ssh_moav_controller.dart';
+import 'package:moav_deploy/security/app_log.dart';
 
 /// Live checks against a real MoaV box. Read-only except for one
 /// throwaway `zzmoavdeploytest<pid>` user that is created, connectivity
@@ -89,6 +90,26 @@ void main() {
     expect(s.defaultProfiles, isNotEmpty);
     final running = s.services.firstWhere((x) => x.state == ServiceState.running);
     expect(running.uptime, isNotNull);
+  }, skip: skip, timeout: const Timeout(Duration(minutes: 3)));
+
+  test('status and user list take the --json path on MoaV 2.3+', () async {
+    final version = (await controller.ping()).moavVersion ?? '';
+    final lines = <String>[];
+    final previous = AppLog.sink;
+    AppLog.sink = lines.add;
+    try {
+      await controller.status();
+      await controller.listUsers();
+    } finally {
+      AppLog.sink = previous;
+    }
+    final major = int.tryParse(version.split('.').first) ?? 0;
+    final minor = int.tryParse(version.split('.').elementAtOrNull(1) ?? '') ?? 0;
+    final expected = major > 2 || (major == 2 && minor >= 3) ? 'json' : 'text';
+    // ignore: avoid_print
+    print('moav v$version: ${lines.join(' | ')}');
+    expect(lines, contains('[I] moav-cli: status via $expected'));
+    expect(lines, contains('[I] moav-cli: user list via $expected'));
   }, skip: skip, timeout: const Timeout(Duration(minutes: 3)));
 
   test('monitoring: grafana health + headline metrics', () async {

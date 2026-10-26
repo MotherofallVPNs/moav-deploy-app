@@ -270,6 +270,8 @@ class _ServiceRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final (tone, label) = switch (service.state) {
       ServiceState.running => (StatusTone.pass, 'running'),
+      ServiceState.unhealthy => (StatusTone.warn, 'unhealthy'),
+      ServiceState.starting => (StatusTone.warn, 'starting'),
       ServiceState.exited => (StatusTone.neutral, 'exited'),
       ServiceState.stopped => (StatusTone.fail, 'stopped'),
       ServiceState.never => (StatusTone.neutral, 'never'),

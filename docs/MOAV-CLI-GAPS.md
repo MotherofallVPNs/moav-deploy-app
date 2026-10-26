@@ -27,10 +27,15 @@ this app as the consumer:
 - `confirm()` returns its default without touching `/dev/tty` under
   `MOAV_NONINTERACTIVE=1`.
 
-The app still uses the text parsers below because they work on every 2.2.x
-box in the field. Moving to `--json` when the server reports 2.3.0 or newer
-is a follow-up: detect the version from `moav --version`, prefer JSON, and
-keep the text path as the fallback.
+The app now sends `--json` for `status`, `doctor`, `user list`, `user add`,
+`user remove` and `test`, and parses the documents below
+(`MoavCli.parse*Json`). When the output is not a JSON document the box is
+treated as 2.2.x and the text parsers take over: `status` and `user list`
+are parsed from the same output (2.2.x ignores the flag), while `doctor`,
+`user add` and `user remove` are re-run without the flag (2.2.x rejects it
+before doing anything). `SshMoavController` logs `<command> via json|text`
+through `AppLog` in debug builds. The remaining text-only paths carry a
+`TODO(#8)` marker in the code.
 
 ### Still missing upstream
 
@@ -41,17 +46,25 @@ keep the text path as the fallback.
 | `moav user revoke` exit code on the text path | detect failure without `--json` | `--json` exits non-zero on an unknown user; the text path still exits 0 |
 | `moav regenerate-users` / `moav start|stop|restart` result | service actions and bundle refresh | plain text, no `--json`; the app relies on the exit code and re-reads `moav status` afterwards |
 
-## JSON shapes the app will consume (MoaV 2.3.x)
+## JSON shapes the app consumes (MoaV 2.3.x)
+
+Captured verbatim from v2.3.1 into `test/fixtures/json/`.
 
 - `moav status --json`: `{version, admin_url, grafana_url, admin_port,
   grafana_port, default_profiles: [...], services: [{name, state, uptime,
-  ports: [...]}]}`. `state` is one of `running`, `unhealthy`, `starting`,
-  `never` or the raw compose state. URLs are `null` unless domain-based.
+  ports: [int]}]}`. `state` is one of `running`, `unhealthy`, `starting`,
+  `never` or the raw compose state (`exited`, `created`, ...). URLs are
+  `null` unless domain-based; `uptime` is `""` when not running. There is
+  no Grafana CDN URL in the document.
 - `moav doctor [check] --json`: `[{id, status: pass|warn|fail, detail}]`,
-  details colour-stripped and redacted.
-- `moav user list --json`: `[{user, services: [...], bundle: bool}]`.
-- `moav user add|remove NAME --json`: `{ok, action, users: [...]}` or
-  `{ok: false, action, error}`.
+  details colour-stripped, redacted and joined with `; `. Exit code is
+  non-zero when any check fails.
+- `moav user list --json`: `[{user, services: [...], bundle: bool}]`; the
+  MTProxy store is called `telemt` here (the app maps it to `telegram`).
+- `moav user add|remove NAME --json`: `{ok, action: add|remove, users:
+  [{user, ok, error?, bundle_dir?}]}` or `{ok: false, action, error}` when
+  the request never reached the scripts. Exit code is non-zero when `ok`
+  is false (including `already exists` on add and an unknown user on remove).
 - `moav test USER --json`: `{overall_status, summary, tests: {proto: {status,
   detail}}}`, unchanged from 2.2.x.
 
