@@ -1,7 +1,7 @@
 # Releasing
 
 How a version goes from `main` to users: GitHub Release assets (APK + AAB),
-the Google Play internal track, and later production. iOS delivery is not
+the Google Play open testing track, and later production. iOS delivery is not
 automated yet (see the end of this page).
 
 ## Single source of truth for release notes
@@ -16,7 +16,7 @@ Everything else is derived from it:
 
 | Consumer | How it gets the text |
 |---|---|
-| Google Play "What's new" | `fastlane android internal` uploads it with the AAB (supply) |
+| Google Play "What's new" | `fastlane android open_testing` uploads it with the AAB (supply) |
 | GitHub Release body | CI appends a `## Store release notes` block via `scripts/release-notes.sh` |
 | Release PR body | You paste the same block under `## Store release notes` (PR template) |
 
@@ -112,14 +112,14 @@ flutter build appbundle --release          # needs android/key.properties
 export PLAY_SERVICE_ACCOUNT_JSON_PATH=/path/to/service-account.json
 cd android
 bundle exec fastlane lanes                 # list lanes
-bundle exec fastlane android internal      # same as CI
+bundle exec fastlane android open_testing      # same as CI
 ```
 
 Lanes (`android/fastlane/Fastfile`):
 
 | Lane | What it does | Who runs it |
 |---|---|---|
-| `android internal` | Upload the signed AAB to the internal track, status completed, with the changelog | CI on release publish |
+| `android open_testing` | Upload the signed AAB to the open testing track, status completed, with the changelog | CI on release publish |
 | `android promote_production` | Promote the current internal release to production | Humans only |
 | `android sync_listing` | Push title and descriptions for all locales from `fastlane/metadata` | Humans only |
 | `ios beta` | Stub. Prints a notice; nothing is uploaded | Nobody yet |
