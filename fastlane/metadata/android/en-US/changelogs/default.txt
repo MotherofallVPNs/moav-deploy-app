@@ -1,5 +1,2 @@
-What's new in 0.2.2
-- Dark launch screen: no more white flash when the app opens.
-- Clearer recovery when a server install is interrupted or its job is lost.
-- Open-source groundwork: project license added and font licenses bundled in-app.
-- Connection and under-the-hood cleanup.
+What's new in 0.2.3
+- More reliable server status, diagnostics and user management: the app now reads MoaV's structured output, with an automatic fallback for older servers.

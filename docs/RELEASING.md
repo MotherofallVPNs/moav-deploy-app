@@ -1,7 +1,7 @@
 # Releasing
 
 How a version goes from `main` to users: GitHub Release assets (APK + AAB),
-the Google Play open testing track, and later production. iOS delivery is not
+the Google Play closed testing track, then open testing, then production. iOS delivery is not
 automated yet (see the end of this page).
 
 ## Single source of truth for release notes
@@ -16,7 +16,7 @@ Everything else is derived from it:
 
 | Consumer | How it gets the text |
 |---|---|
-| Google Play "What's new" | `fastlane android open_testing` uploads it with the AAB (supply) |
+| Google Play "What's new" | `fastlane android closed_testing` uploads it with the AAB (supply) |
 | GitHub Release body | CI appends a `## Store release notes` block via `scripts/release-notes.sh` |
 | Release PR body | You paste the same block under `## Store release notes` (PR template) |
 
@@ -50,9 +50,9 @@ the release flow. Push it deliberately with `fastlane android sync_listing`.
    - writes `SHA256SUMS` for both, uploads all three as workflow artifacts
      and attaches them to the Release;
    - appends the `## Store release notes` block to the Release body;
-   - uploads the AAB to the Play **open testing** track with the changelog
+   - uploads the AAB to the Play **closed testing** track with the changelog and listing
      (needs `PLAY_SERVICE_ACCOUNT_JSON`; skipped with a log line otherwise).
-6. **Test the open testing build** from the Play listing or the testers
+6. **Test the closed testing build** from the Play listing or the testers
    link in the Play Console.
 7. **Promote to production** when ready. Either click Promote in the Play
    Console, or run locally:
@@ -114,14 +114,15 @@ flutter build appbundle --release          # needs android/key.properties
 export PLAY_SERVICE_ACCOUNT_JSON_PATH=/path/to/service-account.json
 cd android
 bundle exec fastlane lanes                 # list lanes
-bundle exec fastlane android open_testing      # same as CI
+bundle exec fastlane android closed_testing    # same as CI
 ```
 
 Lanes (`android/fastlane/Fastfile`):
 
 | Lane | What it does | Who runs it |
 |---|---|---|
-| `android open_testing` | Upload the signed AAB to the open testing track, status completed, with the changelog | CI on release publish |
+| `android closed_testing` | Upload the signed AAB to the closed testing track, status completed, with changelog and listing | CI on release publish |
+| `android promote_to_open` | Promote the current closed testing release to open testing | Humans only |
 | `android promote_production` | Promote the current open testing release to production | Humans only |
 | `android sync_listing` | Push title and descriptions for all locales from `fastlane/metadata` | Humans only |
 | `ios beta` | Stub. Prints a notice; nothing is uploaded | Nobody yet |
