@@ -1,0 +1,6 @@
+What's new in 0.2.1
+- Fixed a bug that stopped the app from connecting to your servers in this build. Connecting now works.
+- Connection problems show a clear message with the likely cause, plus a Check connection option on the server screen.
+- Server addresses pasted with extra prefixes (like ssh://) are cleaned up automatically.
+- Roomier authentication picker when adding a server, now defaulting to your saved keys.
+- Branded unlock prompt and added round app icons.
