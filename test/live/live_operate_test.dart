@@ -8,7 +8,7 @@ import 'package:moav_deploy/core/moav_controller.dart';
 import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/core/ssh_moav_controller.dart';
 
-/// M4 live checks against a real MoaV box. Read-only except for one
+/// Live checks against a real MoaV box. Read-only except for one
 /// throwaway `zzmoavdeploytest<pid>` user that is created, connectivity
 /// tested with `moav test --json`, and revoked. Services are never
 /// started/stopped/restarted and users are never regenerated here.

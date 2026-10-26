@@ -131,10 +131,12 @@ void main() {
 
     final before = await snapshot();
 
+    // Values are only written when .env is empty; an installed box keeps its own.
+    final domain = env['MOAV_TEST_DOMAIN'] ?? host;
     final handle = await controller.install(
-      const InstallSpec(
-        domain: 'yorkschool.xyz',
-        email: 'info@yorkschool.xyz',
+      InstallSpec(
+        domain: domain,
+        email: 'admin@$domain',
         adminPassword: 'not-applied-existing-config-wins',
       ),
     );

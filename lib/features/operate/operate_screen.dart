@@ -50,9 +50,7 @@ class OperateScreen extends ConsumerWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Services
-// ---------------------------------------------------------------------------
+// --- Services ---
 
 class _ServicesTab extends ConsumerWidget {
   const _ServicesTab({required this.profile});
@@ -298,7 +296,7 @@ class _ServiceRow extends StatelessWidget {
           SizedBox(
             width: 62,
             child: Text(
-              service.uptime ?? '—',
+              service.uptime ?? '-',
               textAlign: TextAlign.right,
               style: moavMono(size: 11, weight: FontWeight.w400, color: MoavColors.textSecondary),
               overflow: TextOverflow.ellipsis,
@@ -321,9 +319,7 @@ class _ServiceRow extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Health (moav doctor)
-// ---------------------------------------------------------------------------
+// --- Health (moav doctor) ---
 
 class _HealthTab extends ConsumerWidget {
   const _HealthTab({required this.profile});
@@ -452,7 +448,7 @@ class _CheckTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lines = (check.detail ?? '').split('\n');
-    final description = lines.isEmpty ? '' : lines.first;
+    final description = lines.first;
     final body = lines.skip(1).join('\n');
     return ExpansionTile(
       tilePadding: const EdgeInsets.fromLTRB(14, 0, 8, 0),

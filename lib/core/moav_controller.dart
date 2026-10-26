@@ -1,8 +1,8 @@
 /// The seam between the UI and whatever transport talks to a MoaV server.
 ///
-/// Phase 1 ships [SshMoavController] (drives the `moav` CLI over SSH).
-/// Phase 2 adds `ApiMoavController` (MoaV control API over HTTPS) without any
-/// UI changes. See docs/ARCHITECTURE.md.
+/// Today that is [SshMoavController], which drives the `moav` CLI over SSH.
+/// An API-backed controller can be added without UI changes.
+/// See docs/ARCHITECTURE.md.
 library;
 
 import 'app_error.dart';
@@ -45,9 +45,7 @@ abstract class MoavController {
   Future<Monitoring> monitoring();
 }
 
-// ---------------------------------------------------------------------------
-// Models
-// ---------------------------------------------------------------------------
+// --- Models ---
 
 /// Result of [MoavController.ping].
 class ConnectionCheck {
@@ -91,7 +89,7 @@ class InstallSpec {
   final String domain;
   final String email;
 
-  /// Never logged. Passed to the installer via env or PTY answer only.
+  /// Never logged. Reaches the server only inside the mode-0600 spec file.
   final String adminPassword;
 
   /// Additional `KEY=value` pairs for the installer environment.
@@ -105,10 +103,10 @@ class InstallSpec {
 class InstallHandle {
   const InstallHandle({required this.jobId, required this.logPath});
 
-  /// Opaque server-side id (e.g. a PID or tmux session name).
+  /// Opaque server-side id (the PID of the detached job).
   final String jobId;
 
-  /// Log file being tailed for progress, e.g. `/opt/moav/.deploy.log`.
+  /// Log file being tailed for progress, e.g. `.moav-deploy/deploy.log`.
   final String logPath;
 
   Map<String, Object?> toJson() => {'jobId': jobId, 'logPath': logPath};

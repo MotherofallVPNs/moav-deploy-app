@@ -3,23 +3,12 @@ import 'ssh_connection.dart';
 
 /// Builds the detached, idempotent install job that runs on the server.
 ///
-/// The job is a plain bash script plus a mode-0600 `spec.env` holding the
-/// installer inputs. Everything is written to `~/.moav-deploy/` (paths are
-/// relative to the SSH login directory, i.e. the user's home; not inside
-/// `/opt/moav`, which may not exist yet on a fresh box). The script:
-///
-/// 1. Detects an existing `/opt/moav` and **never** modifies or removes it.
-/// 2. Runs the upstream `install.sh` non-interactively. Without a TTY the
-///    installer keeps an existing checkout untouched, installs missing
-///    prerequisites and refreshes the global `moav` command.
-/// 3. Ensures `.env` exists and fills **only empty/placeholder** values for
-///    domain, ACME email and admin password. Existing settings always win.
-/// 4. Runs `moav bootstrap --yes` only if the box has never been bootstrapped.
-/// 5. Starts services only when this run performed the bootstrap.
-///
-/// Progress markers `[moav-deploy] step N/5` and a terminal
-/// `[moav-deploy] exit=<code>` line make the log self-describing so
-/// [SshMoavController.installStatus] needs nothing but the log.
+/// A bash script plus a mode-0600 `spec.env` are written to `~/.moav-deploy/`.
+/// The script never modifies an existing `/opt/moav`, runs the upstream
+/// installer without a TTY, fills only empty `.env` values, bootstraps only a
+/// never-bootstrapped box, and starts services only after its own bootstrap.
+/// `[moav-deploy] step N/5` and `[moav-deploy] exit=<code>` markers make the
+/// log self-describing. The five steps are documented in docs/ARCHITECTURE.md.
 class InstallScript {
   InstallScript._();
 
@@ -27,7 +16,6 @@ class InstallScript {
   static const scriptPath = '$dir/deploy.sh';
   static const specPath = '$dir/spec.env';
   static const logPath = '$dir/deploy.log';
-  static const pidPath = '$dir/deploy.pid';
 
   static const totalSteps = 5;
   static const stepMarker = '[moav-deploy] step ';
@@ -73,9 +61,8 @@ else
 fi
 
 step 2 "Run MoaV installer (non-interactive)"
-# Without a TTY the installer: installs missing packages, keeps an existing
-# checkout untouched ("Update existing installation?" defaults to no), and
-# installs the global 'moav' command.
+# Without a TTY the installer keeps an existing checkout untouched, installs
+# missing packages and installs the global 'moav' command.
 if command -v curl >/dev/null 2>&1; then
   curl -fsSL https://moav.sh/install.sh | MOAV_BRANCH="${MOAV_BRANCH:-main}" MOAV_INSTALL_DIR="$INSTALL_DIR" bash
 else

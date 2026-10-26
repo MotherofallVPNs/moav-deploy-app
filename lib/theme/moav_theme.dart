@@ -1,7 +1,7 @@
 /// MoaV design system for the Deploy app.
 ///
-/// Tokens mirror `docs/stylesheets/blog.css` on moav-site so the app and the
-/// site read as one product: near-black backgrounds with a faint radial glow
+/// Tokens mirror the MoaV website stylesheet so the app and the site read as
+/// one product: near-black backgrounds with a faint radial glow
 /// at the top, white / grey text ramps, a cyan→purple accent gradient, Inter
 /// for prose and JetBrains Mono for anything that is a value (hosts, keys,
 /// metrics, code). Fonts are bundled in `assets/fonts` and never fetched.
@@ -11,9 +11,7 @@ import 'package:flutter/material.dart';
 
 import '../core/moav_controller.dart' show CheckResult;
 
-// ---------------------------------------------------------------------------
-// Tokens
-// ---------------------------------------------------------------------------
+// --- Tokens ---
 
 abstract final class MoavColors {
   static const bg = Color(0xFF0A0A0F);
@@ -36,7 +34,7 @@ abstract final class MoavColors {
   static const warn = Color(0xFFFFB454);
   static const fail = Color(0xFFFF5C7A);
 
-  /// rgba(255,255,255,.06) — hairline borders.
+  /// rgba(255,255,255,.06): hairline borders.
   static const border = Color(0x0FFFFFFF);
   static const borderStrong = Color(0x1FFFFFFF);
 }
@@ -110,9 +108,7 @@ TextStyle moavLabel({
       letterSpacing: 1.1,
     );
 
-// ---------------------------------------------------------------------------
-// ThemeData
-// ---------------------------------------------------------------------------
+// --- ThemeData ---
 
 const _scheme = ColorScheme(
   brightness: Brightness.dark,
@@ -411,9 +407,7 @@ ThemeData moavDarkTheme() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Layout
-// ---------------------------------------------------------------------------
+// --- Layout ---
 
 /// A [Scaffold] on the MoaV background (radial glow at the top). The app bar
 /// is transparent so the glow reads through it.
@@ -494,9 +488,7 @@ class GradientText extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Surfaces
-// ---------------------------------------------------------------------------
+// --- Surfaces ---
 
 /// Card surface: `bg-card`, 12 px radius, hairline border. `accent` draws a
 /// 2 px gradient hairline along the top edge; `glow` adds the cyan glow.
@@ -749,9 +741,7 @@ class EmptyState extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Status
-// ---------------------------------------------------------------------------
+// --- Status ---
 
 enum StatusTone { pass, warn, fail, neutral, accent }
 
@@ -833,9 +823,7 @@ class StatusPill extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Metrics
-// ---------------------------------------------------------------------------
+// --- Metrics ---
 
 /// One headline number: caption, mono value with optional unit, optional
 /// footnote and status pill. `accent` adds the gradient hairline.
@@ -923,41 +911,7 @@ class MetricTile extends StatelessWidget {
   }
 }
 
-/// `label · value` row in mono, for key/value summaries.
-class KeyValueRow extends StatelessWidget {
-  const KeyValueRow(this.label, this.value, {super.key, this.trailing});
-
-  final String label;
-  final String value;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 96,
-            child: Text(label, style: moavMono(size: 12, weight: FontWeight.w400, color: MoavColors.textMuted)),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: moavMono(size: 12),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          ?trailing,
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Actions
-// ---------------------------------------------------------------------------
+// --- Actions ---
 
 /// Primary action: accent gradient, cyan glow, dark label.
 class GradientButton extends StatelessWidget {

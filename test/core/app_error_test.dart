@@ -93,8 +93,8 @@ void main() {
     test('ArgumentError → invalidInput, StateError keeps its message', () {
       expect(AppError.from(ArgumentError.value('a b', 'name', 'Use letters')).kind,
           AppErrorKind.invalidInput);
-      final s = AppError.from(StateError('No stored credential for York'));
-      expect(s.message, 'No stored credential for York');
+      final s = AppError.from(StateError('No stored credential for Demo'));
+      expect(s.message, 'No stored credential for Demo');
     });
 
     test('unknown errors never expose a key, a stack, or the type name', () {

@@ -1,13 +1,5 @@
-// Demo screenshot gallery. Drives the real app (biometric lock bypassed) on a
-// simulator and hands PNGs to `test_driver/integration_test.dart`.
-//
-//   tool/screenshots.sh                       # yorkschool-shaped fake data
-//   MOAV_TEST_SSH_KEY=~/.ssh/key MOAV_TEST_HOST=yorkschool.xyz \
-//   MOAV_TEST_USER=root tool/screenshots.sh   # real box over SSH
-//
-// Live mode is read-only apart from one throwaway `zzmoavdeploytest*` user
-// created for the bundle/QR shot and revoked at the end. Existing users,
-// services and config are never touched.
+// Demo screenshot gallery driven by tool/screenshots.sh (see docs/BUILDING.md).
+// Live mode is read-only apart from one throwaway zzmoavdeploytest* user.
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -30,10 +22,10 @@ const _port = int.fromEnvironment('MOAV_TEST_PORT', defaultValue: 22);
 const _keyB64 = String.fromEnvironment('MOAV_TEST_SSH_KEY_B64');
 const live = _host != '' && _keyB64 != '';
 
-const yorkschool = ServerProfile(
-  id: 'york',
-  label: 'yorkschool',
-  host: live ? _host : 'yorkschool.xyz',
+const demo = ServerProfile(
+  id: 'demo',
+  label: 'Demo server',
+  host: live ? _host : 'vpn.example.org',
   port: _port,
   username: _user,
   authMethod: SshAuthMethod.generatedKey,
@@ -55,14 +47,14 @@ void main() {
     'demo gallery',
     (tester) async {
       final store = _MemoryCredStore()
-        ..profiles = [yorkschool, frankfurt]
-        ..secrets['york'] = live ? utf8.decode(base64Decode(_keyB64)) : 'x'
+        ..profiles = [demo, frankfurt]
+        ..secrets['demo'] = live ? utf8.decode(base64Decode(_keyB64)) : 'x'
         ..secrets['fra'] = 'x';
       final fake = _FakeController();
-      final MoavController york = live
+      final MoavController primary = live
           ? SshMoavController(
-              profile: yorkschool,
-              secretResolver: (_) async => store.secrets['york'],
+              profile: demo,
+              secretResolver: (_) async => store.secrets['demo'],
             )
           : fake;
       final throwaway =
@@ -73,7 +65,7 @@ void main() {
         overrides: [
           secureCredStoreProvider.overrideWithValue(store),
           moavControllerFactoryProvider.overrideWithValue(
-            _GalleryFactory(york: york, other: fake),
+            _GalleryFactory(primary: primary, other: fake),
           ),
         ],
         child: const MoavDeployApp(lockEnabled: false),
@@ -82,7 +74,7 @@ void main() {
 
       try {
         // 1. Servers list.
-        await _wait(tester, find.text('yorkschool'));
+        await _wait(tester, find.text('Demo server'));
         await _shot(binding, tester, '01-servers');
 
         // 2. Add server + on-device key generation.
@@ -99,7 +91,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // 3. Users + bundle with QR codes.
-        await tester.tap(find.text('yorkschool'));
+        await tester.tap(find.text('Demo server'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Users'));
         await _wait(tester, find.byIcon(Icons.person_remove_outlined));
@@ -144,21 +136,19 @@ void main() {
       } finally {
         // Never leave the throwaway user behind on the real box.
         try {
-          final now = await york.listUsers();
+          final now = await primary.listUsers();
           if (now.any((u) => u.name == throwaway)) {
-            await york.removeUser(throwaway);
+            await primary.removeUser(throwaway);
           }
         } on Object catch (_) {}
-        if (york is SshMoavController) york.dispose();
+        if (primary is SshMoavController) primary.dispose();
       }
     },
     timeout: const Timeout(Duration(minutes: 30)),
   );
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// --- Helpers ---
 
 Future<void> _shot(
   IntegrationTestWidgetsFlutterBinding binding,
@@ -212,20 +202,18 @@ Future<void> _scrollTo(WidgetTester tester, Finder f) async {
   await tester.pumpAndSettle();
 }
 
-// ---------------------------------------------------------------------------
-// Fakes
-// ---------------------------------------------------------------------------
+// --- Fakes ---
 
 class _GalleryFactory extends MoavControllerFactory {
-  _GalleryFactory({required this.york, required this.other})
+  _GalleryFactory({required this.primary, required this.other})
       : super(secretResolver: (_) async => null);
 
-  final MoavController york;
+  final MoavController primary;
   final MoavController other;
 
   @override
   MoavController forServer(ServerProfile profile) =>
-      profile.id == yorkschool.id ? york : other;
+      profile.id == demo.id ? primary : other;
 }
 
 class _MemoryCredStore implements SecureCredStore {
@@ -277,7 +265,7 @@ class _MemoryCredStore implements SecureCredStore {
   }
 }
 
-/// yorkschool-shaped data: MoaV v2.2.2, 27/29 services, Grafana 13.1.3.
+/// Demo data shaped like a real server: MoaV v2.2.2, 27/29 services, Grafana 13.1.3.
 class _FakeController implements MoavController {
   final users = <MoavUser>[
     const MoavUser(name: 'alice', bundleReady: true, protocols: ['sing-box', 'wireguard', 'xray', 'trusttunnel', 'telegram']),
@@ -361,27 +349,27 @@ class _FakeController implements MoavController {
           const BundleEntry(
             protocol: 'telegram',
             fileName: 'telegram-mtproxy.txt',
-            content: 'tg://proxy?server=yorkschool.xyz&port=993&secret=ee…\n',
+            content: 'tg://proxy?server=vpn.example.org&port=993&secret=ee…\n',
           ),
         ],
       ));
 
   static String _reality(String u) =>
-      'vless://7f2a9c1e-4b3d-4e8f-9a6b-1c2d3e4f5a6b@yorkschool.xyz:443'
+      'vless://7f2a9c1e-4b3d-4e8f-9a6b-1c2d3e4f5a6b@vpn.example.org:443'
       '?encryption=none&flow=xtls-rprx-vision&security=reality'
-      '&sni=www.microsoft.com&fp=chrome&pbk=Xq3mF9kL2pR7vT1wY6zB4nC8hJ0dS5gA2eK9uM4oP1I'
-      '&sid=6ba85179e30d4fc2&type=tcp#yorkschool-reality-$u';
+      '&sni=www.example.com&fp=chrome&pbk=Xq3mF9kL2pR7vT1wY6zB4nC8hJ0dS5gA2eK9uM4oP1I'
+      '&sid=6ba85179e30d4fc2&type=tcp#demo-reality-$u';
   static String _hy2(String u) =>
-      'hysteria2://9d8c7b6a5f4e3d2c@yorkschool.xyz:8443/?sni=yorkschool.xyz'
-      '&obfs=salamander&obfs-password=k2Lm9Qx4#yorkschool-hy2-$u';
+      'hysteria2://9d8c7b6a5f4e3d2c@vpn.example.org:8443/?sni=vpn.example.org'
+      '&obfs=salamander&obfs-password=k2Lm9Qx4#demo-hy2-$u';
   static String _trojan(String u) =>
-      'trojan://1a2b3c4d5e6f7a8b@yorkschool.xyz:8445?security=tls'
-      '&sni=yorkschool.xyz&type=tcp#yorkschool-trojan-$u';
+      'trojan://1a2b3c4d5e6f7a8b@vpn.example.org:8445?security=tls'
+      '&sni=vpn.example.org&type=tcp#demo-trojan-$u';
   static String _wg(String u) => '[Interface]\n'
       'PrivateKey = cGxhY2Vob2xkZXJwcml2YXRla2V5MDAwMDAwMDAwMDA=\n'
       'Address = 10.66.66.104/32\nDNS = 10.66.66.1\n\n[Peer]\n'
       'PublicKey = c2VydmVycHVibGlja2V5cGxhY2Vob2xkZXIwMDAwMDA=\n'
-      'Endpoint = yorkschool.xyz:51820\nAllowedIPs = 0.0.0.0/0, ::/0\n'
+      'Endpoint = vpn.example.org:51820\nAllowedIPs = 0.0.0.0/0, ::/0\n'
       'PersistentKeepalive = 25\n# $u\n';
 
   @override
@@ -389,9 +377,9 @@ class _FakeController implements MoavController {
         DoctorReport(
           collectedAt: DateTime.now(),
           checks: const [
-            DoctorCheck(name: 'docker', result: CheckResult.pass, detail: 'Check Docker and prerequisites\n✓ Docker 29.7.2 — running\n✓ Docker Compose 5.4.0'),
+            DoctorCheck(name: 'docker', result: CheckResult.pass, detail: 'Check Docker and prerequisites\n✓ Docker 29.7.2 - running\n✓ Docker Compose 5.4.0'),
             DoctorCheck(name: 'memory', result: CheckResult.pass, detail: 'Check available RAM\nRAM: 1.9 GB total, 775 MB available (60% used)\n✓ Memory OK'),
-            DoctorCheck(name: 'dns', result: CheckResult.fail, detail: 'Check DNS records for enabled protocols\n✓ Main A record: yorkschool.xyz\n✗ grafana.yorkschool.xyz does not resolve to the server IP'),
+            DoctorCheck(name: 'dns', result: CheckResult.fail, detail: 'Check DNS records for enabled protocols\n✓ Main A record: vpn.example.org\n✗ grafana.vpn.example.org does not resolve to the server IP'),
             DoctorCheck(name: 'services', result: CheckResult.pass, detail: 'Check running services vs enabled config\n✓ 27 services running, 2 one-shot'),
             DoctorCheck(name: 'ports', result: CheckResult.pass, detail: 'Check required ports are available\n✓ 443, 8443, 8445, 51820, 51821, 993, 53 bound by MoaV'),
             DoctorCheck(name: 'config', result: CheckResult.pass, detail: 'Validate .env and generated configs\n✓ 0 placeholder values'),
@@ -416,9 +404,9 @@ class _FakeController implements MoavController {
   Future<ServiceStatusReport> status() => _lag(ServiceStatusReport(
         collectedAt: DateTime.now(),
         version: '2.2.2',
-        adminUrl: Uri.parse('https://yorkschool.xyz:9443'),
-        grafanaUrl: Uri.parse('https://yorkschool.xyz:9444'),
-        grafanaCdnUrl: Uri.parse('https://grafana.yorkschool.xyz:2083'),
+        adminUrl: Uri.parse('https://vpn.example.org:9443'),
+        grafanaUrl: Uri.parse('https://vpn.example.org:9444'),
+        grafanaCdnUrl: Uri.parse('https://grafana.vpn.example.org:2083'),
         defaultProfiles: const ['proxy', 'wireguard', 'amneziawg', 'dnstunnel', 'trusttunnel', 'xhttp', 'telegram', 'admin', 'conduit', 'snowflake', 'monitoring'],
         services: [
           _svc('admin', up: '3 weeks', ports: ['9443']),
@@ -458,9 +446,9 @@ class _FakeController implements MoavController {
 
   @override
   Future<Monitoring> monitoring() => _lag(Monitoring(
-        grafanaUrl: Uri.parse('https://yorkschool.xyz:9444'),
-        grafanaCdnUrl: Uri.parse('https://grafana.yorkschool.xyz:2083'),
-        adminUrl: Uri.parse('https://yorkschool.xyz:9443'),
+        grafanaUrl: Uri.parse('https://vpn.example.org:9444'),
+        grafanaCdnUrl: Uri.parse('https://grafana.vpn.example.org:2083'),
+        adminUrl: Uri.parse('https://vpn.example.org:9443'),
         grafanaHealthy: true,
         grafanaVersion: '13.1.3',
         collectedAt: DateTime.now(),

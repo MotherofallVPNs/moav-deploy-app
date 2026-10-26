@@ -2,120 +2,123 @@
 
 ## Guiding principle: swap the transport, keep the app
 
-Every server operation the UI performs is expressed once, as a method on a
-`MoavController` interface. The UI, state management, and models never know
+Every server operation the UI performs is expressed once, as a method on the
+`MoavController` interface. The UI, state management and models never know
 whether the work happened over SSH or over an HTTP API.
 
 ```
 UI (Flutter widgets)
-  → Riverpod providers / controllers (app state)
-    → MoavController  (abstract interface)  ← the seam
-        ├── SshMoavController   (Phase 1: drives `moav` CLI over SSH)
-        └── ApiMoavController   (Phase 2: MoaV control API over HTTPS)
+  -> Riverpod providers / controllers (app state)
+    -> MoavController  (abstract interface)  <- the seam
+        |-- SshMoavController   (today: drives the `moav` CLI over SSH)
+        '-- ApiMoavController   (planned: MoaV control API over HTTPS)
 ```
 
-P1 invests only in `SshMoavController` and the parsing behind it. Because the
-seam is the interface, P2 is additive: implement `ApiMoavController`, flip a
-factory, delete nothing in the UI. **This is why we accept SSH now without it
-being throwaway** — the throwaway surface is one class.
+Only `SshMoavController` and the parsing behind it exist today. Because the
+seam is the interface, the API transport is additive: implement it, flip the
+factory, delete nothing in the UI. The throwaway surface is one class.
 
-## MoavController interface (initial shape)
+## The controller interface
 
 ```dart
 abstract class MoavController {
-  Future<ConnectionCheck> ping();                 // reachable + moav present?
+  Future<ConnectionCheck> ping();                  // reachable, moav present?
   Future<InstallHandle> install(InstallSpec spec); // detached; returns a job id
   Future<InstallStatus> installStatus(InstallHandle h);
   Future<DoctorReport> doctor();                   // per-check health
   Future<List<MoavUser>> listUsers();
   Future<MoavUser> addUser(String name);
   Future<void> removeUser(String name);
-  Future<Bundle> getBundle(String user);           // configs + QR payloads
+  Future<Bundle> getBundle(String user);           // configs and QR payloads
   Future<TestMatrix> testUser(String name);        // per-protocol pass/fail
   Future<void> service(ServiceAction a);           // start/stop/restart/regenerate-users
-  Future<ServiceStatusReport> status();            // moav status table + dashboard URLs
-  Future<Monitoring> monitoring();                 // Grafana URL/health + key metrics
+  Future<ServiceStatusReport> status();            // moav status table and dashboard URLs
+  Future<Monitoring> monitoring();                 // Grafana health and key metrics
 }
 ```
 
-## Phase 1 — SSH implementation notes
+The concrete models live in `lib/core/moav_controller.dart`.
 
-- **SSH lib:** `dartssh2` (pure Dart, SSH + SFTP, ed25519).
-- **CLI is the API for now.** Prefer machine-readable output. Where `moav`
-  offers JSON (`-j`/`--json`), parse that; where it does not, parse text
-  defensively and **file an upstream issue on MoaV** to add JSON + a
-  non-interactive install. Track the gaps in `docs/MOAV-CLI-GAPS.md`.
-- **Long installs survive backgrounding.** Never hold one live SSH session for
-  a multi-minute install. The app uploads a small idempotent job to
-  `~/.moav-deploy/` on the server (script + mode-0600 spec, written over
-  stdin so secrets never hit `ps`), launches it with `setsid nohup … &`,
-  returns the PID as a job handle (persisted in the secure store), and polls
+## SSH implementation
+
+- **SSH library:** `dartssh2` (pure Dart, SSH and SFTP, ed25519).
+- **The CLI is the API for now.** Where `moav` offers JSON (`test --json`)
+  the app parses it; where it does not, the app parses text defensively. Each
+  gap is recorded in [MOAV-CLI-GAPS.md](MOAV-CLI-GAPS.md) so it can be raised
+  upstream.
+- **Long installs survive backgrounding.** The app never holds one live SSH
+  session for a multi-minute install. It uploads a small idempotent job to
+  `~/.moav-deploy/` on the server (script plus a mode-0600 spec, written over
+  stdin so secrets never appear in `ps`), launches it with `setsid nohup`,
+  stores the PID as a job handle in the secure store, and polls
   `installStatus` by tailing `~/.moav-deploy/deploy.log` on reconnect. The
   log carries `[moav-deploy] step N/5` and `[moav-deploy] exit=<code>`
-  markers so status is derivable from the log alone. iOS will suspend the
-  app; the server keeps working; we re-attach.
+  markers so status is derivable from the log alone. The phone can suspend
+  the app; the server keeps working; the app reattaches.
 - **Install is idempotent and never destructive.** On a box that already has
   `/opt/moav` the job keeps the checkout untouched (no `git pull`), fills only
-  empty/placeholder `.env` values, skips `moav bootstrap` when the box was
-  already bootstrapped, and leaves running services alone. Verified live
-  against yorkschool.xyz (git HEAD, `.env`, users, bundles and container set
-  identical before/after).
-- **Interactive installer:** `install.sh` has no `--yes`, but every prompt
-  falls back to a sane default when `/dev/tty` cannot be opened (which is the
-  case under `setsid`). Domain / email / admin password are not installer
-  inputs at all; they live in `/opt/moav/.env`, which the job writes before
-  running `moav bootstrap --yes`. Remaining gaps are in
-  `docs/MOAV-CLI-GAPS.md`.
-
-- **Manage & operate (M3/M4).** Command strings and parsers live in
-  `lib/core/moav_cli.dart`, separate from the transport, with fixture-based
-  unit tests. `user list`, `doctor` and `status` are text-parsed; `test` uses
-  `--json` (found as the trailing JSON document after Docker build noise).
-  Bundles are read over SFTP from `/opt/moav/outputs/bundles/<user>`; only
-  text configs are pulled and single-line links / WireGuard confs become QR
-  payloads. Usernames are validated on-device with the CLI's own rule before
-  they are shell-quoted, and `user revoke` is confirmed by re-listing since
-  the CLI always exits 0 for it. Prometheus is not published on the host, so
-  headline metrics go through `docker exec moav-prometheus wget` against the
-  port parsed from the container's `--web.listen-address`.
+  empty or placeholder `.env` values, skips `moav bootstrap` when the box was
+  already bootstrapped, and leaves running services alone. The live suite
+  re-runs the installer against an installed server and checks that git
+  HEAD, `.env`, users, bundles and the container set are identical before
+  and after.
+- **The upstream installer is interactive.** `install.sh` has no `--yes`, but
+  every prompt falls back to a sane default when `/dev/tty` cannot be opened,
+  which is the case under `setsid`. Domain, email and admin password are not
+  installer inputs; they live in `/opt/moav/.env`, which the job writes
+  before `moav bootstrap --yes`.
+- **Parsing.** Command strings and parsers live in `lib/core/moav_cli.dart`,
+  separate from the transport, with fixture-based unit tests. `user list`,
+  `doctor` and `status` are text-parsed; `test` uses `--json`, found as the
+  trailing JSON document after Docker build noise. Bundles are read over SFTP
+  from `/opt/moav/outputs/bundles/<user>`; only text configs are pulled, and
+  single-line links or WireGuard confs become QR payloads. Usernames are
+  validated on-device with the CLI's own rule before they are shell-quoted,
+  and `user revoke` is confirmed by re-listing since the CLI always exits 0
+  for it. Prometheus is not published on the host, so headline metrics go
+  through `docker exec moav-prometheus wget` against the port parsed from
+  the container's `--web.listen-address`.
 
 ## Security
 
-- Keys generated on-device (ed25519), stored in iOS Keychain/Secure Enclave and
-  Android Keystore. Passphrase never persisted in plaintext.
-- App lock: biometric / device passcode gate on launch and resume.
-- "Install my public key" helper flow; support password auth as fallback only.
-- No analytics, no crash-reporting phone-home by default (at-risk users).
-- Assume device seizure: offer a quick wipe of stored servers/keys.
+- Keys are generated on-device (ed25519) and stored in the iOS Keychain or
+  Android Keystore through `flutter_secure_storage`. Passphrases are never
+  persisted in plaintext.
+- App lock: biometric or device passcode gate on launch and resume.
+- "Install my key" helper flow; password auth is a fallback for that one
+  step only.
+- No analytics and no crash reporting. Errors are scrubbed by
+  `lib/security/redactor.dart` before they reach any log or notice.
+- Device seizure is assumed: the emergency wipe clears every stored server,
+  key and install handle.
 
 ## Monitoring
 
-MoaV already ships Grafana + Prometheus. P1 (done): Grafana URL derived the
-same way `get_grafana_url` does from `.env`, `/api/health` for up/version,
-seven headline numbers from Prometheus instant queries, and Grafana embedded
-in a webview (with open-in-browser for self-signed certificates). P2: richer
-native charts from the API.
+MoaV ships Grafana and Prometheus. The app derives the Grafana URL the same
+way the CLI does from `.env`, probes `/api/health` for up and version, reads
+seven headline numbers from Prometheus instant queries, and embeds Grafana in
+a webview with open-in-browser for self-signed certificates. Native charts
+are a candidate for the API transport.
 
 ## Design system
 
-The app is dark-first and shares MoaV's visual language with the site:
-`lib/theme/moav_theme.dart` is the single source of tokens (backgrounds
-`#0a0a0f / #12121a / #15151f`, text ramp white → `#a0a0b0` → `#606070`,
-cyan `#00d4ff` / purple `#7b5cff` accent gradient, 12 / 8 px radii). Inter is
-the UI face; JetBrains Mono is used for anything that is a value — hosts,
-keys, metrics, service names, logs. Both are bundled under `assets/fonts`
-(no `google_fonts`; at-risk users must never trigger a font download).
-Screens only compose the theme's widgets (`MoavScaffold`, `MoavCard`,
-`SectionHeader`, `MetricTile`, `StatusPill`, `GradientButton`, `CodeBlock`)
-and never touch the `MoavController` seam for styling.
+The app is dark-only and shares MoaV's visual language with the website.
+`lib/theme/moav_theme.dart` is the single source of tokens: backgrounds
+`#0a0a0f`, `#12121a`, `#15151f`; text ramp from white through `#a0a0b0` to
+`#606070`; cyan `#00d4ff` to purple `#7b5cff` accent gradient; 12 and 8 px
+radii. Inter is the UI face; JetBrains Mono is used for anything that is a
+value: hosts, keys, metrics, service names, logs. Both are bundled under
+`assets/fonts`, so no font is ever fetched at runtime. Screens only compose
+the theme's widgets (`MoavScaffold`, `MoavCard`, `SectionHeader`,
+`MetricTile`, `StatusPill`, `GradientButton`, `CodeBlock`).
 
-The Analytics tab (`features/operate/analytics_view.dart`) turns the flat
-headline `Metric` list into tiles, derives per-protocol status from the
-`moav status` service table (`sing-box` → reality/trojan/hysteria2/…), and
-embeds Grafana inline through the same `GrafanaPanel` the full-screen view
-uses, keeping the open-in-browser fallback for self-signed certificates.
+The Analytics tab (`lib/features/operate/analytics_view.dart`) turns the flat
+headline metric list into tiles, derives per-protocol status from the
+`moav status` service table, and embeds Grafana inline through the same
+`GrafanaPanel` the full-screen view uses.
 
 ## Distribution
 
-App Store + Play, plus a sideloadable APK / TestFlight path, because users in
-censored regions frequently cannot reach the official stores.
+Google Play and GitHub Releases today, App Store and TestFlight next, because
+users in censored regions frequently cannot reach the official stores. See
+[DISTRIBUTION.md](DISTRIBUTION.md).

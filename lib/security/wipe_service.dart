@@ -13,8 +13,8 @@ class WipeReport {
     required this.clipboardCleared,
   });
 
-  /// Keys removed from the secure store (profiles list, per-server secrets,
-  /// install handles).
+  /// Keys removed from the secure store (profiles, per-server secrets,
+  /// SSH keys, install handles).
   final int storeEntries;
 
   /// Grafana cookies / cache / local storage were cleared.

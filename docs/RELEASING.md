@@ -49,9 +49,10 @@ the release flow. Push it deliberately with `fastlane android sync_listing`.
    - builds the signed AAB and APK (needs the `ANDROID_*` signing secrets);
    - uploads both as workflow artifacts and attaches them to the Release;
    - appends the `## Store release notes` block to the Release body;
-   - uploads the AAB to the Play **internal** track with the changelog
+   - uploads the AAB to the Play **open testing** track with the changelog
      (needs `PLAY_SERVICE_ACCOUNT_JSON`; skipped with a log line otherwise).
-6. **Test the internal build** from the Play Console internal testers link.
+6. **Test the open testing build** from the Play listing or the testers
+   link in the Play Console.
 7. **Promote to production** when ready. Either click Promote in the Play
    Console, or run locally:
 
@@ -69,8 +70,8 @@ only; they never touch Play or the Release body.
 
 | Secret | Used for |
 |---|---|
-| `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | Signing the AAB and APK (already set up, see `docs/APP-STORES.md`) |
-| `PLAY_SERVICE_ACCOUNT_JSON` | Uploading to Google Play. The only secret this flow adds. |
+| `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | Signing the AAB and APK; see [BUILDING.md](BUILDING.md) for how the keystore is made |
+| `PLAY_SERVICE_ACCOUNT_JSON` | Uploading to Google Play |
 
 ### Creating `PLAY_SERVICE_ACCOUNT_JSON`
 
@@ -120,7 +121,7 @@ Lanes (`android/fastlane/Fastfile`):
 | Lane | What it does | Who runs it |
 |---|---|---|
 | `android open_testing` | Upload the signed AAB to the open testing track, status completed, with the changelog | CI on release publish |
-| `android promote_production` | Promote the current internal release to production | Humans only |
+| `android promote_production` | Promote the current open testing release to production | Humans only |
 | `android sync_listing` | Push title and descriptions for all locales from `fastlane/metadata` | Humans only |
 | `ios beta` | Stub. Prints a notice; nothing is uploaded | Nobody yet |
 
@@ -128,4 +129,4 @@ Lanes (`android/fastlane/Fastfile`):
 
 The iOS lane is a stub until the Apple developer account and App Store
 Connect API key are set up. Until then, build with `flutter build ipa` and
-upload through Xcode or Transporter (see `docs/APP-STORES.md`).
+upload through Xcode or Transporter (see [DISTRIBUTION.md](DISTRIBUTION.md)).

@@ -189,9 +189,9 @@ class _FakeController implements MoavController {
   Future<DoctorReport> doctor() async => DoctorReport(
         collectedAt: DateTime(2026, 9, 14, 8),
         checks: const [
-          DoctorCheck(name: 'docker', result: CheckResult.pass, detail: 'Check Docker\n✓ Docker 29 — running'),
+          DoctorCheck(name: 'docker', result: CheckResult.pass, detail: 'Check Docker\n✓ Docker 29 - running'),
           DoctorCheck(name: 'host', result: CheckResult.warn, detail: 'Check CPU load\n! 929 MiB swapped out'),
-          DoctorCheck(name: 'services', result: CheckResult.fail, detail: 'Check services\n✗ sing-box — not running'),
+          DoctorCheck(name: 'services', result: CheckResult.fail, detail: 'Check services\n✗ sing-box - not running'),
         ],
       );
 
@@ -270,8 +270,8 @@ Widget _app(_FakeCredStore store, {List<Override> overrides = const []}) =>
 
 const _profile = ServerProfile(
   id: 's1',
-  label: 'York',
-  host: 'yorkschool.example',
+  label: 'Demo',
+  host: 'demo.example.org',
   port: 22,
   username: 'root',
   authMethod: SshAuthMethod.importedKey,
@@ -459,7 +459,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
     expect(find.text('Users'), findsOneWidget);
     await _scrollTo(tester, find.text('Deploy'));
@@ -510,7 +510,7 @@ void main() {
       ],
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
     await _scrollTo(tester, find.text('Deploy'));
     await tester.tap(find.text('Deploy'));
@@ -533,7 +533,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Users'));
     await tester.pumpAndSettle();
@@ -596,7 +596,7 @@ void main() {
       ],
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Services'));
     await tester.pumpAndSettle();
@@ -638,7 +638,7 @@ void main() {
     expect(find.byIcon(Icons.cancel), findsWidgets);
     await tester.tap(find.text('services'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('sing-box — not running'), findsOneWidget);
+    expect(find.textContaining('sing-box - not running'), findsOneWidget);
 
     // Analytics tab shows Grafana health, URL, metrics and protocol status.
     await tester.tap(find.text('Analytics'));
@@ -666,7 +666,7 @@ void main() {
       ],
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Users'));
     await tester.pumpAndSettle();
@@ -694,7 +694,7 @@ void main() {
       ],
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Users'));
     await tester.pumpAndSettle();
@@ -721,7 +721,7 @@ void main() {
       ],
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Users'));
     await tester.pumpAndSettle();
@@ -763,7 +763,7 @@ void main() {
       ],
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Services'));
     await tester.pumpAndSettle();
@@ -826,15 +826,15 @@ void main() {
 
     // Host plus the preselected key is enough to save.
     await tester.enterText(
-        find.widgetWithText(TextField, 'Host'), ' ssh://root@BitChat.Center:22/ ');
+        find.widgetWithText(TextField, 'Host'), ' ssh://root@Example.Org:22/ ');
     await tester.pumpAndSettle();
     await _scrollTo(tester, find.text('Save server'));
     await tester.tap(find.text('Save server'));
     await tester.pumpAndSettle();
 
     final saved = store.profiles.single;
-    expect(saved.host, 'bitchat.center');
-    expect(saved.label, 'bitchat.center');
+    expect(saved.host, 'example.org');
+    expect(saved.label, 'example.org');
     expect(store.secrets[saved.id], 'pem-new');
   });
 
@@ -863,13 +863,13 @@ void main() {
     final controller = _FakeController(const [])
       ..pingResult = ConnectionCheck(
         reachable: false,
-        error: 'Could not find yorkschool.example:22.',
+        error: 'Could not find demo.example.org:22.',
         failure: AppError.from(
           const SocketException(
             'Failed host lookup',
             osError: OSError('No address associated with hostname', 7),
           ),
-          host: 'yorkschool.example',
+          host: 'demo.example.org',
           port: 22,
         ),
       );
@@ -886,7 +886,7 @@ void main() {
     await tester.tap(find.text('Test connection'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Could not connect. Could not find yorkschool.example:22.'),
+    expect(find.text('Could not connect. Could not find demo.example.org:22.'),
         findsOneWidget);
     expect(find.textContaining('Check the hostname'), findsOneWidget);
     expect(find.byIcon(Icons.cloud_off), findsOneWidget);
@@ -908,7 +908,7 @@ void main() {
       ],
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('York'));
+    await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
 
     expect(find.text('Not checked yet'), findsOneWidget);
@@ -926,13 +926,13 @@ void main() {
 
   test('form normalises pasted connect strings before dialling', () {
     const pasted = AddServerFormState(
-      host: ' ssh://root@BitChat.Center:22/ ',
+      host: ' ssh://root@Example.Org:22/ ',
       authChoice: AuthChoice.password,
       password: 'p',
     );
     expect(pasted.hostError, isNull);
-    expect(pasted.normalizedHost, 'bitchat.center');
-    expect(pasted.toProfile('x').host, 'bitchat.center');
+    expect(pasted.normalizedHost, 'example.org');
+    expect(pasted.toProfile('x').host, 'example.org');
 
     const junk = AddServerFormState(host: 'not a host', authChoice: AuthChoice.password, password: 'p');
     expect(junk.hostError, isNotNull);

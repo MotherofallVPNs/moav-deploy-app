@@ -52,7 +52,7 @@ platform :android do
     )
   end
 
-  desc "Promote the current internal build to production (manual use only)"
+  desc "Promote the current open testing build to production (manual use only)"
   lane :promote_production do
     json_key = play_json_key
     validate_play_store_json_key(json_key: json_key)

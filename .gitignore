@@ -8,7 +8,6 @@ build/
 .idea/
 *.iml
 .DS_Store
-.worker.log
 **/*.g.dart
 
 # iOS
@@ -29,12 +28,9 @@ android/local.properties
 android/key.properties
 android/**/GeneratedPluginRegistrant.java
 android/app/.cxx/
+android/.kotlin/
 
-# orchestrator scratch files
-.worker-prompt-*.txt
-.worker.log.*
-
-# screenshot harness output (curated copies live in docs/screenshots/)
+# screenshot harness output (tool/screenshots.sh)
 shots/
 
 # fastlane / bundler

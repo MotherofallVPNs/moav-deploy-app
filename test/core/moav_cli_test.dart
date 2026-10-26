@@ -40,11 +40,11 @@ void main() {
       expect(MoavCli.classifyBundleFile('README.html'), isNull);
       expect(MoavCli.classifyBundleFile('reality.txt'),
           (protocol: 'reality', qr: true));
-      expect(MoavCli.classifyBundleFile('moav-yorks-wg.conf'),
+      expect(MoavCli.classifyBundleFile('moav-demo-wg.conf'),
           (protocol: 'wireguard', qr: true));
-      expect(MoavCli.classifyBundleFile('moav-yorks-wgws.conf'),
+      expect(MoavCli.classifyBundleFile('moav-demo-wgws.conf'),
           (protocol: 'wireguard-wstunnel', qr: true));
-      expect(MoavCli.classifyBundleFile('moav-yorks-awg.conf'),
+      expect(MoavCli.classifyBundleFile('moav-demo-awg.conf'),
           (protocol: 'amneziawg', qr: true));
       expect(MoavCli.classifyBundleFile('trusttunnel.toml'),
           (protocol: 'trusttunnel', qr: false));
