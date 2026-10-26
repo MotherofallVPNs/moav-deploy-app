@@ -94,10 +94,7 @@ class UsersScreen extends ConsumerWidget {
         Navigator.of(context).push(UserBundleScreen.route(profile, user.name));
       }
     } on Object catch (e) {
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(content: Text('Could not add user: ${errorSummary(e)}')),
-      );
+      showErrorSnackBar(messenger, e, prefix: 'Could not add user.');
     }
   }
 
@@ -133,9 +130,7 @@ class UsersScreen extends ConsumerWidget {
       await ref.read(usersProvider(profile.id).notifier).remove(user.name);
       messenger.showSnackBar(SnackBar(content: Text('Revoked ${user.name}')));
     } on Object catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Could not revoke: ${errorSummary(e)}')),
-      );
+      showErrorSnackBar(messenger, e, prefix: 'Could not revoke.');
     }
   }
 }

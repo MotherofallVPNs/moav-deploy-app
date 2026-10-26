@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/server_profile.dart';
+import '../../core/ssh_endpoint.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/error_view.dart';
 import 'servers_provider.dart';
@@ -110,13 +111,14 @@ class _EditServerScreenState extends ConsumerState<EditServerScreen> {
   );
 
   Future<void> _save() async {
-    final host = _host.text.trim();
+    final endpoint = SshEndpoint.tryParse(_host.text);
     final username = _username.text.trim();
     final port = int.tryParse(_port.text.trim());
-    if (host.isEmpty || host.contains(RegExp(r'\s'))) {
-      setState(() => _error = 'Enter a valid host without spaces');
+    if (endpoint == null) {
+      setState(() => _error = 'Enter a hostname or IP address, without spaces');
       return;
     }
+    final host = endpoint.host;
     if (username.isEmpty || port == null || port < 1 || port > 65535) {
       setState(() => _error = 'Enter a username and a port from 1 to 65535');
       return;

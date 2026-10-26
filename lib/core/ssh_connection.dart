@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:dartssh2/dartssh2.dart';
 
+import 'ssh_endpoint.dart';
+
 /// Thin helpers over dartssh2 shared by the controller and the key installer.
 class SshConnection {
   SshConnection._();
@@ -20,7 +22,9 @@ class SshConnection {
     if (privateKeyPem == null && password == null) {
       throw StateError('No credential available for $username@$host');
     }
-    final socket = await SSHSocket.connect(host, port, timeout: timeout);
+    // Last line of defence: the resolver only understands a bare name or IP.
+    final target = SshEndpoint.normalizeHost(host);
+    final socket = await SSHSocket.connect(target, port, timeout: timeout);
     final client = SSHClient(
       socket,
       username: username,
