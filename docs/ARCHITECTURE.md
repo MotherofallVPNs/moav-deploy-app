@@ -33,6 +33,7 @@ abstract class MoavController {
   Future<TestMatrix> testUser(String name);        // per-protocol pass/fail
   Future<void> service(ServiceAction a);           // start/stop/restart/regenerate-users
   Future<ServiceStatusReport> status();            // moav status table and dashboard URLs
+  Future<ServiceFlags> serviceFlags();             // ENABLE_* and DEFAULT_PROFILES from .env
   Future<Monitoring> monitoring();                 // Grafana health and dashboard URLs (fast)
   Future<MetricsSnapshot> metrics();               // Prometheus headline metrics (slow, own timeout)
   Future<ServerInfo> serverInfo();                 // host CPU/RAM/disk + moav and component versions
@@ -79,7 +80,11 @@ The concrete models live in `lib/core/moav_controller.dart`.
   every prompt falls back to a sane default when `/dev/tty` cannot be opened,
   which is the case under `setsid`. Domain, email and admin password are not
   installer inputs; they live in `/opt/moav/.env`, which the job writes
-  before `moav bootstrap --yes`.
+  before `moav bootstrap --yes`. The services picked in the app go the same
+  way: `DEFAULT_PROFILES` (what `bootstrap --yes` and `moav start` use
+  without a TTY) plus the `ENABLE_*` flags, the latter only into a `.env`
+  the job itself created. The catalog of profiles and flags is
+  `lib/core/moav_services.dart`, mirrored from upstream `lib/service.sh`.
 - **Parsing.** Command strings and parsers live in `lib/core/moav_cli.dart`,
   separate from the transport, with fixture-based unit tests. `user list`,
   `doctor` and `status` are text-parsed; `test` uses `--json`, found as the

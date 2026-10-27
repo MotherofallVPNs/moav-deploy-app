@@ -3,6 +3,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/moav_controller.dart';
+import '../../core/moav_services.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/error_view.dart';
@@ -57,6 +58,9 @@ class _InstallFormState extends State<_InstallForm> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _branch = TextEditingController();
+
+  /// Profiles to build and start; starts as upstream's own default set.
+  final _profiles = <String>{...MoavProfiles.defaults};
 
   @override
   void dispose() {
@@ -155,13 +159,51 @@ class _InstallFormState extends State<_InstallForm> {
           autocorrect: false,
           onChanged: (_) => setState(() {}),
         ),
+        SectionHeader(
+          'Services',
+          trailing: TextButton(
+            onPressed: _profiles.length == MoavProfiles.defaults.length &&
+                    _profiles.containsAll(MoavProfiles.defaults)
+                ? null
+                : () => setState(() => _profiles
+                  ..clear()
+                  ..addAll(MoavProfiles.defaults)),
+            child: const Text('Reset to default'),
+          ),
+        ),
+        Text(
+          'Written to DEFAULT_PROFILES before moav bootstrap --yes; the '
+          'matching ENABLE_* flags are set only in a .env this install '
+          'creates. Change them later from the Services tab.',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: 10),
+        ServiceSelection(
+          selected: _profiles,
+          onChanged: (name, on) => setState(() {
+            if (on) {
+              _profiles.add(name);
+            } else {
+              _profiles.remove(name);
+            }
+          }),
+        ),
+        if (_profiles.isEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Select at least one service.',
+            style: theme.textTheme.bodySmall?.copyWith(color: MoavColors.fail),
+          ),
+        ],
         if (s.error != null) ...[
           const SizedBox(height: 16),
           ErrorBanner(error: s.error!),
         ],
         const SizedBox(height: 24),
         GradientButton(
-          onPressed: s.starting || _passwordError != null ? null : _start,
+          onPressed: s.starting || _passwordError != null || _profiles.isEmpty
+              ? null
+              : _start,
           busy: s.starting,
           expand: true,
           icon: Icons.rocket_launch_outlined,
@@ -179,6 +221,61 @@ class _InstallFormState extends State<_InstallForm> {
         email: _email.text.trim(),
         adminPassword: _password.text,
         extraEnv: branch.isEmpty ? const {} : {'MOAV_BRANCH': branch},
+        // Catalog order, so DEFAULT_PROFILES reads like upstream writes it.
+        profiles: [
+          for (final p in MoavProfiles.all)
+            if (_profiles.contains(p.name)) p.name,
+        ],
+      ),
+    );
+  }
+}
+
+/// One checkbox per MoaV profile, in upstream's menu order.
+class ServiceSelection extends StatelessWidget {
+  const ServiceSelection({
+    super.key,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final Set<String> selected;
+  final void Function(String profile, bool selected) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return MoavCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          for (final (i, p) in MoavProfiles.all.indexed) ...[
+            if (i > 0) const Divider(),
+            CheckboxListTile(
+              key: ValueKey('profile-${p.name}'),
+              value: selected.contains(p.name),
+              onChanged: (v) => onChanged(p.name, v ?? false),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: const EdgeInsets.fromLTRB(6, 0, 14, 0),
+              title: Row(
+                children: [
+                  Text(p.name, style: moavMono(size: 13, weight: FontWeight.w600)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      p.title,
+                      style: theme.textTheme.bodySmall?.copyWith(color: MoavColors.textSecondary),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (!p.recommended)
+                    const StatusPill('opt-in', tone: StatusTone.neutral, dot: false),
+                ],
+              ),
+              subtitle: Text(p.description, style: theme.textTheme.bodySmall),
+            ),
+          ],
+        ],
       ),
     );
   }

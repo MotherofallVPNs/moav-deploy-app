@@ -397,6 +397,13 @@ class _FakeController implements MoavController {
   Future<void> service(ServiceAction action) => _lag(null, 800);
 
   @override
+  Future<ServiceFlags> serviceFlags() => _lag(ServiceFlags(
+        collectedAt: DateTime.now(),
+        values: const {'ENABLE_GOOSERELAY': 'false', 'ENABLE_MONITORING': 'true'},
+        defaultProfiles: const ['proxy', 'wireguard', 'admin', 'monitoring'],
+      ));
+
+  @override
   Future<Monitoring> monitoring() => _lag(Monitoring(
         grafanaUrl: Uri.parse('https://vpn.example.org:9444'),
         grafanaCdnUrl: Uri.parse('https://grafana.vpn.example.org:2083'),
