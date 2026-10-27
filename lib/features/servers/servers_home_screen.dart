@@ -10,6 +10,7 @@ import '../../widgets/error_view.dart';
 import '../admin/admin_panel_screen.dart';
 import '../deploy/deploy_screen.dart';
 import '../keys/keyring_screen.dart';
+import '../operate/grafana_screen.dart';
 import '../server/server_screen.dart';
 import '../users/users_screen.dart';
 import '../wipe/wipe_dialog.dart';
@@ -158,7 +159,7 @@ Future<void> _handleHomeAction(
   }
 }
 
-enum _TileAction { test, edit, users, admin, deploy, remove }
+enum _TileAction { test, edit, users, grafana, admin, deploy, remove }
 
 class _ServerTile extends ConsumerWidget {
   const _ServerTile({required this.profile});
@@ -210,6 +211,9 @@ class _ServerTile extends ConsumerWidget {
               _TileAction.admin => Navigator.of(
                 context,
               ).push(AdminPanelScreen.route(profile)),
+              _TileAction.grafana => Navigator.of(
+                context,
+              ).push(GrafanaScreen.route(profile)),
               _TileAction.deploy => Navigator.of(
                 context,
               ).push(DeployScreen.route(profile)),
@@ -235,6 +239,13 @@ class _ServerTile extends ConsumerWidget {
                 child: ListTile(
                   leading: Icon(Icons.people_outline),
                   title: Text('Users'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _TileAction.grafana,
+                child: ListTile(
+                  leading: Icon(Icons.dashboard_outlined),
+                  title: Text('Grafana'),
                 ),
               ),
               PopupMenuItem(

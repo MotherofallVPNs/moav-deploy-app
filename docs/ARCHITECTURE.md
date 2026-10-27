@@ -41,6 +41,8 @@ abstract class MoavController {
   Future<InstallStatus?> updateStatus();           // progress of that job
   Future<AdminPanelAccess> adminPanelAccess();     // PORT_ADMIN + ADMIN_PASSWORD from .env (memory only)
   Future<ServerTunnel> openTunnel(int remotePort); // ssh -L for server-local web UIs
+  Future<GrafanaAccess> grafanaAccess();           // PORT_GRAFANA + ADMIN_PASSWORD from .env (memory only)
+  Future<ChartsSnapshot> metricSeries();           // Prometheus range queries for the native charts
 }
 ```
 

@@ -28,6 +28,14 @@ typedef CommandRunner = Future<SshOutput> Function(
   Duration timeout,
 });
 
+/// Uploads one file to the server; tests inject one to capture the scripts
+/// [startUpdate] ships without SSH.
+typedef FileWriter = Future<void> Function(
+  String path,
+  String content, {
+  String mode,
+});
+
 /// [MoavController] that drives the `moav` CLI over SSH using dartssh2.
 ///
 /// Every method documents the exact CLI invocation it runs. Output parsing
@@ -42,13 +50,16 @@ class SshMoavController implements MoavController {
     required SecretResolver secretResolver,
     this.connectTimeout = const Duration(seconds: 15),
     CommandRunner? runner,
+    FileWriter? fileWriter,
   })  : _secretResolver = secretResolver,
-        _runner = runner;
+        _runner = runner,
+        _fileWriter = fileWriter;
 
   final ServerProfile profile;
   final SecretResolver _secretResolver;
   final Duration connectTimeout;
   final CommandRunner? _runner;
+  final FileWriter? _fileWriter;
 
   SSHClient? _client;
 
@@ -420,6 +431,30 @@ class SshMoavController implements MoavController {
     }
   }
 
+  /// `PORT_GRAFANA`, `ENABLE_MONITORING`, the answering scheme and
+  /// `ADMIN_PASSWORD` from `.env` (see [MoavCli.grafanaPanel]); handled
+  /// exactly like [adminPanelAccess] so the password never reaches a log.
+  @override
+  Future<GrafanaAccess> grafanaAccess() async {
+    final out = await _run(MoavCli.grafanaPanel,
+        allowFailure: true, timeout: flagsTimeout);
+    final access = MoavCli.parseGrafanaPanel(out.stdout);
+    if (access == null) {
+      throw StateError('Could not read the Grafana settings from .env');
+    }
+    return access;
+  }
+
+  // TODO(#8): Prometheus is not published on the host and there is no
+  // `moav metrics`; range queries go through `docker exec` as well.
+  /// Time series for the native charts (see [MoavCli.prometheusRange]).
+  @override
+  Future<ChartsSnapshot> metricSeries() async {
+    final out = await _run(MoavCli.prometheusRange,
+        allowFailure: true, timeout: metricsTimeout);
+    return MoavCli.parseMetricSeries(out.stdout);
+  }
+
   /// A `grep` over `.env`; see [MoavCli.serviceFlags].
   static const flagsTimeout = Duration(seconds: 30);
 
@@ -527,13 +562,7 @@ class SshMoavController implements MoavController {
   /// with `setsid nohup`. A job still running is left alone (idempotent).
   @override
   Future<void> startUpdate() async {
-    final client = await _connected();
-    await SshConnection.writeFile(
-      client,
-      UpdateScript.scriptPath,
-      UpdateScript.body,
-      mode: '700',
-    );
+    await _writeFile(UpdateScript.scriptPath, UpdateScript.body, mode: '700');
     final out = await _run(UpdateScript.launch);
     if (!RegExp(r'^(STARTED|RUNNING) \d+', multiLine: true)
         .hasMatch(out.stdout)) {
@@ -553,6 +582,14 @@ class SshMoavController implements MoavController {
 
   static void _logFormat(String command, CliFormat format) =>
       AppLog.info('moav-cli', '$command via ${format.name}');
+
+  Future<void> _writeFile(String path, String content,
+      {String mode = '600'}) async {
+    final writer = _fileWriter;
+    if (writer != null) return writer(path, content, mode: mode);
+    final client = await _connected();
+    await SshConnection.writeFile(client, path, content, mode: mode);
+  }
 
   Future<SshOutput> _run(
     String command, {

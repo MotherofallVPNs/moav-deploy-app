@@ -370,7 +370,7 @@ void main() {
   });
 
   test('update script runs the documented command without a TTY', () {
-    expect(UpdateScript.body, contains('moav_cmd update < /dev/null'));
+    expect(UpdateScript.body, contains('moav_cmd update --yes < /dev/null'));
     expect(UpdateScript.body, isNot(contains('__UPDATE_COMMAND__')));
     expect(UpdateScript.body, contains('MOAV_NONINTERACTIVE=1'));
     expect(UpdateScript.body, isNot(contains('reset --hard')));

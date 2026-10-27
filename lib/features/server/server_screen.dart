@@ -8,6 +8,7 @@ import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
 import '../admin/admin_panel_screen.dart';
 import '../deploy/deploy_screen.dart';
+import '../operate/grafana_screen.dart';
 import '../operate/operate_screen.dart';
 import '../servers/servers_provider.dart';
 import '../users/users_screen.dart';
@@ -116,6 +117,13 @@ class ServerScreen extends StatelessWidget {
             subtitle: 'CPU, RAM, disk, versions and MoaV updates',
             onTap: () => Navigator.of(context)
                 .push(OperateScreen.route(profile, tab: OperateTab.server)),
+          ),
+          _HubTile(
+            icon: Icons.dashboard_outlined,
+            title: 'Grafana',
+            subtitle: 'Full dashboards, through this SSH connection',
+            onTap: () =>
+                Navigator.of(context).push(GrafanaScreen.route(profile)),
           ),
           _HubTile(
             icon: Icons.admin_panel_settings_outlined,

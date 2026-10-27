@@ -152,6 +152,17 @@ class MetricsNotifier extends CachedFetchNotifier<MetricsSnapshot> {
   String get activityLabel => 'Prometheus metrics';
 }
 
+/// Time series for the native charts; refreshed on its own, like metrics.
+class ChartsNotifier extends CachedFetchNotifier<ChartsSnapshot> {
+  ChartsNotifier(super.serverId);
+
+  @override
+  Future<ChartsSnapshot> fetch() => controller.metricSeries();
+
+  @override
+  String get activityLabel => 'Prometheus charts';
+}
+
 class ServerInfoNotifier extends CachedFetchNotifier<ServerInfo> {
   ServerInfoNotifier(super.serverId);
 
@@ -185,6 +196,9 @@ final monitoringProvider = NotifierProvider.family<MonitoringNotifier,
 
 final metricsProvider = NotifierProvider.family<MetricsNotifier,
     FetchState<MetricsSnapshot>, String>(MetricsNotifier.new);
+
+final chartsProvider = NotifierProvider.family<ChartsNotifier,
+    FetchState<ChartsSnapshot>, String>(ChartsNotifier.new);
 
 final serverInfoProvider = NotifierProvider.family<ServerInfoNotifier,
     FetchState<ServerInfo>, String>(ServerInfoNotifier.new);

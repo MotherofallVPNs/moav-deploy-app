@@ -70,6 +70,14 @@ abstract class MoavController {
   /// Opens a loopback listener on this device that forwards to [remotePort]
   /// on the server, so a server-local web UI can be loaded in a webview.
   Future<ServerTunnel> openTunnel(int remotePort);
+
+  /// Port, scheme and admin password of Grafana, read from the server's
+  /// `.env`. Same in-memory contract as [adminPanelAccess].
+  Future<GrafanaAccess> grafanaAccess();
+
+  /// Time series for the native charts (Prometheus range queries). Slow,
+  /// like [metrics], and cached independently of it.
+  Future<ChartsSnapshot> metricSeries();
 }
 
 /// Receives chunks of command output as they arrive.
@@ -109,6 +117,79 @@ class AdminPanelAccess {
   String toString() =>
       'AdminPanelAccess(port: $port, enabled: $enabled, '
       'password: ${password == null ? 'absent' : 'present'})';
+}
+
+/// What the app needs to open Grafana through the SSH session.
+class GrafanaAccess {
+  const GrafanaAccess({
+    required this.port,
+    this.enabled = true,
+    this.scheme = 'https',
+    this.password,
+  });
+
+  /// Host port Grafana is published on (`PORT_GRAFANA`, default 9444).
+  final int port;
+
+  /// `ENABLE_MONITORING` as written in `.env` (unset counts as enabled).
+  final bool enabled;
+
+  /// `https` when the Grafana entrypoint found a certificate, else `http`.
+  final String scheme;
+
+  /// `ADMIN_PASSWORD` from `.env` (Grafana's `GF_SECURITY_ADMIN_PASSWORD`),
+  /// or `null` when unset. Memory only, like [AdminPanelAccess.password].
+  final String? password;
+
+  @override
+  String toString() =>
+      'GrafanaAccess(port: $port, enabled: $enabled, scheme: $scheme, '
+      'password: ${password == null ? 'absent' : 'present'})';
+}
+
+/// One Prometheus series: a query's samples over the charted window.
+class MetricSeries {
+  const MetricSeries({
+    required this.key,
+    required this.points,
+    this.label,
+  });
+
+  /// The query name from the snippet (`cpu_percent`, `users_singbox`, ...).
+  final String key;
+
+  /// A distinguishing label (e.g. the `job`) when one query yields several
+  /// series; `null` for a scalar query.
+  final String? label;
+  final List<SeriesPoint> points;
+
+  double? get last => points.isEmpty ? null : points.last.value;
+}
+
+class SeriesPoint {
+  const SeriesPoint(this.time, this.value);
+
+  final DateTime time;
+  final double value;
+}
+
+/// Time series for the native charts, fetched separately from
+/// [MetricsSnapshot].
+class ChartsSnapshot {
+  const ChartsSnapshot({
+    required this.series,
+    required this.collectedAt,
+    this.window = const Duration(hours: 1),
+  });
+
+  final List<MetricSeries> series;
+  final DateTime collectedAt;
+
+  /// How far back the range queries reached.
+  final Duration window;
+
+  List<MetricSeries> named(String key) =>
+      [for (final s in series) if (s.key == key) s];
 }
 
 // --- Models ---
