@@ -10,6 +10,7 @@ import 'moav_cli.dart';
 import 'moav_controller.dart';
 import 'server_profile.dart';
 import 'ssh_connection.dart';
+import 'update_script.dart';
 
 /// Resolves the secret needed to authenticate a [ServerProfile].
 ///
@@ -142,7 +143,10 @@ class SshMoavController implements MoavController {
     return parseInstallStatus(out.stdout);
   }
 
-  static InstallStatus parseInstallStatus(String raw) {
+  static InstallStatus parseInstallStatus(
+    String raw, {
+    int totalSteps = InstallScript.totalSteps,
+  }) {
     final idx = raw.indexOf('__LOG__');
     final head = idx < 0 ? raw : raw.substring(0, idx);
     final alive = head.contains('ALIVE');
@@ -172,7 +176,7 @@ class SshMoavController implements MoavController {
         }
       }
     }
-    final progress = step == 0 ? null : step / InstallScript.totalSteps;
+    final progress = step == 0 ? null : step / totalSteps;
 
     if (exitCode != null) {
       return InstallStatus(
@@ -390,15 +394,105 @@ class SshMoavController implements MoavController {
     return parsed.report;
   }
 
-  // TODO(#8): Prometheus is not published on the host and there is no
-  // `moav metrics`; this stays a text/shell path.
-  /// Dashboard URLs from `.env`, Grafana `/api/health`, and headline metrics
-  /// from Prometheus via `docker exec` (see [MoavCli.monitoring]).
+  /// Dashboard URLs from `.env` and Grafana `/api/health` only; cheap, so it
+  /// gets the default timeout (see [MoavCli.monitoring]).
   @override
   Future<Monitoring> monitoring() async {
     final out = await _run(MoavCli.monitoring,
-        allowFailure: true, timeout: const Duration(minutes: 1));
+        allowFailure: true, timeout: monitoringTimeout);
     return MoavCli.parseMonitoring(out.stdout);
+  }
+
+  // TODO(#8): Prometheus is not published on the host and there is no
+  // `moav metrics`; this stays a text/shell path.
+  /// Headline metrics from Prometheus via `docker exec`
+  /// (see [MoavCli.prometheus]). Slow on a loaded box, hence [metricsTimeout].
+  @override
+  Future<MetricsSnapshot> metrics() async {
+    final out = await _run(MoavCli.prometheus,
+        allowFailure: true, timeout: metricsTimeout);
+    final parsed = MoavCli.parseMonitoring(out.stdout);
+    return MetricsSnapshot(
+      metrics: parsed.metrics,
+      collectedAt: parsed.collectedAt ?? DateTime.now(),
+    );
+  }
+
+  /// Grafana health and dashboard URLs; a quick shell snippet.
+  static const monitoringTimeout = Duration(seconds: 30);
+
+  /// Prometheus queries through `docker exec` on a possibly swapping box.
+  static const metricsTimeout = Duration(seconds: 90);
+
+  /// `/proc` reads plus `moav --version`; includes a one-second CPU sample.
+  static const serverInfoTimeout = Duration(seconds: 45);
+
+  /// `moav doctor updates` asks GitHub with a five-second curl limit.
+  static const updateCheckTimeout = Duration(seconds: 60);
+
+  // TODO(#8): no `--json` for host metrics or `moav --version`; text path.
+  /// CPU, RAM, swap, disk and uptime from `/proc` and `df`, plus the
+  /// `moav --version` banner and component table (see [MoavCli.hostInfo]).
+  @override
+  Future<ServerInfo> serverInfo() async {
+    final out = await _run(MoavCli.hostInfo,
+        allowFailure: true, timeout: serverInfoTimeout);
+    final info = MoavCli.parseHostInfo(out.stdout);
+    if (info.host.isEmpty && info.version.moavVersion == null) {
+      throw StateError(
+          'The server returned no host metrics: ${_short(out.combined)}');
+    }
+    return info;
+  }
+
+  /// `moav doctor updates --json` (exits non-zero when an update exists); a
+  /// 2.2.x box rejects the flag, so `moav doctor updates` is run instead.
+  @override
+  Future<UpdateCheck> checkForUpdates() async {
+    var out = await _run(MoavCli.doctorUpdatesJson,
+        allowFailure: true, timeout: updateCheckTimeout);
+    var check = MoavCli.parseUpdateCheck(out.stdout);
+    if (check != null && MoavCli.decodeJsonDocument(out.stdout) != null) {
+      _logFormat('doctor updates', CliFormat.json);
+    } else {
+      _logFormat('doctor updates', CliFormat.text);
+      out = await _run(MoavCli.doctorUpdates,
+          allowFailure: true, timeout: updateCheckTimeout);
+      check = MoavCli.parseUpdateCheck(out.stdout);
+    }
+    if (check == null) {
+      throw StateError(
+          'moav doctor updates gave no version: ${_short(out.combined)}');
+    }
+    return check;
+  }
+
+  /// Uploads [UpdateScript] to `~/.moav-deploy/update.sh` and launches it
+  /// with `setsid nohup`. A job still running is left alone (idempotent).
+  @override
+  Future<void> startUpdate() async {
+    final client = await _connected();
+    await SshConnection.writeFile(
+      client,
+      UpdateScript.scriptPath,
+      UpdateScript.body,
+      mode: '700',
+    );
+    final out = await _run(UpdateScript.launch);
+    if (!RegExp(r'^(STARTED|RUNNING) \d+', multiLine: true)
+        .hasMatch(out.stdout)) {
+      throw StateError('Could not start the update: ${_short(out.combined)}');
+    }
+  }
+
+  /// `kill -0 $(cat update.pid); tail -n 400 ~/.moav-deploy/update.log`.
+  @override
+  Future<InstallStatus?> updateStatus() async {
+    final out = await _run(UpdateScript.status(), allowFailure: true);
+    if (out.stdout.contains('NOJOB') || !out.stdout.contains('__LOG__')) {
+      return null;
+    }
+    return parseInstallStatus(out.stdout, totalSteps: UpdateScript.totalSteps);
   }
 
   static void _logFormat(String command, CliFormat format) =>

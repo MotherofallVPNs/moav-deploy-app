@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/core/moav_cli.dart';
+import 'package:moav_deploy/core/moav_controller.dart';
 import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/core/ssh_connection.dart';
 import 'package:moav_deploy/core/ssh_moav_controller.dart';
+import 'package:moav_deploy/core/update_script.dart';
 import 'package:moav_deploy/security/app_log.dart';
 
 String fixture(String name) => File('test/fixtures/$name').readAsStringSync();
@@ -269,6 +271,112 @@ void main() {
       expect(box.ran, ["user remove 'dave' --json", "user revoke 'dave' 2>&1", 'user list --json']);
       expect(logged, contains(contains('user remove via text')));
     });
+  });
+
+  group('checkForUpdates', () {
+    test('2.3.x: json document, one round trip', () async {
+      final box = FakeBox({
+        tail(MoavCli.doctorUpdatesJson): failed(jsonFixture('doctor_updates.json')),
+      });
+      final c = await controllerFor(box).checkForUpdates();
+      expect(c.updateAvailable, isTrue);
+      expect(c.latestVersion, '2.3.1');
+      expect(box.ran, ['doctor updates --json']);
+      expect(logged, contains(contains('doctor updates via json')));
+    });
+
+    test('2.2.x rejects the flag: falls back to the text check', () async {
+      final box = FakeBox({
+        tail(MoavCli.doctorUpdatesJson): doctorRejected,
+        tail(MoavCli.doctorUpdates): ok(
+          'updates - Check for MoaV updates\n'
+          '    Current version: v2.2.2\n'
+          '    ✓ Up to date (v2.2.2)\n',
+        ),
+      });
+      final c = await controllerFor(box).checkForUpdates();
+      expect(c.updateAvailable, isFalse);
+      expect(c.currentVersion, '2.2.2');
+      expect(box.ran, ['doctor updates --json', 'doctor updates 2>&1']);
+      expect(logged, contains(contains('doctor updates via text')));
+    });
+
+    test('no version on either path throws', () async {
+      final box = FakeBox({
+        tail(MoavCli.doctorUpdatesJson): failed('nope'),
+        tail(MoavCli.doctorUpdates): ok('nope'),
+      });
+      await expectLater(controllerFor(box).checkForUpdates(), throwsStateError);
+    });
+  });
+
+  group('serverInfo', () {
+    test('parses the host snippet', () async {
+      final box = FakeBox({tail(MoavCli.hostInfo): ok(fixture('host_info.txt'))});
+      final s = await controllerFor(box).serverInfo();
+      expect(s.version.moavVersion, '2.3.0');
+      expect(s.host.cpuCount, 2);
+      expect(s.host.diskUsage, closeTo(0.285, 0.001));
+    });
+
+    test('an empty answer throws instead of showing blanks', () async {
+      final box = FakeBox({tail(MoavCli.hostInfo): ok('')});
+      await expectLater(controllerFor(box).serverInfo(), throwsStateError);
+    });
+  });
+
+  group('metrics', () {
+    test('parses the prometheus snippet into a snapshot', () async {
+      final box = FakeBox({
+        tail(MoavCli.prometheus): ok(
+          '__URLS__\n__HEALTH__\n\n__PROM__\n__Q__ load1\n'
+          '{"status":"success","data":{"result":[{"value":[1,"2.15"]}]}}\n__END__\n',
+        ),
+      });
+      final m = await controllerFor(box).metrics();
+      expect(m.metrics.single.name, 'Load (1m)');
+      expect(m.metrics.single.value, '2.15');
+    });
+  });
+
+  group('updateStatus', () {
+    test('no job ever launched gives null', () async {
+      final box = FakeBox({tail(UpdateScript.status()): ok('NOJOB\n')});
+      expect(await controllerFor(box).updateStatus(), isNull);
+    });
+
+    test('a live job reports its step out of three', () async {
+      final box = FakeBox({
+        tail(UpdateScript.status()): ok(
+          'ALIVE\n__LOG__\n[moav-deploy] step 2/3: Run moav update\nPulling...\n',
+        ),
+      });
+      final s = (await controllerFor(box).updateStatus())!;
+      expect(s.phase, InstallPhase.running);
+      expect(s.progress, closeTo(2 / 3, 1e-9));
+      expect(s.message, 'Run moav update');
+    });
+
+    test('a finished job reports the exit marker', () async {
+      final box = FakeBox({
+        tail(UpdateScript.status()): ok(
+          'DEAD\n__LOG__\n[moav-deploy] step 3/3: Report\n[moav-deploy] exit=0\n',
+        ),
+      });
+      final s = (await controllerFor(box).updateStatus())!;
+      expect(s.phase, InstallPhase.succeeded);
+      expect(s.progress, 1.0);
+    });
+  });
+
+  test('update script runs the documented command without a TTY', () {
+    expect(UpdateScript.body, contains('moav_cmd update < /dev/null'));
+    expect(UpdateScript.body, isNot(contains('__UPDATE_COMMAND__')));
+    expect(UpdateScript.body, contains('MOAV_NONINTERACTIVE=1'));
+    expect(UpdateScript.body, isNot(contains('reset --hard')));
+    expect(UpdateScript.body, isNot(contains('moav_cmd restart')));
+    expect(UpdateScript.body, isNot(contains('moav_cmd build')));
+    expect(UpdateScript.launch, contains('setsid nohup bash update.sh'));
   });
 
   test('log lines never carry the document, only the format', () async {

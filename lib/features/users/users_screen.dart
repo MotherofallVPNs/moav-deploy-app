@@ -6,9 +6,10 @@ import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/error_view.dart';
 import 'user_bundle_screen.dart';
+import 'user_detail_screen.dart';
 import 'users_provider.dart';
 
-/// Lists MoaV users on a server; add / remove; tap for the bundle + QR.
+/// Lists MoaV users on a server; add / remove; tap for the detail view.
 class UsersScreen extends ConsumerWidget {
   const UsersScreen({super.key, required this.profile});
 
@@ -155,7 +156,7 @@ class _UserTile extends StatelessWidget {
             : 'No bundle · ${user.protocols.join(', ')}';
     return MoavCard(
       padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
-      onTap: () => Navigator.of(context).push(UserBundleScreen.route(profile, user.name)),
+      onTap: () => Navigator.of(context).push(UserDetailScreen.route(profile, user)),
       child: Row(
         children: [
           MoavAvatar(user.name),

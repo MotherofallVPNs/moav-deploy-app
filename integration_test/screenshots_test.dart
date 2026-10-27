@@ -404,6 +404,11 @@ class _FakeController implements MoavController {
         grafanaHealthy: true,
         grafanaVersion: '13.1.3',
         collectedAt: DateTime.now(),
+      ));
+
+  @override
+  Future<MetricsSnapshot> metrics() => _lag(MetricsSnapshot(
+        collectedAt: DateTime.now(),
         metrics: const [
           Metric(name: 'Exporters up', value: '11'),
           Metric(name: 'Load (1m)', value: '4.80'),
@@ -414,6 +419,51 @@ class _FakeController implements MoavController {
           Metric(name: 'Disk free', value: '41.2 GB'),
         ],
       ));
+
+  @override
+  Future<ServerInfo> serverInfo() => _lag(ServerInfo(
+        collectedAt: DateTime.now(),
+        host: const HostMetrics(
+          cpuCount: 2,
+          cpuUsage: 0.37,
+          load1: 1.62,
+          load5: 1.48,
+          load15: 1.51,
+          memTotalBytes: 2057842688,
+          memAvailableBytes: 812646400,
+          swapTotalBytes: 2147479552,
+          swapFreeBytes: 1610612736,
+          diskTotalBytes: 61255049216,
+          diskAvailableBytes: 44237496320,
+          uptime: Duration(days: 80, hours: 3),
+        ),
+        version: const VersionInfo(
+          moavVersion: '2.2.2',
+          branch: 'main',
+          commit: 'a1b2c3d',
+          components: [
+            ComponentVersion(name: 'sing-box', version: '1.14.3', source: 'github.com/SagerNet/sing-box'),
+            ComponentVersion(name: 'wstunnel', version: '11.1.0', source: 'github.com/erebe/wstunnel'),
+            ComponentVersion(name: 'xray-core', version: 'v26.10.21', source: 'github.com/XTLS/Xray-core'),
+            ComponentVersion(name: 'wireguard', version: 'alpine', source: 'wireguard-tools package'),
+          ],
+        ),
+      ));
+
+  @override
+  Future<UpdateCheck> checkForUpdates() => _lag(UpdateCheck(
+        updateAvailable: true,
+        checkedAt: DateTime.now(),
+        currentVersion: '2.2.2',
+        latestVersion: '2.3.1',
+        message: 'Update available: v2.3.1',
+      ));
+
+  @override
+  Future<void> startUpdate() => _lag(null);
+
+  @override
+  Future<InstallStatus?> updateStatus() => _lag(null);
 
   @override
   Future<TestMatrix> testUser(String name) => _lag(TestMatrix(

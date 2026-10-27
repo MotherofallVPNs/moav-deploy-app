@@ -79,14 +79,18 @@ class MoavCli {
     return '$prelude"\$M" $verb$target 2>&1';
   }
 
-  /// Emits marker-delimited sections: dashboard URLs derived exactly like
-  /// `get_grafana_url` in `lib/common.sh`, the Grafana `/api/health` body, and
-  /// one Prometheus instant query per headline metric (via `docker exec`, as
-  /// Prometheus is not published on the host).
-  // TODO(#8): no `moav metrics` upstream; this shell snippet is the text path.
-  static const monitoring = '''
+  /// Shared by [monitoring] and [prometheus]: reads a `.env` value.
+  static const _envReader = '''
 cd $root 2>/dev/null || exit 0
 ev() { grep -E "^\$1=" .env 2>/dev/null | head -1 | cut -d= -f2- | sed -E 's/[[:space:]]+#.*\$//; s/^"//; s/"\$//; s/^'"'"'//; s/'"'"'\$//' | tr -d '[:space:]'; }
+''';
+
+  /// Emits marker-delimited sections: dashboard URLs derived exactly like
+  /// `get_grafana_url` in `lib/common.sh` and the Grafana `/api/health`
+  /// body. The Prometheus section is left empty; see [prometheus].
+  // TODO(#8): no `moav metrics` upstream; this shell snippet is the text path.
+  static const monitoring = '''
+$_envReader
 DOMAIN=\$(ev DOMAIN); SERVER_IP=\$(ev SERVER_IP); PG=\$(ev PORT_GRAFANA); PA=\$(ev PORT_ADMIN); GS=\$(ev GRAFANA_SUBDOMAIN); CDN=\$(ev ENABLE_CDN); PC=\$(ev PORT_GRAFANA_CDN)
 H="\${DOMAIN:-\${SERVER_IP:-localhost}}"
 echo "__URLS__"
@@ -97,9 +101,24 @@ echo "__HEALTH__"
 curl -sk -m 5 "https://127.0.0.1:\${PG:-9444}/api/health" 2>/dev/null || curl -s -m 5 "http://127.0.0.1:\${PG:-9444}/api/health" 2>/dev/null
 echo
 echo "__PROM__"
+echo "__END__"
+''';
+
+  /// One Prometheus instant query per headline metric (via `docker exec`, as
+  /// Prometheus is not published on the host). The queries run in parallel
+  /// and print in a fixed order, so one slow query costs seconds, not
+  /// seconds times seven. Same markers as [monitoring]; URL/health empty.
+  // TODO(#8): no `moav metrics` upstream; this shell snippet is the text path.
+  static const prometheus = '''
+$_envReader
+echo "__URLS__"
+echo "__HEALTH__"
+echo
+echo "__PROM__"
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx moav-prometheus; then
   PP=\$(docker inspect -f '{{join .Args " "}}' moav-prometheus 2>/dev/null | grep -oE 'listen-address=[^ ]*:[0-9]+' | grep -oE '[0-9]+\$'); PP=\${PP:-9090}
-  q() { echo "__Q__ \$1"; docker exec moav-prometheus wget -qO- -T 5 "http://127.0.0.1:\$PP/api/v1/query?query=\$2" 2>/dev/null; echo; }
+  T=\$(mktemp -d 2>/dev/null || echo "/tmp/moav-deploy-prom.\$\$"); mkdir -p "\$T"
+  q() { docker exec moav-prometheus wget -qO- -T 8 "http://127.0.0.1:\$PP/api/v1/query?query=\$2" > "\$T/\$1" 2>/dev/null & }
   q targets_up 'count(up%3D%3D1)'
   q load1 'node_load1'
   q mem_available_bytes 'node_memory_MemAvailable_bytes'
@@ -107,9 +126,37 @@ if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx moav-prometheus; then
   q rx_bytes_per_s 'sum(rate(node_network_receive_bytes_total%7Bdevice!~%22lo%7Cveth.*%7Cbr-.*%7Cdocker.*%22%7D%5B5m%5D))'
   q tx_bytes_per_s 'sum(rate(node_network_transmit_bytes_total%7Bdevice!~%22lo%7Cveth.*%7Cbr-.*%7Cdocker.*%22%7D%5B5m%5D))'
   q disk_free_bytes 'node_filesystem_avail_bytes%7Bmountpoint%3D%22/%22%7D'
+  wait
+  for n in targets_up load1 mem_available_bytes mem_total_bytes rx_bytes_per_s tx_bytes_per_s disk_free_bytes; do
+    echo "__Q__ \$n"; cat "\$T/\$n" 2>/dev/null; echo
+  done
+  rm -rf "\$T"
 fi
 echo "__END__"
 ''';
+
+  /// Host metrics and versions, marker-delimited. CPU usage comes from two
+  /// `/proc/stat` samples one second apart; `df -Pk` keeps it POSIX so it
+  /// also works on an Alpine box.
+  // TODO(#8): no `--json` for host metrics or `moav --version`; text path.
+  static const hostInfo = '''
+$prelude
+echo "__LOAD__"; cat /proc/loadavg 2>/dev/null
+echo "__NPROC__"; nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null
+echo "__CPU1__"; grep '^cpu ' /proc/stat 2>/dev/null
+sleep 1
+echo "__CPU2__"; grep '^cpu ' /proc/stat 2>/dev/null
+echo "__MEM__"; grep -E '^(MemTotal|MemAvailable|SwapTotal|SwapFree):' /proc/meminfo 2>/dev/null
+echo "__DISK__"; df -Pk / 2>/dev/null | tail -n 1
+echo "__UPTIME__"; cat /proc/uptime 2>/dev/null
+echo "__VERSION__"; "\$M" --version 2>/dev/null
+echo "__GIT__"; git -C $root rev-parse --abbrev-ref HEAD 2>/dev/null; git -C $root rev-parse --short HEAD 2>/dev/null
+echo "__END__"
+''';
+
+  /// `moav doctor updates --json` (2.3+) and its 2.2.x text form.
+  static const doctorUpdatesJson = '$prelude"\$M" doctor updates --json';
+  static const doctorUpdates = '$prelude"\$M" doctor updates 2>&1';
 
   // ---------------------------------------------------------------------------
   // JSON documents (MoaV >= 2.3.0)
@@ -748,6 +795,218 @@ echo "__END__"
       i++;
     }
     return '${b.toStringAsFixed(b >= 100 || i == 0 ? 0 : 1)} ${units[i]}';
+  }
+
+  // ---------------------------------------------------------------------------
+  // host info snippet (TODO(#8): text path)
+  // ---------------------------------------------------------------------------
+
+  static const hostMarkers = [
+    '__LOAD__',
+    '__NPROC__',
+    '__CPU1__',
+    '__CPU2__',
+    '__MEM__',
+    '__DISK__',
+    '__UPTIME__',
+    '__VERSION__',
+    '__GIT__',
+    '__END__',
+  ];
+
+  /// Splits marker-delimited output into `marker -> body` (markers sit alone
+  /// on a line). Text before the first marker is dropped.
+  static Map<String, String> sections(String raw, List<String> markers) {
+    final out = <String, String>{};
+    String? current;
+    final buf = StringBuffer();
+    for (final line in SshConnection.stripAnsi(raw).split('\n')) {
+      final t = line.trim();
+      if (markers.contains(t)) {
+        if (current != null) out[current] = buf.toString();
+        current = t;
+        buf.clear();
+        continue;
+      }
+      if (current != null) buf.writeln(line);
+    }
+    if (current != null) out[current] = buf.toString();
+    return out;
+  }
+
+  static ServerInfo parseHostInfo(String raw, {DateTime? now}) {
+    final s = sections(raw, hostMarkers);
+    return ServerInfo(
+      host: parseHostMetrics(s),
+      version: parseVersionInfo(
+        s['__VERSION__'] ?? '',
+        git: s['__GIT__'] ?? '',
+      ),
+      collectedAt: now ?? DateTime.now(),
+    );
+  }
+
+  static HostMetrics parseHostMetrics(Map<String, String> s) {
+    final load = (s['__LOAD__'] ?? '').trim().split(RegExp(r'\s+'));
+    double? loadAt(int i) => load.length > i ? double.tryParse(load[i]) : null;
+
+    final mem = <String, int>{};
+    for (final line in (s['__MEM__'] ?? '').split('\n')) {
+      final m = RegExp(r'^(\w+):\s+(\d+)\s*kB').firstMatch(line.trim());
+      if (m != null) mem[m.group(1)!] = int.parse(m.group(2)!) * 1024;
+    }
+
+    int? diskTotal;
+    int? diskAvail;
+    final disk = (s['__DISK__'] ?? '').trim().split(RegExp(r'\s+'));
+    if (disk.length >= 4) {
+      final total = int.tryParse(disk[1]);
+      final avail = int.tryParse(disk[3]);
+      if (total != null) diskTotal = total * 1024;
+      if (avail != null) diskAvail = avail * 1024;
+    }
+
+    final up = double.tryParse(
+      (s['__UPTIME__'] ?? '').trim().split(RegExp(r'\s+')).first,
+    );
+
+    return HostMetrics(
+      cpuCount: int.tryParse((s['__NPROC__'] ?? '').trim()),
+      cpuUsage: cpuUsageBetween(s['__CPU1__'] ?? '', s['__CPU2__'] ?? ''),
+      load1: loadAt(0),
+      load5: loadAt(1),
+      load15: loadAt(2),
+      memTotalBytes: mem['MemTotal'],
+      memAvailableBytes: mem['MemAvailable'],
+      swapTotalBytes: mem['SwapTotal'],
+      swapFreeBytes: mem['SwapFree'],
+      diskTotalBytes: diskTotal,
+      diskAvailableBytes: diskAvail,
+      uptime: up == null ? null : Duration(seconds: up.round()),
+    );
+  }
+
+  /// Busy fraction between two `cpu ...` lines of `/proc/stat`
+  /// (user nice system idle iowait irq softirq steal).
+  static double? cpuUsageBetween(String first, String second) {
+    List<int>? fields(String line) {
+      final parts = line.trim().split(RegExp(r'\s+'));
+      if (parts.length < 5 || parts.first != 'cpu') return null;
+      final v = parts.skip(1).map(int.tryParse).toList();
+      return v.any((x) => x == null) ? null : v.cast<int>();
+    }
+
+    final a = fields(first);
+    final b = fields(second);
+    if (a == null || b == null) return null;
+    int sum(List<int> v) => v.fold(0, (x, y) => x + y);
+    int idle(List<int> v) => v[3] + (v.length > 4 ? v[4] : 0);
+    final total = sum(b) - sum(a);
+    if (total <= 0) return null;
+    final busy = total - (idle(b) - idle(a));
+    return (busy / total).clamp(0, 1).toDouble();
+  }
+
+  static final _componentRowRe =
+      RegExp(r'^\s*│\s*(.+?)\s*│\s*(.+?)\s*│\s*(.+?)\s*│\s*$');
+
+  /// `moav --version`: the `MoaV vX.Y.Z` banner plus the box-drawn
+  /// component table (`│ name │ version │ source │`).
+  static VersionInfo parseVersionInfo(String raw, {String git = ''}) {
+    final text = SshConnection.stripAnsi(raw);
+    String? version;
+    final components = <ComponentVersion>[];
+    for (final line in text.split('\n')) {
+      version ??= _versionRe.firstMatch(line)?.group(1);
+      final m = _componentRowRe.firstMatch(line);
+      if (m == null) continue;
+      final name = m.group(1)!;
+      if (name == 'Component') continue;
+      final source = m.group(3)!;
+      components.add(ComponentVersion(
+        name: name,
+        version: m.group(2)!,
+        source: source.isEmpty ? null : source,
+      ));
+    }
+    final gitLines = SshConnection.stripAnsi(git)
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    return VersionInfo(
+      moavVersion: version,
+      branch: gitLines.isNotEmpty ? gitLines[0] : null,
+      commit: gitLines.length > 1 ? gitLines[1] : null,
+      components: components,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // moav doctor updates
+  // ---------------------------------------------------------------------------
+
+  static final _currentVersionRe =
+      RegExp(r'Current version:\s*v?([0-9][^\s;]*)');
+  static final _updateAvailableRe =
+      RegExp(r'Update available:\s*v?([0-9][^\s;(]*)');
+  static final _upToDateRe = RegExp(r'Up to date\s*\(v?([^)]+)\)');
+  static final _aheadRe = RegExp(r'ahead of latest release\s*v?([^)]+)\)');
+
+  /// Reads the `updates` check from `doctor updates --json` or the 2.2.x
+  /// text; both carry the same sentences. Returns `null` when the output
+  /// mentions no version at all (the check did not run).
+  static UpdateCheck? parseUpdateCheck(String raw, {DateTime? now}) {
+    var text = SshConnection.stripAnsi(raw);
+    final doc = decodeJsonDocument(raw);
+    if (doc is List) {
+      text = [
+        for (final e in doc)
+          if (_asMap(e)?['id']?.toString() == 'updates')
+            _asMap(e)!['detail']?.toString() ?? '',
+      ].join('; ');
+    }
+    final current = _currentVersionRe.firstMatch(text)?.group(1);
+    final available = _updateAvailableRe.firstMatch(text)?.group(1);
+    final upToDate = _upToDateRe.firstMatch(text)?.group(1);
+    final ahead = _aheadRe.firstMatch(text)?.group(1);
+    if (current == null && available == null && upToDate == null) return null;
+    final at = now ?? DateTime.now();
+    if (available != null) {
+      return UpdateCheck(
+        updateAvailable: true,
+        checkedAt: at,
+        currentVersion: current,
+        latestVersion: available,
+        message: 'Update available: v$available',
+      );
+    }
+    if (upToDate != null) {
+      return UpdateCheck(
+        updateAvailable: false,
+        checkedAt: at,
+        currentVersion: current ?? upToDate,
+        latestVersion: upToDate,
+        message: 'Up to date (v$upToDate)',
+      );
+    }
+    if (ahead != null) {
+      return UpdateCheck(
+        updateAvailable: false,
+        checkedAt: at,
+        currentVersion: current,
+        latestVersion: ahead,
+        message: 'Running v$current, ahead of the latest release v$ahead',
+      );
+    }
+    return UpdateCheck(
+      updateAvailable: false,
+      checkedAt: at,
+      currentVersion: current,
+      message: text.contains('Could not check')
+          ? 'Could not check: the server cannot reach GitHub.'
+          : 'Could not read the update check.',
+    );
   }
 
   static String _tail(String s) {

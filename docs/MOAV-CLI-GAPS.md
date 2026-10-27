@@ -45,6 +45,9 @@ through `AppLog` in debug builds. The remaining text-only paths carry a
 | Prometheus reachable from the host, or a `moav metrics` command | headline metrics | still not published on the host; the app uses `docker exec moav-prometheus wget` with the port parsed from `--web.listen-address` |
 | `moav user revoke` exit code on the text path | detect failure without `--json` | `--json` exits non-zero on an unknown user; the text path still exits 0 |
 | `moav regenerate-users` / `moav start|stop|restart` result | service actions and bundle refresh | plain text, no `--json`; the app relies on the exit code and re-reads `moav status` afterwards |
+| Host metrics (CPU, RAM, swap, disk) | the Server tab | no `moav` command; the app reads `/proc/loadavg`, `/proc/stat`, `/proc/meminfo`, `/proc/uptime` and `df -Pk /` in one marker-delimited snippet (`MoavCli.hostInfo`) |
+| `moav --version` component table | the Server tab | box-drawn text; parsed by `│` columns (`MoavCli.parseVersionInfo`) |
+| `moav update` without prompts | in-app self-update | `moav doctor updates --json` reports the verdict; `moav update` still prompts via `read` for local changes / `.env` additions. The app runs it detached with stdin on `/dev/null`, so every prompt takes its default (stash, add defaults); services are never rebuilt or restarted by the app (`lib/core/update_script.dart`) |
 
 ## JSON shapes the app consumes (MoaV 2.3.x)
 
