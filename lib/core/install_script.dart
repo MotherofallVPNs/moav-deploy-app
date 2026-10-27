@@ -1,12 +1,14 @@
 import 'moav_controller.dart';
+import 'moav_services.dart';
 import 'ssh_connection.dart';
 
 /// Builds the detached, idempotent install job that runs on the server.
 ///
 /// A bash script plus a mode-0600 `spec.env` are written to `~/.moav-deploy/`.
 /// The script never modifies an existing `/opt/moav`, runs the upstream
-/// installer without a TTY, fills only empty `.env` values, bootstraps only a
-/// never-bootstrapped box, and starts services only after its own bootstrap.
+/// installer without a TTY, fills only empty `.env` values (plus the chosen
+/// services, see [spec]), bootstraps only a never-bootstrapped box, and
+/// starts services only after its own bootstrap.
 /// `[moav-deploy] step N/5` and `[moav-deploy] exit=<code>` markers make the
 /// log self-describing. The five steps are documented in docs/ARCHITECTURE.md.
 class InstallScript {
@@ -23,11 +25,25 @@ class InstallScript {
 
   /// Installer inputs as a sourceable env file. Values are single-quoted so
   /// any character is safe; the file is never echoed to the log.
+  ///
+  /// `MD_PROFILES` becomes `DEFAULT_PROFILES` (what `moav bootstrap --yes`
+  /// and `moav start` use without a TTY); `MD_ENABLE` carries the matching
+  /// `ENABLE_*=true|false` pairs, applied only to a `.env` this run creates.
   static String spec(InstallSpec s) {
+    final profiles = s.profiles
+        .where(MoavProfiles.validName.hasMatch)
+        .toSet()
+        .join(' ');
+    final enable = MoavProfiles.enableFlagsFor(s.profiles)
+        .entries
+        .map((e) => '${e.key}=${e.value}')
+        .join(' ');
     final lines = <String>[
       'MD_DOMAIN=${SshConnection.shellQuote(s.domain.trim())}',
       'MD_EMAIL=${SshConnection.shellQuote(s.email.trim())}',
       'MD_ADMIN_PASSWORD=${SshConnection.shellQuote(s.adminPassword)}',
+      'MD_PROFILES=${SshConnection.shellQuote(profiles)}',
+      'MD_ENABLE=${SshConnection.shellQuote(enable)}',
     ];
     for (final e in s.extraEnv.entries) {
       final key = e.key.trim();
@@ -47,6 +63,7 @@ INSTALL_DIR="${MOAV_INSTALL_DIR:-/opt/moav}"
 SPEC="$HOME/.moav-deploy/spec.env"
 if [ -f "$SPEC" ]; then . "$SPEC"; fi
 MD_DOMAIN="${MD_DOMAIN:-}"; MD_EMAIL="${MD_EMAIL:-}"; MD_ADMIN_PASSWORD="${MD_ADMIN_PASSWORD:-}"
+MD_PROFILES="${MD_PROFILES:-}"; MD_ENABLE="${MD_ENABLE:-}"
 
 step()   { echo; echo "[moav-deploy] step $1/5: $2"; }
 finish() { rm -f "$SPEC"; echo; echo "[moav-deploy] exit=$1"; exit "$1"; }
@@ -71,11 +88,20 @@ fi
 rc=$?
 if [ $rc -ne 0 ]; then echo "Installer failed (exit $rc)"; finish $rc; fi
 
-step 3 "Configure .env"
+step 3 "Configure .env (domain, email, password, services)"
 cd "$INSTALL_DIR" || finish 1
+ENV_FRESH=0
 if [ ! -f .env ]; then
   cp .env.example .env && chmod 600 .env && echo "Created .env from .env.example"
+  ENV_FRESH=1
 fi
+# set_env KEY VALUE: replaces an existing or commented-out line, else appends
+# (same rules as upstream update_env_var). Only used on a .env created above.
+set_env() {
+  if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env
+  elif grep -qE "^#[[:space:]]*$1=" .env; then sed -i "s|^#[[:space:]]*$1=.*|$1=$2|" .env
+  else echo "$1=$2" >> .env; fi
+}
 # set_if_empty KEY VALUE: only fills empty or placeholder values.
 set_if_empty() {
   local key="$1" val="$2" cur tmp
@@ -96,6 +122,17 @@ set_if_empty DOMAIN "$MD_DOMAIN"
 set_if_empty ACME_EMAIL "$MD_EMAIL"
 set_if_empty ADMIN_PASSWORD "$MD_ADMIN_PASSWORD"
 unset MD_ADMIN_PASSWORD
+# Service selection. DEFAULT_PROFILES is what 'moav bootstrap --yes' and
+# 'moav start' use without a TTY; ENABLE_* only changes on a fresh .env.
+if [ "$ENV_FRESH" = 1 ]; then
+  for kv in $MD_ENABLE; do
+    case "$kv" in ENABLE_*=true|ENABLE_*=false) set_env "${kv%%=*}" "${kv#*=}" ;; esac
+  done
+  [ -n "$MD_ENABLE" ] && echo "  ENABLE_* flags set from the selected services"
+else
+  echo "  Existing .env: ENABLE_* flags kept as configured"
+fi
+set_if_empty DEFAULT_PROFILES "$MD_PROFILES"
 
 step 4 "Bootstrap (keys, certificates, configs)"
 BOOTSTRAPPED_NOW=0

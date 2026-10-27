@@ -6,6 +6,7 @@
 library;
 
 import 'app_error.dart';
+import 'moav_services.dart';
 
 /// Every server operation the app can perform, expressed once.
 abstract class MoavController {
@@ -35,11 +36,15 @@ abstract class MoavController {
   /// Per-protocol connectivity test for a user (`moav test <user>`).
   Future<TestMatrix> testUser(String name);
 
-  /// Start / stop / restart services, or regenerate all users.
+  /// Start / stop / restart services, enable / disable one in `.env`, or
+  /// regenerate all users.
   Future<void> service(ServiceAction action);
 
   /// Per-service state (`moav status`) plus the dashboard URLs it prints.
   Future<ServiceStatusReport> status();
+
+  /// The `ENABLE_*` toggles and `DEFAULT_PROFILES` from the server's `.env`.
+  Future<ServiceFlags> serviceFlags();
 
   /// Grafana URL and its health, plus the dashboard URLs. Fast.
   Future<Monitoring> monitoring();
@@ -101,6 +106,7 @@ class InstallSpec {
     required this.email,
     required this.adminPassword,
     this.extraEnv = const {},
+    this.profiles = MoavProfiles.defaults,
   });
 
   final String domain;
@@ -112,8 +118,13 @@ class InstallSpec {
   /// Additional `KEY=value` pairs for the installer environment.
   final Map<String, String> extraEnv;
 
+  /// Compose profiles to build and start (`DEFAULT_PROFILES`), in the order
+  /// given. Defaults to [MoavProfiles.defaults], i.e. upstream's own set.
+  final List<String> profiles;
+
   @override
-  String toString() => 'InstallSpec(domain: $domain, email: $email)';
+  String toString() =>
+      'InstallSpec(domain: $domain, email: $email, profiles: $profiles)';
 }
 
 /// Identifies a detached install job on the server.
@@ -306,7 +317,21 @@ class TestMatrix {
   int count(CheckResult r) => results.where((t) => t.result == r).length;
 }
 
-enum ServiceActionKind { start, stop, restart, regenerateUsers }
+enum ServiceActionKind {
+  start,
+  stop,
+  restart,
+  regenerateUsers,
+
+  /// Sets the service's `ENABLE_*` flag(s) to `true` in `.env`, then starts it.
+  enable,
+
+  /// Sets the service's `ENABLE_*` flag(s) to `false` in `.env`, then stops it.
+  disable;
+
+  /// Needs a [ServiceAction.service]; `all` makes no sense for a flag.
+  bool get perService => this == enable || this == disable;
+}
 
 class ServiceAction {
   const ServiceAction(this.kind, {this.service});
@@ -528,4 +553,33 @@ class ServiceStatusReport {
   final List<String> defaultProfiles;
 
   int get runningCount => services.where((s) => s.state.isUp).length;
+}
+
+/// `ENABLE_*` toggles and `DEFAULT_PROFILES` as written in `/opt/moav/.env`.
+class ServiceFlags {
+  const ServiceFlags({
+    required this.values,
+    required this.collectedAt,
+    this.defaultProfiles = const [],
+  });
+
+  /// Raw `ENABLE_*` values, unquoted; an empty string means "unset".
+  final Map<String, String> values;
+  final List<String> defaultProfiles;
+  final DateTime collectedAt;
+
+  /// Whether [key] is on, using upstream's default when it is unset.
+  bool isOn(String key) {
+    final v = values[key];
+    if (v == null || v.isEmpty) return MoavServices.flagDefault(key);
+    return v == 'true';
+  }
+
+  /// Whether [service] is enabled in `.env`: `null` when the service has no
+  /// flag of its own. A multi-flag service counts as enabled if any flag is.
+  bool? serviceEnabled(String service) {
+    final t = MoavServices.toggleFor(service);
+    if (t == null) return null;
+    return t.allFlags.any(isOn);
+  }
 }

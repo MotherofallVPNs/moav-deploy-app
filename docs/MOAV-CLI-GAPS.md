@@ -45,6 +45,7 @@ through `AppLog` in debug builds. The remaining text-only paths carry a
 | Prometheus reachable from the host, or a `moav metrics` command | headline metrics | still not published on the host; the app uses `docker exec moav-prometheus wget` with the port parsed from `--web.listen-address` |
 | `moav user revoke` exit code on the text path | detect failure without `--json` | `--json` exits non-zero on an unknown user; the text path still exits 0 |
 | `moav regenerate-users` / `moav start|stop|restart` result | service actions and bundle refresh | plain text, no `--json`; the app relies on the exit code and re-reads `moav status` afterwards |
+| `ENABLE_*` flags readable and settable through `moav` | per-service enable/disable in the app | no `moav enable|disable` and `moav status --json` omits the flags; the app reads `.env` with `grep` and writes it like `update_env_var` (`MoavCli.serviceFlags`, `MoavCli.setEnableFlags`) |
 | Host metrics (CPU, RAM, swap, disk) | the Server tab | no `moav` command; the app reads `/proc/loadavg`, `/proc/stat`, `/proc/meminfo`, `/proc/uptime` and `df -Pk /` in one marker-delimited snippet (`MoavCli.hostInfo`) |
 | `moav --version` component table | the Server tab | box-drawn text; parsed by `│` columns (`MoavCli.parseVersionInfo`) |
 | `moav update` without prompts | in-app self-update | `moav doctor updates --json` reports the verdict; `moav update` still prompts via `read` for local changes / `.env` additions. The app runs it detached with stdin on `/dev/null`, so every prompt takes its default (stash, add defaults); services are never rebuilt or restarted by the app (`lib/core/update_script.dart`) |
@@ -94,8 +95,33 @@ Captured verbatim from v2.3.1 into `test/fixtures/json/`.
 1. Preflight: report whether `/opt/moav` exists; it is never removed or updated.
 2. `curl -fsSL https://moav.sh/install.sh | bash` with no TTY (see defaults above).
 3. Ensure `.env` exists; fill only empty/placeholder `DOMAIN`, `ACME_EMAIL`, `ADMIN_PASSWORD`.
+   Then write the services chosen in the app: `DEFAULT_PROFILES` is filled
+   when empty (it is what `moav bootstrap --yes` and a bare `moav start`
+   use without a TTY, see `BOOTSTRAP_ASSUME_YES` in `lib/bootstrap.sh`), and
+   the matching `ENABLE_*=true|false` flags are written only to a `.env`
+   this run created, so an existing box keeps its flags.
 4. `moav bootstrap --yes` **only** if `outputs/bundles` is empty (never bootstrapped).
 5. `moav start` only if step 4 ran; otherwise print `moav status` and leave services alone.
+
+There is no non-interactive profile argument on `moav bootstrap` or
+`moav start`; `install.sh --non-interactive` derives `DEFAULT_PROFILES` from
+the `ENABLE_*` environment the same way (`ni_default_profiles`). The app's
+profile list and flag table (`lib/core/moav_services.dart`) mirror
+`select_profiles`, `profile_enabled` and `confirm_disabled_profile` in
+upstream `lib/service.sh` (v2.3.1).
+
+## Per-service controls
+
+`moav start|stop|restart <service>` take a Compose service name as printed
+by `moav status` (`cmd_start` resolves aliases such as `sing-box` to the
+`proxy` profile, `stop`/`restart` act on the single container). A bare
+`moav start <name>` on a service whose `ENABLE_*` is `false` prompts, and
+without a TTY it skips and exits non-zero, which the app surfaces verbatim.
+Enable/disable have no `moav` verb: the app writes the flag(s) with the
+same replace/uncomment/append rules as upstream `update_env_var`
+(`MoavCli.setEnableFlags`) and then runs `moav start` or `moav stop` for the
+service. Flags are read back with a `grep` over `.env`
+(`MoavCli.serviceFlags`); `moav status --json` does not report them.
 
 Switching step 2 to `MOAV_NONINTERACTIVE=1` with the `MOAV_*` answers in the
 environment is the natural next step once 2.3.x is the baseline; it removes

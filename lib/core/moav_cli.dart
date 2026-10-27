@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'moav_controller.dart';
+import 'moav_services.dart';
 import 'ssh_connection.dart';
 
 /// Which CLI output format a parser consumed.
@@ -66,17 +67,85 @@ class MoavCli {
 
   // TODO(#8): `start|stop|restart|regenerate-users` have no `--json`; the
   // app relies on the exit code and re-reads `moav status` afterwards.
+  /// `moav start|stop|restart [service]` or `moav regenerate-users`. The
+  /// enable/disable kinds are not CLI verbs; see [setEnableFlags].
   static String service(ServiceAction a) {
     final verb = switch (a.kind) {
       ServiceActionKind.start => 'start',
       ServiceActionKind.stop => 'stop',
       ServiceActionKind.restart => 'restart',
       ServiceActionKind.regenerateUsers => 'regenerate-users',
+      ServiceActionKind.enable || ServiceActionKind.disable =>
+        throw ArgumentError.value(a.kind, 'kind', 'not a moav verb'),
     };
     final target = a.service == null || a.kind == ServiceActionKind.regenerateUsers
         ? ''
         : ' ${SshConnection.shellQuote(a.service!)}';
     return '$prelude"\$M" $verb$target 2>&1';
+  }
+
+  // TODO(#8): no `moav profiles --json` or `moav enable|disable`; the
+  // `ENABLE_*` flags are read from and written to `.env` directly.
+  /// Prints every `ENABLE_*` line and `DEFAULT_PROFILES` from `.env`.
+  static const serviceFlags = '''
+cd $root 2>/dev/null || exit 0
+grep -E '^(ENABLE_[A-Z0-9_]+|DEFAULT_PROFILES)=' .env 2>/dev/null
+''';
+
+  /// Writes [flags] into `.env` the way upstream `update_env_var` does
+  /// (replace the line, uncomment a `#KEY=` line, else append) and echoes
+  /// the result. Keys and values are validated here, never quoted.
+  static String setEnableFlags(Map<String, bool> flags) {
+    if (flags.isEmpty) throw ArgumentError('no flags to set');
+    for (final k in flags.keys) {
+      if (!MoavServices.validFlag.hasMatch(k)) {
+        throw ArgumentError.value(k, 'flag', 'not an ENABLE_* flag');
+      }
+    }
+    final sets = flags.entries
+        .map((e) => 'set_env ${e.key} ${e.value}')
+        .join('\n');
+    final keys = flags.keys.join('|');
+    return '''
+cd $root 2>/dev/null || { echo "$root not found"; exit 1; }
+[ -w .env ] || { echo ".env is not writable"; exit 1; }
+set_env() {
+  if grep -q "^\$1=" .env; then sed -i "s|^\$1=.*|\$1=\$2|" .env
+  elif grep -qE "^#[[:space:]]*\$1=" .env; then sed -i "s|^#[[:space:]]*\$1=.*|\$1=\$2|" .env
+  else echo "\$1=\$2" >> .env; fi
+}
+$sets
+grep -E '^($keys)=' .env
+''';
+  }
+
+  /// Parses [serviceFlags] output: `KEY=value` lines, quotes and trailing
+  /// comments stripped. Missing keys are simply absent (upstream defaults
+  /// apply via [ServiceFlags.isOn]).
+  static ServiceFlags parseServiceFlags(String raw, {DateTime? now}) {
+    final values = <String, String>{};
+    var profiles = const <String>[];
+    for (final line in SshConnection.stripAnsi(raw).split('\n')) {
+      final i = line.indexOf('=');
+      if (i <= 0) continue;
+      final key = line.substring(0, i).trim();
+      var value = line.substring(i + 1).replaceFirst(RegExp(r'\s+#.*$'), '').trim();
+      if (value.length >= 2 &&
+          (value.startsWith('"') && value.endsWith('"') ||
+              value.startsWith("'") && value.endsWith("'"))) {
+        value = value.substring(1, value.length - 1);
+      }
+      if (key == 'DEFAULT_PROFILES') {
+        profiles = value.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+      } else if (MoavServices.validFlag.hasMatch(key)) {
+        values[key] = value.toLowerCase();
+      }
+    }
+    return ServiceFlags(
+      values: values,
+      defaultProfiles: profiles,
+      collectedAt: now ?? DateTime.now(),
+    );
   }
 
   /// Shared by [monitoring] and [prometheus]: reads a `.env` value.

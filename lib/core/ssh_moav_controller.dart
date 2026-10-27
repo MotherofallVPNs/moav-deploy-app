@@ -8,6 +8,7 @@ import 'app_error.dart';
 import 'install_script.dart';
 import 'moav_cli.dart';
 import 'moav_controller.dart';
+import 'moav_services.dart';
 import 'server_profile.dart';
 import 'ssh_connection.dart';
 import 'update_script.dart';
@@ -370,10 +371,48 @@ class SshMoavController implements MoavController {
 
   // TODO(#8): no `--json` for these; only the exit code signals failure.
   /// `moav start|stop|restart [service]` or `moav regenerate-users`.
+  ///
+  /// Enable/disable first write the service's `ENABLE_*` flag(s) to `.env`
+  /// (see [MoavCli.setEnableFlags]), then run `moav start` / `moav stop`
+  /// for it, so a failure names the step that broke.
   @override
   Future<void> service(ServiceAction action) async {
-    if (action.service != null) _validateName(action.service!);
+    final svc = action.service;
+    if (svc != null) _validateName(svc);
+    if (action.kind.perService) {
+      if (svc == null) {
+        throw ArgumentError('${action.kind.name} needs a service name');
+      }
+      final toggle = MoavServices.toggleFor(svc);
+      if (toggle == null) {
+        throw StateError(
+            "'$svc' has no ENABLE_* flag of its own; it follows the protocols it serves.");
+      }
+      final enabled = action.kind == ServiceActionKind.enable;
+      await _run(MoavCli.setEnableFlags(toggle.flags(enabled: enabled)),
+          timeout: flagsTimeout);
+      await _run(
+        MoavCli.service(ServiceAction(
+          enabled ? ServiceActionKind.start : ServiceActionKind.stop,
+          service: svc,
+        )),
+        timeout: const Duration(minutes: 10),
+      );
+      return;
+    }
     await _run(MoavCli.service(action), timeout: const Duration(minutes: 10));
+  }
+
+  /// A `grep` over `.env`; see [MoavCli.serviceFlags].
+  static const flagsTimeout = Duration(seconds: 30);
+
+  // TODO(#8): no `moav profiles --json`; `.env` is read directly.
+  /// `ENABLE_*` toggles and `DEFAULT_PROFILES` from `/opt/moav/.env`.
+  @override
+  Future<ServiceFlags> serviceFlags() async {
+    final out = await _run(MoavCli.serviceFlags,
+        allowFailure: true, timeout: flagsTimeout);
+    return MoavCli.parseServiceFlags(out.stdout);
   }
 
   /// `moav status --json`; 2.2.x ignores the flag and prints the box-drawn

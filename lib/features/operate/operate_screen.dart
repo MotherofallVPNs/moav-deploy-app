@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/moav_controller.dart';
+import '../../core/moav_services.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/cached_view.dart';
@@ -119,14 +120,35 @@ class _ServicesTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(statusProvider(profile.id));
     final statusNotifier = ref.read(statusProvider(profile.id).notifier);
+    final flags = ref.watch(serviceFlagsProvider(profile.id)).data;
     final actions = ref.watch(serviceActionsProvider(profile.id));
     final notifier = ref.read(serviceActionsProvider(profile.id).notifier);
 
     ref.listen(serviceActionsProvider(profile.id), (prev, next) {
-      final text = next.error ?? next.message;
-      if (text != null && text != (prev?.error ?? prev?.message)) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
-      }
+      final error = next.error;
+      final text = error?.summary ?? next.message;
+      if (text == null) return;
+      if (next.message == prev?.message && identical(error, prev?.error)) return;
+      final detail = error?.detail;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(text),
+        duration: Duration(seconds: error == null ? 4 : 8),
+        action: error == null || detail == null
+            ? null
+            : SnackBarAction(
+                label: 'Details',
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: Text(error.message),
+                    content: SingleChildScrollView(child: CodeBlock(detail, size: 11)),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+                    ],
+                  ),
+                ),
+              ),
+      ));
     });
 
     Future<void> confirmAndRun(ServiceAction a, {String? warning}) async {
@@ -147,10 +169,33 @@ class _ServicesTab extends ConsumerWidget {
       await notifier.run(a);
     }
 
+    /// Confirms before the disruptive kinds, then runs [a] for one service.
+    Future<void> rowAction(ServiceStatus svc, ServiceActionKind kind) {
+      final a = ServiceAction(kind, service: svc.name);
+      final toggle = MoavServices.toggleFor(svc.name);
+      final flagList = toggle == null
+          ? ''
+          : (kind == ServiceActionKind.enable ? toggle.onFlags : toggle.allFlags).join(', ');
+      final warning = switch (kind) {
+        ServiceActionKind.start => null,
+        ServiceActionKind.stop => '${svc.name} will stop. Clients on it will disconnect.',
+        ServiceActionKind.restart => '${svc.name} will restart. Clients on it will disconnect.',
+        ServiceActionKind.disable => '${svc.name} will stop, and $flagList will be set to '
+            'false in .env so it no longer starts with moav start.',
+        // Multi-flag services: say exactly which flags are being flipped.
+        ServiceActionKind.enable => toggle != null && toggle.onFlags.length > 1
+            ? 'Sets $flagList to true in .env, then starts ${svc.name}.'
+            : null,
+        ServiceActionKind.regenerateUsers => null,
+      };
+      return confirmAndRun(a, warning: warning);
+    }
+
     return StaleRefresher(
-      onOpen: (ref) => ref
-          .read(statusProvider(profile.id).notifier)
-          .refreshIfStale(tabStaleAfter),
+      onOpen: (ref) {
+        ref.read(statusProvider(profile.id).notifier).refreshIfStale(tabStaleAfter);
+        ref.read(serviceFlagsProvider(profile.id).notifier).refreshIfStale(tabStaleAfter);
+      },
       child: CachedView<ServiceStatusReport>(
         state: status,
         onRefresh: statusNotifier.refresh,
@@ -238,14 +283,11 @@ class _ServicesTab extends ConsumerWidget {
                     if (i > 0) const Divider(),
                     _ServiceRow(
                       service: svc,
+                      enabled: flags?.serviceEnabled(svc.name),
+                      toggleable: MoavServices.toggleFor(svc.name) != null,
                       busy: actions.busy,
-                      onAction: (kind) => confirmAndRun(
-                        ServiceAction(kind, service: svc.name),
-                        warning: kind == ServiceActionKind.start
-                            ? null
-                            : '${svc.name} will ${kind == ServiceActionKind.stop ? 'stop' : 'restart'}. '
-                                'Clients on it will disconnect.',
-                      ),
+                      active: actions.isRunningFor(svc.name),
+                      onAction: (kind) => rowAction(svc, kind),
                     ),
                   ],
                 ],
@@ -322,10 +364,24 @@ class _ServiceRow extends StatelessWidget {
     required this.service,
     required this.busy,
     required this.onAction,
+    this.enabled,
+    this.toggleable = false,
+    this.active = false,
   });
 
   final ServiceStatus service;
+
+  /// `ENABLE_*` verdict from `.env`; `null` when unknown or not applicable.
+  final bool? enabled;
+
+  /// The service has a flag of its own (enable/disable are offered).
+  final bool toggleable;
+
+  /// Any action is in flight (menus are locked).
   final bool busy;
+
+  /// The in-flight action targets this row.
+  final bool active;
   final void Function(ServiceActionKind) onAction;
 
   @override
@@ -367,16 +423,44 @@ class _ServiceRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
+          if (enabled == false) ...[
+            const StatusPill('disabled', tone: StatusTone.neutral, dot: false),
+            const SizedBox(width: 6),
+          ],
           StatusPill(label, tone: tone),
-          PopupMenuButton<ServiceActionKind>(
-            enabled: !busy,
-            onSelected: onAction,
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: ServiceActionKind.restart, child: Text('Restart')),
-              PopupMenuItem(value: ServiceActionKind.stop, child: Text('Stop')),
-              PopupMenuItem(value: ServiceActionKind.start, child: Text('Start')),
-            ],
-          ),
+          if (active)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 14),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else
+            PopupMenuButton<ServiceActionKind>(
+              enabled: !busy,
+              tooltip: 'Actions for ${service.name}',
+              onSelected: onAction,
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: ServiceActionKind.start, child: Text('Start')),
+                const PopupMenuItem(value: ServiceActionKind.restart, child: Text('Restart')),
+                const PopupMenuItem(value: ServiceActionKind.stop, child: Text('Stop')),
+                if (toggleable) ...[
+                  const PopupMenuDivider(),
+                  if (enabled != true)
+                    const PopupMenuItem(
+                      value: ServiceActionKind.enable,
+                      child: Text('Enable and start'),
+                    ),
+                  if (enabled != false)
+                    const PopupMenuItem(
+                      value: ServiceActionKind.disable,
+                      child: Text('Disable and stop'),
+                    ),
+                ],
+              ],
+            ),
         ],
       ),
     );

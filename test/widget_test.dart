@@ -527,11 +527,13 @@ void main() {
     await _scrollTo(tester, find.text('Deploy'));
     await tester.tap(find.text('Deploy'));
     await tester.pumpAndSettle();
-    expect(find.text('Start install'), findsOneWidget);
 
     await tester.enterText(find.widgetWithText(TextField, 'Domain'), 'vpn.example.org');
     await tester.enterText(
         find.widgetWithText(TextField, 'Admin dashboard password'), 'secret');
+    // The service selection sits between the inputs and the button.
+    await _scrollTo(tester, find.text('Start install'));
+    expect(find.text('Start install'), findsOneWidget);
     await tester.tap(find.text('Start install'));
     await tester.pump();
     await tester.pump();
@@ -554,6 +556,7 @@ void main() {
     await tester.tap(find.text('Start another install'));
     await tester.pumpAndSettle();
     expect(store.installHandles, isEmpty);
+    await _scrollTo(tester, find.text('Start install'));
     expect(find.text('Start install'), findsOneWidget);
   });
 
@@ -916,10 +919,12 @@ void main() {
     await _scrollTo(tester, find.text('Deploy'));
     await tester.tap(find.text('Deploy'));
     await tester.pumpAndSettle();
+    await _scrollTo(tester, find.text('Start install'));
     await tester.tap(find.text('Start install'));
     await tester.pumpAndSettle();
     expect(find.text('Could not find the server.'), findsOneWidget);
     expect(find.textContaining('Check the hostname'), findsOneWidget);
+    await _scrollTo(tester, find.text('Start install'));
     expect(find.text('Start install'), findsOneWidget); // form stays, can retry
   });
 

@@ -137,6 +137,15 @@ class ServerInfoNotifier extends CachedFetchNotifier<ServerInfo> {
   Future<ServerInfo> fetch() => controller.serverInfo();
 }
 
+/// `ENABLE_*` flags from `.env`; the Services tab reads enabled/disabled
+/// per row from it and refreshes it after an enable/disable action.
+class ServiceFlagsNotifier extends CachedFetchNotifier<ServiceFlags> {
+  ServiceFlagsNotifier(super.serverId);
+
+  @override
+  Future<ServiceFlags> fetch() => controller.serviceFlags();
+}
+
 final statusProvider = NotifierProvider.family<StatusNotifier,
     FetchState<ServiceStatusReport>, String>(StatusNotifier.new);
 
@@ -151,6 +160,9 @@ final metricsProvider = NotifierProvider.family<MetricsNotifier,
 
 final serverInfoProvider = NotifierProvider.family<ServerInfoNotifier,
     FetchState<ServerInfo>, String>(ServerInfoNotifier.new);
+
+final serviceFlagsProvider = NotifierProvider.family<ServiceFlagsNotifier,
+    FetchState<ServiceFlags>, String>(ServiceFlagsNotifier.new);
 
 /// A cached value is re-fetched in the background when a tab reopens and
 /// the value is older than this.
@@ -168,9 +180,14 @@ class ServiceActionState {
   /// The action in flight, if any.
   final ServiceAction? running;
   final String? message;
-  final String? error;
+
+  /// Failure of the last action, with the command output as detail.
+  final AppError? error;
 
   bool get busy => running != null;
+
+  /// Whether the action in flight targets [service] specifically.
+  bool isRunningFor(String service) => running?.service == service;
 }
 
 /// Serialises service actions for one server and refreshes status after.
@@ -191,9 +208,14 @@ class ServiceActionsNotifier extends Notifier<ServiceActionState> {
       state = ServiceActionState(message: '${describe(action)} done');
     } on Object catch (e) {
       if (!ref.mounted) return;
-      state = ServiceActionState(error: AppError.from(e).summary);
+      state = ServiceActionState(error: AppError.from(e));
     } finally {
+      // Same cached refresh the tab uses: the row re-renders from the
+      // next `moav status`, the old report stays visible meanwhile.
       unawaited(ref.read(statusProvider(serverId).notifier).refresh());
+      if (action.kind.perService) {
+        unawaited(ref.read(serviceFlagsProvider(serverId).notifier).refresh());
+      }
       if (action.kind == ServiceActionKind.regenerateUsers) {
         ref.invalidate(usersProvider(serverId));
       }
@@ -206,6 +228,8 @@ class ServiceActionsNotifier extends Notifier<ServiceActionState> {
       ServiceActionKind.stop => 'Stop',
       ServiceActionKind.restart => 'Restart',
       ServiceActionKind.regenerateUsers => 'Regenerate users',
+      ServiceActionKind.enable => 'Enable',
+      ServiceActionKind.disable => 'Disable',
     };
     if (a.kind == ServiceActionKind.regenerateUsers) return verb;
     return '$verb ${a.service ?? 'all services'}';
