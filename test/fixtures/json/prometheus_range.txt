@@ -1,0 +1,22 @@
+__RANGE__
+__R__ cpu_percent
+{"status":"success","data":{"resultType":"matrix","result":[{"metric":{},"values":[[1761580800,"12.5"],[1761580860,"40.25"],[1761580920,"NaN"],[1761580980,"33"]]}]}}
+__R__ mem_percent
+{"status":"success","data":{"resultType":"matrix","result":[{"metric":{},"values":[[1761580800,"61.2"],[1761580860,"62.8"]]}]}}
+__R__ rx_bytes_per_s
+{"status":"success","data":{"resultType":"matrix","result":[{"metric":{},"values":[[1761580800,"1048576"],[1761580860,"2097152"]]}]}}
+__R__ tx_bytes_per_s
+{"status":"success","data":{"resultType":"matrix","result":[]}}
+__R__ users_singbox
+{"status":"success","data":{"resultType":"matrix","result":[{"metric":{},"values":[[1761580800,"14"],[1761580860,"15"]]}]}}
+__R__ users_xray
+{"status":"success","data":{"resultType":"matrix","result":[{"metric":{},"values":[[1761580800,"3"],[1761580860,"2"]]}]}}
+__R__ users_wireguard
+not json at all
+__R__ users_amneziawg
+
+__R__ users_conduit
+{"status":"error","errorType":"bad_data","error":"unknown metric"}
+__R__ exporters_up
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"job":"node"},"value":[1761580980,"1"]},{"metric":{"job":"telemt-api"},"value":[1761580980,"0"]},{"metric":{"job":"cadvisor"},"value":[1761580980,"1"]}]}}
+__END__

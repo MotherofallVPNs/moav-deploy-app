@@ -232,6 +232,188 @@ echo "__END__"
     return v;
   }
 
+  /// Grafana (upstream docker-compose.yml, scripts/grafana-entrypoint.sh):
+  /// host port `${PORT_GRAFANA:-9444}` to container 3000, login form with
+  /// `GF_SECURITY_ADMIN_USER=admin` and
+  /// `GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD}`, the same `.env` value
+  /// the admin dashboard uses. TLS when the entrypoint finds a certificate,
+  /// plain HTTP otherwise; [grafanaPanel] probes which.
+  static const grafanaPortKey = 'PORT_GRAFANA';
+  static const grafanaEnabledKey = 'ENABLE_MONITORING';
+
+  /// Grafana has no password variable of its own; see [grafanaPortKey].
+  static const grafanaPasswordKey = adminPasswordKey;
+  static const defaultGrafanaPort = 9444;
+  static const grafanaAdminUser = 'admin';
+
+  /// Prints Grafana's port, enable flag, the scheme it answers on and the
+  /// admin password from `.env` between markers; same rules as [adminPanel].
+  static const grafanaPanel = '''
+$_envReader
+PG=\$(ev $grafanaPortKey); PG=\${PG:-$defaultGrafanaPort}
+echo "__GRAFANA__"
+echo "port=\$PG"
+echo "enabled=\$(ev $grafanaEnabledKey)"
+if curl -sk -m 5 -o /dev/null "https://127.0.0.1:\$PG/api/health" 2>/dev/null; then echo "scheme=https"
+elif curl -s -m 5 -o /dev/null "http://127.0.0.1:\$PG/api/health" 2>/dev/null; then echo "scheme=http"; fi
+printf 'password=%s\\n' "\$(grep -m1 '^$grafanaPasswordKey=' .env 2>/dev/null | cut -d= -f2-)"
+echo "__END__"
+''';
+
+  /// Parses [grafanaPanel] output; `null` when the markers are missing.
+  static GrafanaAccess? parseGrafanaPanel(String raw) {
+    final text = SshConnection.stripAnsi(raw);
+    final start = text.indexOf('__GRAFANA__');
+    final end = text.indexOf('__END__');
+    if (start < 0 || end < 0 || end < start) return null;
+    int port = defaultGrafanaPort;
+    var enabled = true;
+    var scheme = 'https';
+    String? password;
+    for (final line in text.substring(start + 11, end).split('\n')) {
+      final eq = line.indexOf('=');
+      if (eq < 0) continue;
+      final key = line.substring(0, eq).trim();
+      final value = line.substring(eq + 1).trim();
+      switch (key) {
+        case 'port':
+          port = int.tryParse(value) ?? defaultGrafanaPort;
+        case 'enabled':
+          enabled = value.isEmpty || value == 'true';
+        case 'scheme':
+          if (value == 'http' || value == 'https') scheme = value;
+        case 'password':
+          final v = _unquote(value);
+          password = v.isEmpty ? null : v;
+      }
+    }
+    return GrafanaAccess(
+      port: port,
+      enabled: enabled,
+      scheme: scheme,
+      password: password,
+    );
+  }
+
+  /// The PromQL behind each native chart, by series key. Expressions match
+  /// the provisioned Grafana dashboards (configs/monitoring/grafana) so the
+  /// in-app charts and Grafana agree.
+  static const chartQueries = <String, String>{
+    'cpu_percent':
+        '100 - (avg(irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)',
+    'mem_percent':
+        '(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100',
+    'rx_bytes_per_s':
+        'sum(rate(node_network_receive_bytes_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]))',
+    'tx_bytes_per_s':
+        'sum(rate(node_network_transmit_bytes_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]))',
+    'users_singbox': 'sum(singbox_active_users)',
+    'users_xray': 'sum(xray_active_users)',
+    'users_wireguard': 'sum(wireguard_peer_active)',
+    'users_amneziawg': 'sum(amneziawg_peer_active)',
+    'users_conduit': 'sum(conduit_connected_clients)',
+  };
+
+  /// Instant query for exporter health, one sample per scrape job.
+  static const exporterHealthQuery = 'sum by (job)(up)';
+  static const exporterHealthKey = 'exporters_up';
+
+  /// How far back the chart range queries reach, and their resolution.
+  static const chartWindow = Duration(hours: 1);
+  static const chartStep = Duration(seconds: 60);
+
+  /// Range queries for [chartQueries] over [chartWindow] plus the exporter
+  /// health vector, each printed after a `__R__ <key>` marker. Same
+  /// `docker exec` route and parallel fan-out as [prometheus].
+  static final prometheusRange = _prometheusRangeSnippet();
+
+  static String _prometheusRangeSnippet() {
+    final b = StringBuffer()
+      ..writeln(_envReader)
+      ..writeln('echo "__RANGE__"')
+      ..writeln(
+          "if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx moav-prometheus; then")
+      ..writeln(
+          r'''  PP=$(docker inspect -f '{{join .Args " "}}' moav-prometheus 2>/dev/null | grep -oE 'listen-address=[^ ]*:[0-9]+' | grep -oE '[0-9]+$'); PP=${PP:-9090}''')
+      ..writeln(
+          r'''  T=$(mktemp -d 2>/dev/null || echo "/tmp/moav-deploy-range.$$"); mkdir -p "$T"''')
+      ..writeln('  NOW=\$(date +%s); START=\$((NOW-${chartWindow.inSeconds})); '
+          'STEP=${chartStep.inSeconds}')
+      ..writeln(
+          r'''  r() { docker exec moav-prometheus wget -qO- -T 10 "http://127.0.0.1:$PP/api/v1/query_range?query=$2&start=$START&end=$NOW&step=$STEP" > "$T/$1" 2>/dev/null & }''')
+      ..writeln(
+          r'''  q() { docker exec moav-prometheus wget -qO- -T 10 "http://127.0.0.1:$PP/api/v1/query?query=$2" > "$T/$1" 2>/dev/null & }''');
+    for (final e in chartQueries.entries) {
+      b.writeln("  r ${e.key} '${Uri.encodeComponent(e.value)}'");
+    }
+    b
+      ..writeln(
+          "  q $exporterHealthKey '${Uri.encodeComponent(exporterHealthQuery)}'")
+      ..writeln('  wait')
+      ..writeln(
+          '  for n in ${chartQueries.keys.join(' ')} $exporterHealthKey; do')
+      ..writeln(r'''    echo "__R__ $n"; cat "$T/$n" 2>/dev/null; echo''')
+      ..writeln('  done')
+      ..writeln(r'''  rm -rf "$T"''')
+      ..writeln('fi')
+      ..writeln('echo "__END__"');
+    return b.toString();
+  }
+
+  /// Parses [prometheusRange] output: every `__R__` block becomes one
+  /// [MetricSeries] per result (matrix or vector), keyed by the query name.
+  static ChartsSnapshot parseMetricSeries(String raw, {DateTime? now}) {
+    final text = SshConnection.stripAnsi(raw);
+    final start = text.indexOf('__RANGE__');
+    final end = text.indexOf('__END__');
+    final series = <MetricSeries>[];
+    if (start >= 0 && end > start) {
+      for (final part in text.substring(start + 9, end).split('__R__ ')) {
+        final nl = part.indexOf('\n');
+        if (nl < 0) continue;
+        final key = part.substring(0, nl).trim();
+        final body = part.substring(nl + 1).trim();
+        if (key.isEmpty || body.isEmpty) continue;
+        try {
+          final j = jsonDecode(body);
+          final data = (j as Map)['data'];
+          final result = data is Map ? data['result'] : null;
+          if (result is! List) continue;
+          for (final r in result) {
+            if (r is! Map) continue;
+            final metric = _asMap(r['metric']) ?? const {};
+            final label = metric['job']?.toString() ??
+                (metric.length == 1 ? metric.values.first?.toString() : null);
+            final samples =
+                r['values'] ?? [if (r['value'] != null) r['value']];
+            final points = <SeriesPoint>[];
+            if (samples is List) {
+              for (final v in samples) {
+                if (v is! List || v.length != 2) continue;
+                final t = (v[0] as num?)?.toDouble();
+                final y = double.tryParse(v[1].toString());
+                if (t == null || y == null || y.isNaN) continue;
+                points.add(SeriesPoint(
+                  DateTime.fromMillisecondsSinceEpoch((t * 1000).round(),
+                      isUtc: true),
+                  y,
+                ));
+              }
+            }
+            series.add(MetricSeries(key: key, label: label, points: points));
+          }
+        } on Object {
+          // Skip blocks that did not decode; the other charts still render.
+        }
+      }
+    }
+    return ChartsSnapshot(
+      series: series,
+      collectedAt: now ?? DateTime.now(),
+      window: chartWindow,
+    );
+  }
+
   /// One Prometheus instant query per headline metric (via `docker exec`, as
   /// Prometheus is not published on the host). The queries run in parallel
   /// and print in a fixed order, so one slow query costs seconds, not

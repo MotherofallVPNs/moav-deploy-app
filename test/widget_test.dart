@@ -195,6 +195,12 @@ class _FakeController implements MoavController {
   /// Thrown by the next [metrics] call only, then cleared.
   Object? nextMetricsError;
 
+  /// The charts section has its own cache; empty here so the tab tests
+  /// above stay about metrics, Grafana health and protocol status.
+  @override
+  Future<ChartsSnapshot> metricSeries() async =>
+      ChartsSnapshot(series: const [], collectedAt: DateTime(2026, 9, 14, 8));
+
   @override
   Future<MetricsSnapshot> metrics() async {
     _maybeFail();
@@ -762,7 +768,8 @@ void main() {
     // Protocol pills come from the status report (sing-box → reality etc.).
     await _scrollTo(tester, find.text('REALITY'));
     expect(find.text('HYSTERIA2'), findsOneWidget);
-    await _scrollTo(tester, find.text('Grafana preview is not available here'));
+    // Native charts section (empty series here) sits between them.
+    await _scrollTo(tester, find.text('LAST HOUR'));
     await _scrollTo(tester, find.text('Admin dashboard'));
     expect(find.text('Admin dashboard'), findsOneWidget);
   });

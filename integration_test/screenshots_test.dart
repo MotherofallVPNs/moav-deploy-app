@@ -1,6 +1,7 @@
 // Demo screenshot gallery driven by tool/screenshots.sh (see docs/BUILDING.md).
 // Live mode is read-only apart from one throwaway zzmoavdeploytest* user.
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -495,4 +496,45 @@ class _FakeController implements MoavController {
 
   @override
   Future<ServerTunnel> openTunnel(int remotePort) => _lag(_GalleryTunnel());
+
+  @override
+  Future<GrafanaAccess> grafanaAccess() =>
+      _lag(const GrafanaAccess(port: 9444, password: 'gallery'));
+
+  /// An hour of plausible demo curves at one-minute steps.
+  @override
+  Future<ChartsSnapshot> metricSeries() {
+    final now = DateTime.now();
+    List<SeriesPoint> curve(double base, double swing, [int phase = 0]) => [
+          for (var i = 0; i < 61; i++)
+            SeriesPoint(
+              now.subtract(Duration(minutes: 60 - i)),
+              base + swing * (0.5 + 0.5 * math.sin((i + phase) / 9)),
+            ),
+        ];
+    MetricSeries series(String key, List<SeriesPoint> points,
+            {String? label}) =>
+        MetricSeries(key: key, label: label, points: points);
+    return _lag(ChartsSnapshot(
+      collectedAt: now,
+      series: [
+        series('cpu_percent', curve(38, 30)),
+        series('mem_percent', curve(58, 12, 20)),
+        series('rx_bytes_per_s', curve(0.9e6, 0.8e6, 5)),
+        series('tx_bytes_per_s', curve(2.6e6, 2.4e6, 12)),
+        series('users_singbox', curve(14, 6)),
+        series('users_xray', curve(6, 4, 30)),
+        series('users_wireguard', curve(3, 2, 15)),
+        for (final (job, up) in [
+          ('node', 1.0),
+          ('cadvisor', 1.0),
+          ('singbox-users', 1.0),
+          ('xray-users', 1.0),
+          ('wireguard', 1.0),
+          ('telemt-api', 0.0),
+        ])
+          series('exporters_up', [SeriesPoint(now, up)], label: job),
+      ],
+    ));
+  }
 }

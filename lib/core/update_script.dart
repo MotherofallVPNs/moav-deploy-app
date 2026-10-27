@@ -6,6 +6,22 @@ import 'install_script.dart';
 /// `setsid nohup` so it survives the SSH session, with the same
 /// `[moav-deploy] step N/3` and `[moav-deploy] exit=<code>` markers so
 /// `SshMoavController.parseInstallStatus` reads its log unchanged.
+///
+/// The update has to work on any installed `moav`, so the job tries the
+/// non-interactive invocation first and falls back to the legacy one:
+///
+/// * **MoaV with PR #345** (`moav update --yes`): [updateCommand]. With
+///   `MOAV_NONINTERACTIVE=1` exported the stash prompt picks option 1 and
+///   every `confirm` takes its default (accept component pins and new
+///   `.env` variables). Nothing reads stdin. Services are not restarted.
+/// * **Older MoaV** (v2.3.1 and before): `cmd_update` rejects any unknown
+///   argument with `Unknown option: --yes` and returns 1 before touching
+///   git, so the first attempt is a harmless no-op there. The job detects
+///   that exact line ([legacyRejectionMarker]) and re-runs plain
+///   `moav update` with [legacyAnswers] on stdin: `1` answers the stash
+///   prompt, `Y` the `Update component versions in .env?` prompt, and the
+///   `.env` additions prompt reads EOF, which its `[Y/n]` default accepts.
+///   The old `confirm` already honours `MOAV_NONINTERACTIVE=1` for the rest.
 class UpdateScript {
   UpdateScript._();
 
@@ -15,15 +31,19 @@ class UpdateScript {
 
   static const totalSteps = 3;
 
-  /// The exact self-update invocation, verified against MoaV 2.3.0:
-  /// `moav update` does `git fetch` + `git pull` on the current branch, then
-  /// re-execs for the post-update checks. With stdin on `/dev/null` every
-  /// prompt takes its default: local changes are **stashed** (never
-  /// discarded), new `.env` defaults are appended, pinned component versions
-  /// are bumped in `.env`. It does **not** rebuild or restart services; the
-  /// log lists those apply steps for the operator.
-  // TODO: switch to a `--yes`/non-interactive flag once upstream ships one.
-  static const updateCommand = 'update';
+  /// First attempt: the deterministic path on a `moav` with PR #345.
+  static const updateCommand = 'update --yes';
+
+  /// Second attempt, only when the first is rejected as an unknown option.
+  static const legacyUpdateCommand = 'update';
+
+  /// The line an older `cmd_update` prints (via `error`) for the flag it
+  /// does not know. Matched as a substring so ANSI colour codes around it
+  /// do not matter.
+  static const legacyRejectionMarker = 'Unknown option: --yes';
+
+  /// stdin for [legacyUpdateCommand]: stash local changes, accept pins.
+  static const legacyAnswers = '1\nY\n';
 
   /// The bash job. Contains no secrets.
   static const script = r'''#!/bin/bash
@@ -48,8 +68,18 @@ moav_cmd --version < /dev/null 2>&1 | head -3
 
 step 2 "Run moav update"
 cd "$INSTALL_DIR" || finish 1
-moav_cmd __UPDATE_COMMAND__ < /dev/null
-rc=$?
+ATTEMPT="$(mktemp 2>/dev/null || echo "/tmp/moav-deploy-update.$$")"
+# Attempt 1: moav with `update --yes` (PR #345). Older moav rejects the flag
+# before doing anything, which attempt 2 detects below.
+moav_cmd __UPDATE_COMMAND__ < /dev/null 2>&1 | tee "$ATTEMPT"
+rc=${PIPESTATUS[0]}
+if [ $rc -ne 0 ] && grep -q '__LEGACY_MARKER__' "$ATTEMPT"; then
+  echo
+  echo "[moav-deploy] This moav predates 'update --yes'; retrying the legacy way (1 = stash, Y = accept versions)."
+  printf '__LEGACY_ANSWERS__' | moav_cmd __LEGACY_COMMAND__ 2>&1
+  rc=$?
+fi
+rm -f "$ATTEMPT"
 if [ $rc -ne 0 ]; then echo "moav update failed (exit $rc)"; finish $rc; fi
 
 step 3 "Report"
@@ -59,9 +89,12 @@ echo "Services were not restarted. Apply any rebuild/restart steps listed above 
 finish 0
 ''';
 
-  /// [script] with the update invocation filled in.
-  static String get body =>
-      script.replaceFirst('__UPDATE_COMMAND__', updateCommand);
+  /// [script] with the update invocations filled in.
+  static String get body => script
+      .replaceFirst('__UPDATE_COMMAND__', updateCommand)
+      .replaceFirst('__LEGACY_MARKER__', legacyRejectionMarker)
+      .replaceFirst('__LEGACY_ANSWERS__', legacyAnswers.replaceAll('\n', r'\n'))
+      .replaceFirst('__LEGACY_COMMAND__', legacyUpdateCommand);
 
   /// Launches the job detached and prints `STARTED <pid>`, or `RUNNING <pid>`
   /// when one is already in flight.

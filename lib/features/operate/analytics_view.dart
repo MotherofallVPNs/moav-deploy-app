@@ -8,17 +8,18 @@ import '../../theme/moav_theme.dart';
 import '../../widgets/cached_view.dart';
 import '../../widgets/error_view.dart';
 import '../admin/admin_panel_screen.dart';
+import 'charts_view.dart';
 import 'grafana_screen.dart';
 import 'operate_provider.dart';
 import 'operate_screen.dart';
 
-/// Analytics tab: Grafana health, a grid of headline metric tiles from
-/// Prometheus, per-protocol status derived from `moav status`, and Grafana
-/// embedded inline. Read-only.
+/// Analytics tab: Grafana health with the way into the full dashboards, a
+/// grid of headline metric tiles from Prometheus, native charts over the
+/// last hour, and per-protocol status derived from `moav status`. Read-only.
 ///
-/// Three independent caches feed it: Grafana URLs/health (fast), Prometheus
-/// metrics (slow, its own timeout and Retry) and `moav status`. A slow or
-/// failing one never blocks the others.
+/// Four independent caches feed it: Grafana URLs/health (fast), Prometheus
+/// metrics and chart series (slow, their own timeout and Retry) and
+/// `moav status`. A slow or failing one never blocks the others.
 class AnalyticsView extends ConsumerWidget {
   const AnalyticsView({super.key, required this.profile});
 
@@ -29,11 +30,13 @@ class AnalyticsView extends ConsumerWidget {
     final id = profile.id;
     final mon = ref.watch(monitoringProvider(id));
     final metrics = ref.watch(metricsProvider(id));
+    final charts = ref.watch(chartsProvider(id));
     final status = ref.watch(statusProvider(id));
 
     Future<void> refreshAll() => Future.wait([
           ref.read(monitoringProvider(id).notifier).refresh(),
           ref.read(metricsProvider(id).notifier).refresh(),
+          ref.read(chartsProvider(id).notifier).refresh(),
           ref.read(statusProvider(id).notifier).refresh(),
         ]);
 
@@ -41,6 +44,7 @@ class AnalyticsView extends ConsumerWidget {
       onOpen: (ref) {
         ref.read(monitoringProvider(id).notifier).refreshIfStale(tabStaleAfter);
         ref.read(metricsProvider(id).notifier).refreshIfStale(tabStaleAfter);
+        ref.read(chartsProvider(id).notifier).refreshIfStale(tabStaleAfter);
         ref.read(statusProvider(id).notifier).refreshIfStale(tabStaleAfter);
       },
       child: CachedView<Monitoring>(
@@ -50,7 +54,7 @@ class AnalyticsView extends ConsumerWidget {
         builder: (context, m) => ListView(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
           children: [
-            _GrafanaCard(monitoring: m),
+            _GrafanaCard(monitoring: m, profile: profile),
             SectionHeader(
               'Headline metrics',
               trailing: _SectionRefresh(
@@ -63,6 +67,17 @@ class AnalyticsView extends ConsumerWidget {
               onRetry: ref.read(metricsProvider(id).notifier).refresh,
             ),
             SectionHeader(
+              'Last hour',
+              trailing: _SectionRefresh(
+                state: charts,
+                onRefresh: ref.read(chartsProvider(id).notifier).refresh,
+              ),
+            ),
+            ChartsSection(
+              state: charts,
+              onRetry: ref.read(chartsProvider(id).notifier).refresh,
+            ),
+            SectionHeader(
               'Protocols',
               trailing: _SectionRefresh(
                 state: status,
@@ -73,23 +88,6 @@ class AnalyticsView extends ConsumerWidget {
               state: status,
               onRetry: ref.read(statusProvider(id).notifier).refresh,
             ),
-            if (m.grafanaUrl != null) ...[
-              SectionHeader(
-                'Grafana',
-                trailing: TextButton.icon(
-                  onPressed: () => Navigator.of(context).push(GrafanaScreen.route(m.grafanaUrl!)),
-                  icon: const Icon(Icons.fullscreen, size: 18),
-                  label: const Text('Full screen'),
-                ),
-              ),
-              MoavCard(
-                padding: EdgeInsets.zero,
-                child: SizedBox(
-                  height: 320,
-                  child: GrafanaPanel(url: m.grafanaUrl!, compact: true),
-                ),
-              ),
-            ],
             if (m.adminUrl != null) ...[
               const SizedBox(height: 12),
               MoavCard(
@@ -270,9 +268,10 @@ class _StatusSection extends StatelessWidget {
 }
 
 class _GrafanaCard extends StatelessWidget {
-  const _GrafanaCard({required this.monitoring});
+  const _GrafanaCard({required this.monitoring, required this.profile});
 
   final Monitoring monitoring;
+  final ServerProfile profile;
 
   @override
   Widget build(BuildContext context) {
@@ -337,10 +336,11 @@ class _GrafanaCard extends StatelessWidget {
           const SizedBox(height: 14),
           Row(
             children: [
+              // The in-app view goes through the SSH tunnel and signs in with
+              // the .env password; the charts below are the native summary.
               GradientButton(
-                onPressed: url == null
-                    ? null
-                    : () => Navigator.of(context).push(GrafanaScreen.route(url)),
+                onPressed: () =>
+                    Navigator.of(context).push(GrafanaScreen.route(profile)),
                 icon: Icons.dashboard_outlined,
                 label: 'Open Grafana',
               ),
