@@ -471,6 +471,27 @@ class MoavWordmark extends StatelessWidget {
   }
 }
 
+/// The MoaV mark (the launcher icon's foreground, bundled as an asset) for
+/// hero placements: the lock screen, onboarding and empty states.
+class MoavMark extends StatelessWidget {
+  const MoavMark({super.key, this.size = 96});
+
+  static const asset = 'assets/brand/moav-mark.png';
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset(
+      asset,
+      width: size,
+      height: size,
+      filterQuality: FilterQuality.medium,
+      semanticLabel: 'MoaV',
+    );
+  }
+}
+
 /// Text painted with the accent gradient.
 class GradientText extends StatelessWidget {
   const GradientText(this.text, {super.key, this.style});

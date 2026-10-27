@@ -123,7 +123,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const IconBadge(Icons.lock_outline, size: 72, gradient: true),
+              const MoavMark(size: 120),
               const SizedBox(height: 24),
               const MoavWordmark(suffix: 'Deploy', size: 26),
               const SizedBox(height: 8),

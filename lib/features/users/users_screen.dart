@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
+import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
 import 'user_bundle_screen.dart';
 import 'user_detail_screen.dart';
@@ -24,7 +25,7 @@ class UsersScreen extends ConsumerWidget {
     final notifier = ref.read(usersProvider(profile.id).notifier);
 
     return MoavScaffold(
-      appBar: AppBar(
+      appBar: MoavAppBar(
         title: Text('Users · ${profile.label}'),
         actions: [
           IconButton(

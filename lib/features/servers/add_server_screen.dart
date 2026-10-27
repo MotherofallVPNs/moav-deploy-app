@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../theme/moav_theme.dart';
+import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
 import '../keys/keyring_provider.dart';
 import 'add_server_form.dart';
@@ -20,7 +21,7 @@ class AddServerScreen extends ConsumerWidget {
     final notifier = ref.read(addServerFormProvider.notifier);
 
     return MoavScaffold(
-      appBar: AppBar(title: const Text('Add server')),
+      appBar: MoavAppBar(title: const Text('Add server')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
         children: [
@@ -142,16 +143,21 @@ class AddServerScreen extends ConsumerWidget {
     notifier.setSubmitting(true);
     final id = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
     try {
-      if (form.authChoice == AuthChoice.generateKey ||
-          form.authChoice == AuthChoice.importKey) {
-        await ref
-            .read(keyringProvider.notifier)
-            .add(
-              label: form.label.trim().isEmpty
-                  ? 'MoaV device key'
-                  : '${form.label.trim()} key',
-              privateKeyPem: secret,
-            );
+      final keyring = ref.read(keyringProvider.notifier);
+      if (form.authChoice == AuthChoice.importKey) {
+        await keyring.add(
+          label: AddServerFormNotifier.generatedKeyLabel(form.label),
+          privateKeyPem: secret,
+        );
+      } else if (form.authChoice == AuthChoice.generateKey) {
+        // Saved at generation time; only the label can have changed since.
+        final id = form.generatedKeyId;
+        if (id != null && form.label.trim().isNotEmpty) {
+          await keyring.rename(
+            id,
+            AddServerFormNotifier.generatedKeyLabel(form.label),
+          );
+        }
       }
       await ref
           .read(serversProvider.notifier)

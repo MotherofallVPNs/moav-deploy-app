@@ -11,6 +11,7 @@ import 'moav_controller.dart';
 import 'moav_services.dart';
 import 'server_profile.dart';
 import 'ssh_connection.dart';
+import 'ssh_tunnel.dart';
 import 'update_script.dart';
 
 /// Resolves the secret needed to authenticate a [ServerProfile].
@@ -357,18 +358,6 @@ class SshMoavController implements MoavController {
   /// Bundle files larger than this are configs we never render (safety cap).
   static const maxBundleFileBytes = 256 * 1024;
 
-  /// `moav test <name> --json`. Builds a client image on first run, so this
-  /// can take minutes; on 2.2.x the document is the tail of a noisy stdout.
-  @override
-  Future<TestMatrix> testUser(String name) async {
-    _validateName(name);
-    final out = await _run(MoavCli.test(name),
-        allowFailure: true, timeout: testTimeout);
-    return MoavCli.parseTest(name, out.stdout);
-  }
-
-  static const testTimeout = Duration(minutes: 15);
-
   // TODO(#8): no `--json` for these; only the exit code signals failure.
   /// `moav start|stop|restart [service]` or `moav regenerate-users`.
   ///
@@ -376,7 +365,7 @@ class SshMoavController implements MoavController {
   /// (see [MoavCli.setEnableFlags]), then run `moav start` / `moav stop`
   /// for it, so a failure names the step that broke.
   @override
-  Future<void> service(ServiceAction action) async {
+  Future<void> service(ServiceAction action, {OutputSink? onOutput}) async {
     final svc = action.service;
     if (svc != null) _validateName(svc);
     if (action.kind.perService) {
@@ -390,17 +379,45 @@ class SshMoavController implements MoavController {
       }
       final enabled = action.kind == ServiceActionKind.enable;
       await _run(MoavCli.setEnableFlags(toggle.flags(enabled: enabled)),
-          timeout: flagsTimeout);
+          timeout: flagsTimeout, onOutput: onOutput);
       await _run(
         MoavCli.service(ServiceAction(
           enabled ? ServiceActionKind.start : ServiceActionKind.stop,
           service: svc,
         )),
         timeout: const Duration(minutes: 10),
+        onOutput: onOutput,
       );
       return;
     }
-    await _run(MoavCli.service(action), timeout: const Duration(minutes: 10));
+    await _run(MoavCli.service(action),
+        timeout: const Duration(minutes: 10), onOutput: onOutput);
+  }
+
+  /// `PORT_ADMIN`, `ENABLE_ADMIN_UI` and `ADMIN_PASSWORD` from `.env` (see
+  /// [MoavCli.adminPanel]). The command never fails and its output is
+  /// parsed here only, so the password cannot end up in an error or a log.
+  @override
+  Future<AdminPanelAccess> adminPanelAccess() async {
+    final out = await _run(MoavCli.adminPanel,
+        allowFailure: true, timeout: flagsTimeout);
+    final access = MoavCli.parseAdminPanel(out.stdout);
+    if (access == null) {
+      throw StateError('Could not read the admin dashboard settings from .env');
+    }
+    return access;
+  }
+
+  /// `ssh -L` through the cached session to `127.0.0.1:[remotePort]` on
+  /// the server. Close the tunnel when the view that uses it goes away.
+  @override
+  Future<ServerTunnel> openTunnel(int remotePort) async {
+    final client = await _connected();
+    try {
+      return await SshTunnel.open(client, remotePort);
+    } on Object catch (e) {
+      throw AppError.from(e, host: profile.host, port: profile.port);
+    }
   }
 
   /// A `grep` over `.env`; see [MoavCli.serviceFlags].
@@ -541,10 +558,16 @@ class SshMoavController implements MoavController {
     String command, {
     bool allowFailure = false,
     Duration timeout = const Duration(seconds: 60),
+    OutputSink? onOutput,
   }) async {
     final runner = _runner;
     if (runner != null) {
-      return runner(command, allowFailure: allowFailure, timeout: timeout);
+      // Injected runners answer in one go; replay the output so views that
+      // stream it see the same text.
+      final out =
+          await runner(command, allowFailure: allowFailure, timeout: timeout);
+      onOutput?.call(out.combined);
+      return out;
     }
     final client = await _connected();
     try {
@@ -553,6 +576,7 @@ class SshMoavController implements MoavController {
         command,
         allowFailure: allowFailure,
         timeout: timeout,
+        onOutput: onOutput,
       );
     } on SshCommandException {
       rethrow; // the session is fine; the command just failed

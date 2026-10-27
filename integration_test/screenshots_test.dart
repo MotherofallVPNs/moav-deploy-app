@@ -217,6 +217,22 @@ class _GalleryFactory extends MoavControllerFactory {
       profile.id == demo.id ? primary : other;
 }
 
+/// Stands in for the SSH port-forward; the gallery has no webview anyway.
+class _GalleryTunnel implements ServerTunnel {
+  @override
+  int get localPort => 45000;
+
+  @override
+  Uri uri({String scheme = 'https', String path = '/'}) =>
+      Uri(scheme: scheme, host: '127.0.0.1', port: localPort, path: path);
+
+  @override
+  bool get isOpen => true;
+
+  @override
+  Future<void> close() async {}
+}
+
 /// Demo data shaped like a real server: MoaV v2.2.2, 27/29 services, Grafana 13.1.3.
 class _FakeController implements MoavController {
   final users = <MoavUser>[
@@ -394,7 +410,8 @@ class _FakeController implements MoavController {
       ));
 
   @override
-  Future<void> service(ServiceAction action) => _lag(null, 800);
+  Future<void> service(ServiceAction action, {OutputSink? onOutput}) =>
+      _lag(null, 800);
 
   @override
   Future<ServiceFlags> serviceFlags() => _lag(ServiceFlags(
@@ -473,17 +490,9 @@ class _FakeController implements MoavController {
   Future<InstallStatus?> updateStatus() => _lag(null);
 
   @override
-  Future<TestMatrix> testUser(String name) => _lag(TestMatrix(
-        user: name,
-        ranAt: DateTime.now(),
-        overall: CheckResult.pass,
-        results: const [
-          ProtocolTest(protocol: 'reality', result: CheckResult.pass, detail: 'Connected'),
-          ProtocolTest(protocol: 'hysteria2', result: CheckResult.pass, detail: 'Connected'),
-          ProtocolTest(protocol: 'trojan', result: CheckResult.pass, detail: 'Connected'),
-          ProtocolTest(protocol: 'shadowsocks', result: CheckResult.pass, detail: 'Connected'),
-          ProtocolTest(protocol: 'xhttp', result: CheckResult.warn, detail: 'Slow handshake (2.1 s)'),
-          ProtocolTest(protocol: 'wireguard', result: CheckResult.skip, detail: 'Needs a client tunnel'),
-        ],
-      ));
+  Future<AdminPanelAccess> adminPanelAccess() =>
+      _lag(const AdminPanelAccess(port: 9443, password: 'gallery'));
+
+  @override
+  Future<ServerTunnel> openTunnel(int remotePort) => _lag(_GalleryTunnel());
 }

@@ -50,9 +50,6 @@ class MoavCli {
       '$prelude"\$M" user add ${SshConnection.shellQuote(name)} --json';
   static String userRemoveJson(String name) =>
       '$prelude"\$M" user remove ${SshConnection.shellQuote(name)} --json';
-  static String test(String name) =>
-      '$prelude"\$M" test ${SshConnection.shellQuote(name)} --json 2>/dev/null';
-
   // Text commands: the 2.2.x fallback for the JSON ones above.
   static const userList = '$prelude"\$M" user list 2>&1';
   static String userAdd(String name) =>
@@ -172,6 +169,68 @@ echo
 echo "__PROM__"
 echo "__END__"
 ''';
+
+  // Admin dashboard (upstream admin/main.py, docker-compose.yml): HTTP Basic
+  // auth, password only, host port ${PORT_ADMIN:-9443}, always TLS.
+  static const adminPasswordKey = 'ADMIN_PASSWORD';
+  static const adminPortKey = 'PORT_ADMIN';
+  static const adminEnabledKey = 'ENABLE_ADMIN_UI';
+  static const defaultAdminPort = 9443;
+
+  /// Any username passes upstream's `verify_auth`; this one is just a label.
+  static const adminBasicAuthUser = 'admin';
+
+  /// Prints the admin dashboard's port, enable flag and password from
+  /// `.env` between markers. The password line keeps the raw value (quotes
+  /// are stripped in [parseAdminPanel], as upstream's entrypoint does) and
+  /// the snippet always exits 0, so the value never lands in an exception.
+  static const adminPanel = '''
+$_envReader
+echo "__ADMIN__"
+echo "port=\$(ev $adminPortKey)"
+echo "enabled=\$(ev $adminEnabledKey)"
+printf 'password=%s\\n' "\$(grep -m1 '^$adminPasswordKey=' .env 2>/dev/null | cut -d= -f2-)"
+echo "__END__"
+''';
+
+  /// Parses [adminPanel] output; `null` when the markers are missing (the
+  /// checkout is absent or the shell did not run the snippet).
+  static AdminPanelAccess? parseAdminPanel(String raw) {
+    final text = SshConnection.stripAnsi(raw);
+    final start = text.indexOf('__ADMIN__');
+    final end = text.indexOf('__END__');
+    if (start < 0 || end < 0 || end < start) return null;
+    int port = defaultAdminPort;
+    var enabled = true;
+    String? password;
+    for (final line in text.substring(start + 9, end).split('\n')) {
+      final eq = line.indexOf('=');
+      if (eq < 0) continue;
+      final key = line.substring(0, eq).trim();
+      final value = line.substring(eq + 1).trim();
+      switch (key) {
+        case 'port':
+          port = int.tryParse(value) ?? defaultAdminPort;
+        case 'enabled':
+          enabled = value.isEmpty || value == 'true';
+        case 'password':
+          final v = _unquote(value);
+          password = v.isEmpty ? null : v;
+      }
+    }
+    return AdminPanelAccess(port: port, enabled: enabled, password: password);
+  }
+
+  /// Strips one layer of matching surrounding quotes, like upstream's
+  /// `admin-entrypoint.sh` when it loads `.env`.
+  static String _unquote(String v) {
+    if (v.length >= 2 &&
+        ((v.startsWith('"') && v.endsWith('"')) ||
+            (v.startsWith("'") && v.endsWith("'")))) {
+      return v.substring(1, v.length - 1);
+    }
+    return v;
+  }
 
   /// One Prometheus instant query per headline metric (via `docker exec`, as
   /// Prometheus is not published on the host). The queries run in parallel
@@ -467,33 +526,8 @@ echo "__END__"
   }
 
   // ---------------------------------------------------------------------------
-  // moav test --json
+  // moav doctor
   // ---------------------------------------------------------------------------
-
-  /// `moav test --json` prints Docker build chatter before the JSON document,
-  /// so this finds the last top-level `{ … }` that decodes.
-  static Map<String, Object?>? extractTrailingJson(String raw) {
-    final text = SshConnection.stripAnsi(raw);
-    var end = text.lastIndexOf('}');
-    while (end >= 0) {
-      var start = text.lastIndexOf(RegExp(r'^\{', multiLine: true), end);
-      while (start >= 0) {
-        try {
-          final v = jsonDecode(text.substring(start, end + 1));
-          if (v is Map<String, Object?>) return v;
-          if (v is Map) return v.cast<String, Object?>();
-        } on FormatException {
-          // keep widening
-        }
-        start = start == 0
-            ? -1
-            : text.lastIndexOf(RegExp(r'^\{', multiLine: true), start - 1);
-      }
-      end = text.lastIndexOf('}', end - 1);
-      if (end < 0) break;
-    }
-    return null;
-  }
 
   static CheckResult checkResultFrom(String? s) => switch (s?.toLowerCase()) {
         'pass' || 'ok' || 'success' => CheckResult.pass,
@@ -501,39 +535,6 @@ echo "__END__"
         'fail' || 'error' || 'failed' => CheckResult.fail,
         _ => CheckResult.skip,
       };
-
-  static TestMatrix parseTest(String user, String raw, {DateTime? now}) {
-    final json = extractTrailingJson(raw);
-    if (json == null) {
-      throw FormatException(
-        'moav test did not return JSON: ${_tail(SshConnection.stripAnsi(raw))}',
-      );
-    }
-    final tests = json['tests'];
-    final results = <ProtocolTest>[];
-    if (tests is Map) {
-      for (final e in tests.entries) {
-        final v = e.value;
-        if (v is! Map) continue;
-        results.add(ProtocolTest(
-          protocol: e.key.toString(),
-          result: checkResultFrom(v['status']?.toString()),
-          detail: v['detail']?.toString(),
-        ));
-      }
-    }
-    final overall = json['overall_status'];
-    return TestMatrix(
-      user: user,
-      results: results,
-      ranAt: now ?? DateTime.now(),
-      overall: overall == null ? null : checkResultFrom(overall.toString()),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // moav doctor
-  // ---------------------------------------------------------------------------
 
   /// Descriptions from upstream `DOCTOR_CHECKS`; the JSON document carries
   /// only ids, and the UI shows the first detail line as the description.
@@ -1078,8 +1079,4 @@ echo "__END__"
     );
   }
 
-  static String _tail(String s) {
-    final t = s.trim();
-    return t.length > 300 ? '…${t.substring(t.length - 300)}' : t;
-  }
 }

@@ -6,6 +6,7 @@ import '../../core/ssh_key_installer.dart';
 import '../../core/app_error.dart';
 import '../../security/key_service.dart';
 import '../../security/secure_cred_store.dart';
+import '../keys/keyring_provider.dart';
 import 'servers_provider.dart';
 
 /// Which credential the user chose on the add-server form.
@@ -21,7 +22,8 @@ extension AuthChoiceX on AuthChoice {
 }
 
 /// Immutable form state. Secrets are held here only until the form is
-/// submitted, then handed to the secure store and dropped.
+/// submitted, then handed to the secure store and dropped. A generated key
+/// is the exception: it is saved to the keyring the moment it exists.
 class AddServerFormState {
   const AddServerFormState({
     this.label = '',
@@ -32,6 +34,7 @@ class AddServerFormState {
     this.importedKeyPem = '',
     this.password = '',
     this.generatedKey,
+    this.generatedKeyId,
     this.savedKey,
     this.savedKeyPem,
     this.oneTimePassword = '',
@@ -50,6 +53,10 @@ class AddServerFormState {
   final String importedKeyPem;
   final String password;
   final Ed25519KeyMaterial? generatedKey;
+
+  /// Keyring id of [generatedKey], saved as soon as it was generated so it
+  /// survives abandoning this form and can be reused for other servers.
+  final String? generatedKeyId;
   final StoredSshKey? savedKey;
   final String? savedKeyPem;
 
@@ -72,6 +79,7 @@ class AddServerFormState {
     String? importedKeyPem,
     String? password,
     Ed25519KeyMaterial? generatedKey,
+    String? generatedKeyId,
     StoredSshKey? savedKey,
     String? savedKeyPem,
     bool clearGeneratedKey = false,
@@ -94,6 +102,9 @@ class AddServerFormState {
     generatedKey: clearGeneratedKey
         ? null
         : (generatedKey ?? this.generatedKey),
+    generatedKeyId: clearGeneratedKey
+        ? null
+        : (generatedKeyId ?? this.generatedKeyId),
     savedKey: savedKey ?? this.savedKey,
     savedKeyPem: savedKeyPem ?? this.savedKeyPem,
     oneTimePassword: oneTimePassword ?? this.oneTimePassword,
@@ -200,14 +211,31 @@ class AddServerFormNotifier extends Notifier<AddServerFormState> {
     state = state.copyWith(savedKey: key, savedKeyPem: pem, clearError: true);
   }
 
+  /// Label the keyring shows for a key generated on this form.
+  static String generatedKeyLabel(String formLabel) =>
+      formLabel.trim().isEmpty ? 'MoaV device key' : '${formLabel.trim()} key';
+
+  /// Generates a key and saves it to the keyring right away. Regenerating
+  /// replaces the previous one unless it was already installed on a server.
   Future<void> generateKey() async {
     try {
       final key = await ref.read(keyServiceProvider).generateEd25519();
+      final keyring = ref.read(keyringProvider.notifier);
+      final previous = state.generatedKeyId;
+      final saved = await keyring.add(
+        label: generatedKeyLabel(state.label),
+        privateKeyPem: key.privateKeyPem,
+      );
+      if (previous != null && previous != saved.id && !state.keyInstalled) {
+        await keyring.remove(previous);
+      }
       state = state.copyWith(
         generatedKey: key,
+        generatedKeyId: saved.id,
         keyInstalled: false,
         clearError: true,
-        clearNotice: true,
+        notice: 'Key saved to this phone. It stays in SSH keys even if you '
+            'leave this screen.',
       );
     } on Object catch (e) {
       state = state.copyWith(

@@ -33,12 +33,9 @@ abstract class MoavController {
   /// A user's client configs and QR payloads.
   Future<Bundle> getBundle(String user);
 
-  /// Per-protocol connectivity test for a user (`moav test <user>`).
-  Future<TestMatrix> testUser(String name);
-
   /// Start / stop / restart services, enable / disable one in `.env`, or
-  /// regenerate all users.
-  Future<void> service(ServiceAction action);
+  /// regenerate all users. [onOutput] receives command output as it streams.
+  Future<void> service(ServiceAction action, {OutputSink? onOutput});
 
   /// Per-service state (`moav status`) plus the dashboard URLs it prints.
   Future<ServiceStatusReport> status();
@@ -65,6 +62,53 @@ abstract class MoavController {
 
   /// Progress of the detached update job; `null` when none was ever started.
   Future<InstallStatus?> updateStatus();
+
+  /// Port and password of the admin dashboard, read from the server's `.env`.
+  /// The password is handed over in memory only and never stored or logged.
+  Future<AdminPanelAccess> adminPanelAccess();
+
+  /// Opens a loopback listener on this device that forwards to [remotePort]
+  /// on the server, so a server-local web UI can be loaded in a webview.
+  Future<ServerTunnel> openTunnel(int remotePort);
+}
+
+/// Receives chunks of command output as they arrive.
+typedef OutputSink = void Function(String text);
+
+/// A local port forwarded to the server; see [MoavController.openTunnel].
+abstract class ServerTunnel {
+  int get localPort;
+
+  /// `https://127.0.0.1:<localPort>/` by default.
+  Uri uri({String scheme = 'https', String path = '/'});
+
+  bool get isOpen;
+
+  Future<void> close();
+}
+
+/// What the app needs to open the admin dashboard through the SSH session.
+class AdminPanelAccess {
+  const AdminPanelAccess({
+    required this.port,
+    this.enabled = true,
+    this.password,
+  });
+
+  /// Host port the panel is published on (`PORT_ADMIN`, default 9443).
+  final int port;
+
+  /// `ENABLE_ADMIN_UI` as written in `.env` (unset counts as enabled).
+  final bool enabled;
+
+  /// `ADMIN_PASSWORD` from `.env`, or `null` when unset. Memory only: never
+  /// persisted, never logged, and deliberately left out of [toString].
+  final String? password;
+
+  @override
+  String toString() =>
+      'AdminPanelAccess(port: $port, enabled: $enabled, '
+      'password: ${password == null ? 'absent' : 'present'})';
 }
 
 // --- Models ---
@@ -278,43 +322,6 @@ class Bundle {
   final String? path;
 
   Iterable<BundleEntry> get withQr => entries.where((e) => e.qrPayload != null);
-}
-
-class ProtocolTest {
-  const ProtocolTest({
-    required this.protocol,
-    required this.result,
-    this.detail,
-    this.latency,
-  });
-
-  final String protocol;
-  final CheckResult result;
-  final String? detail;
-  final Duration? latency;
-}
-
-class TestMatrix {
-  const TestMatrix({
-    required this.user,
-    required this.results,
-    required this.ranAt,
-    this.overall,
-  });
-
-  final String user;
-  final List<ProtocolTest> results;
-  final DateTime ranAt;
-
-  /// The CLI's own verdict (`pass` / `fail` / `warn`), when reported.
-  final CheckResult? overall;
-
-  /// Every protocol that was actually tested passed (skips ignored).
-  bool get allPass => results.every(
-        (r) => r.result == CheckResult.pass || r.result == CheckResult.skip,
-      );
-
-  int count(CheckResult r) => results.where((t) => t.result == r).length;
 }
 
 enum ServiceActionKind {

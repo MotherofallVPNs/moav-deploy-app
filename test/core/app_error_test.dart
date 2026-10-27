@@ -85,7 +85,7 @@ void main() {
     });
 
     test('JSON / text parse failure → unexpectedOutput', () {
-      final e = AppError.from(const FormatException('moav test did not return JSON: garbage'));
+      final e = AppError.from(const FormatException('moav status did not return JSON: garbage'));
       expect(e.kind, AppErrorKind.unexpectedOutput);
       expect(e.detail, contains('garbage'));
     });

@@ -6,14 +6,13 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
+import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
-import '../operate/user_test_screen.dart';
 import 'user_bundle_screen.dart';
 import 'users_provider.dart';
 
 /// One user at a glance: protocol stores, the subscription blob to paste
-/// into a phone app, the bundle (QR codes and configs) and, deliberately
-/// behind its own button, the connectivity test.
+/// into a phone app and the bundle (QR codes and configs).
 class UserDetailScreen extends ConsumerWidget {
   const UserDetailScreen({super.key, required this.profile, required this.user});
 
@@ -37,7 +36,7 @@ class UserDetailScreen extends ConsumerWidget {
         user;
     final bundle = ref.watch(bundleProvider(key));
     return MoavScaffold(
-      appBar: AppBar(
+      appBar: MoavAppBar(
         title: Text(user.name, style: moavMono(size: 17, weight: FontWeight.w600)),
         actions: [
           IconButton(
@@ -80,26 +79,6 @@ class UserDetailScreen extends ConsumerWidget {
                   icon: Icons.qr_code_2,
                   label: 'Download connection bundle',
                   expand: true,
-                ),
-              ],
-            ),
-          ),
-          const SectionHeader('Diagnostics'),
-          MoavCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Connects through every protocol from the server itself. '
-                  'The first run builds a client image and can take minutes.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () => Navigator.of(context)
-                      .push(UserTestScreen.route(profile, user.name)),
-                  icon: const Icon(Icons.network_check, size: 18),
-                  label: const Text('Run connection test'),
                 ),
               ],
             ),

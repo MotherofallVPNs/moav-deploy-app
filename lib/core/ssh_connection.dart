@@ -42,6 +42,9 @@ class SshConnection {
 
   /// Runs [command] and returns its combined output as text.
   ///
+  /// With [onOutput] the command's stdout and stderr are also handed over
+  /// chunk by chunk as they arrive, for live progress views.
+  ///
   /// Throws [SshCommandException] when the exit code is non-zero and
   /// [allowFailure] is false.
   static Future<SshOutput> run(
@@ -49,13 +52,40 @@ class SshConnection {
     String command, {
     bool allowFailure = false,
     Duration timeout = const Duration(seconds: 60),
+    void Function(String text)? onOutput,
   }) async {
-    final result = await client.runWithResult(command).timeout(timeout);
-    final out = SshOutput(
-      stdout: utf8.decode(result.stdout, allowMalformed: true),
-      stderr: utf8.decode(result.stderr, allowMalformed: true),
-      exitCode: result.exitCode ?? -1,
-    );
+    final SshOutput out;
+    if (onOutput == null) {
+      final result = await client.runWithResult(command).timeout(timeout);
+      out = SshOutput(
+        stdout: utf8.decode(result.stdout, allowMalformed: true),
+        stderr: utf8.decode(result.stderr, allowMalformed: true),
+        exitCode: result.exitCode ?? -1,
+      );
+    } else {
+      final session = await client.execute(command).timeout(timeout);
+      final stdout = StringBuffer();
+      final stderr = StringBuffer();
+      const decoder = Utf8Decoder(allowMalformed: true);
+      Future<void> drain(Stream<List<int>> s, StringBuffer into) =>
+          s.transform(decoder).forEach((chunk) {
+            into.write(chunk);
+            onOutput(chunk);
+          });
+      await Future.wait([
+        drain(session.stdout, stdout),
+        drain(session.stderr, stderr),
+        session.done,
+      ]).timeout(timeout, onTimeout: () {
+        session.close();
+        throw TimeoutException('$command timed out', timeout);
+      });
+      out = SshOutput(
+        stdout: stdout.toString(),
+        stderr: stderr.toString(),
+        exitCode: session.exitCode ?? -1,
+      );
+    }
     if (!allowFailure && out.exitCode != 0) {
       throw SshCommandException(command, out);
     }

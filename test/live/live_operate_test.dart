@@ -9,10 +9,8 @@ import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/core/ssh_moav_controller.dart';
 import 'package:moav_deploy/security/app_log.dart';
 
-/// Live checks against a real MoaV box. Read-only except for one
-/// throwaway `zzmoavdeploytest<pid>` user that is created, connectivity
-/// tested with `moav test --json`, and revoked. Services are never
-/// started/stopped/restarted and users are never regenerated here.
+/// Live checks against a real MoaV box. Read-only: services are never
+/// started/stopped/restarted and users are never added or regenerated here.
 ///
 ///   MOAV_TEST_SSH_KEY=~/.ssh/key MOAV_TEST_HOST=h MOAV_TEST_USER=root \
 ///     flutter test test/live/live_operate_test.dart
@@ -28,9 +26,7 @@ void main() {
   final port = int.tryParse(env['MOAV_TEST_PORT'] ?? '') ?? 22;
   final skip = enabled ? null : 'MOAV_TEST_* env not set';
 
-  final testUser = 'zzmoavdeploytest${pid % 100000}';
   late final SshMoavController controller;
-  var created = false;
 
   setUpAll(() {
     if (!enabled) return;
@@ -48,18 +44,8 @@ void main() {
     );
   });
 
-  tearDownAll(() async {
-    if (!enabled) return;
-    try {
-      if (created) {
-        final now = await controller.listUsers();
-        if (now.any((u) => u.name == testUser)) {
-          await controller.removeUser(testUser);
-        }
-      }
-    } finally {
-      controller.dispose();
-    }
+  tearDownAll(() {
+    if (enabled) controller.dispose();
   });
 
   test('doctor reports per-check health', () async {
@@ -125,24 +111,4 @@ void main() {
     expect(m.metrics.map((x) => x.name),
         containsAll(['Exporters up', 'Load (1m)', 'RAM available']));
   }, skip: skip, timeout: const Timeout(Duration(minutes: 2)));
-
-  test('moav test --json on a throwaway user gives a protocol matrix',
-      () async {
-    await controller.addUser(testUser);
-    created = true;
-    final t = await controller.testUser(testUser);
-    // ignore: avoid_print
-    print('overall=${t.overall?.name} '
-        '${t.results.map((r) => '${r.protocol}=${r.result.name}').join(' ')}');
-    expect(t.user, testUser);
-    expect(t.results.length, greaterThanOrEqualTo(8));
-    expect(t.overall, isNotNull);
-    expect(t.results.map((r) => r.protocol), contains('reality'));
-    expect(t.count(CheckResult.pass), greaterThan(0));
-    for (final r in t.results) {
-      expect(r.detail, isNotNull, reason: r.protocol);
-    }
-    await controller.removeUser(testUser);
-    created = false;
-  }, skip: skip, timeout: const Timeout(Duration(minutes: 20)));
 }

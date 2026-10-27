@@ -80,13 +80,7 @@ class OnboardingScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Center(
-                    child: IconBadge(
-                      Icons.shield_outlined,
-                      size: 72,
-                      gradient: true,
-                    ),
-                  ),
+                  const Center(child: MoavMark(size: 120)),
                   const SizedBox(height: 24),
                   const Center(child: MoavWordmark(suffix: 'Deploy', size: 26)),
                   const SizedBox(height: 20),

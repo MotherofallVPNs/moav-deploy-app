@@ -50,6 +50,8 @@ flutter:
   assets:
     - assets/fonts/LICENSE-Inter.txt
     - assets/fonts/LICENSE-JetBrainsMono.txt
+    # The MoaV mark shown on the lock and onboarding screens (MoavMark).
+    - assets/brand/moav-mark.png
 
   # Fonts are bundled offline (no runtime font fetching: at-risk users must
   # never trigger a network request just to render text).

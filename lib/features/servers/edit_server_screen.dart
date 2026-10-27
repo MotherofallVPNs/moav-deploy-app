@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/server_profile.dart';
 import '../../core/ssh_endpoint.dart';
 import '../../theme/moav_theme.dart';
+import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
 import 'servers_provider.dart';
 
@@ -48,7 +49,7 @@ class _EditServerScreenState extends ConsumerState<EditServerScreen> {
 
   @override
   Widget build(BuildContext context) => MoavScaffold(
-    appBar: AppBar(title: const Text('Edit server')),
+    appBar: MoavAppBar(title: const Text('Edit server')),
     body: ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [

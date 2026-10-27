@@ -69,7 +69,7 @@ class Redactor {
     caseSensitive: false,
   );
 
-  // "key": "value"  (JSON: sing-box, xray, moav test output)
+  // "key": "value"  (JSON: sing-box, xray, moav --json output)
   static final _jsonValue = RegExp(
     '("[A-Za-z0-9_.-]*(?:${secretKeyWords.join('|')})[A-Za-z0-9_.-]*"\\s*:\\s*)'
     r'("(?:[^"\\]|\\.)*"|[0-9A-Za-z+/=._-]+)',

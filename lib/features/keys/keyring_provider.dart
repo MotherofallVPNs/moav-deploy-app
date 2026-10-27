@@ -16,7 +16,9 @@ class KeyringNotifier extends AsyncNotifier<List<StoredSshKey>> {
   }) async {
     final publicKey = const KeyService().publicKeyFromPem(privateKeyPem);
     if (publicKey == null) throw ArgumentError('Not a usable ed25519 key');
-    final existing = (state.value ?? const <StoredSshKey>[])
+    // Never save over a list that has not loaded yet.
+    final current = await future;
+    final existing = current
         .where(
           (key) =>
               key.publicKey.split(' ').take(2).join(' ') ==
@@ -32,7 +34,7 @@ class KeyringNotifier extends AsyncNotifier<List<StoredSshKey>> {
       createdAt: DateTime.now().toUtc(),
     );
     await _store.writeSshKeySecret(id, privateKeyPem.trim());
-    final next = [...(state.value ?? const <StoredSshKey>[]), key];
+    final next = [...current, key];
     await _store.saveSshKeys(next);
     state = AsyncData(next);
     return key;

@@ -5,7 +5,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
+import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
+import '../admin/admin_panel_screen.dart';
 import '../deploy/deploy_screen.dart';
 import '../keys/keyring_screen.dart';
 import '../server/server_screen.dart';
@@ -23,7 +25,7 @@ class ServersHomeScreen extends ConsumerWidget {
     final servers = ref.watch(serversProvider);
 
     return MoavScaffold(
-      appBar: AppBar(
+      appBar: MoavAppBar(
         title: const MoavWordmark(suffix: 'Deploy'),
         actions: [
           PopupMenuButton<_HomeAction>(
@@ -156,7 +158,7 @@ Future<void> _handleHomeAction(
   }
 }
 
-enum _TileAction { test, edit, users, deploy, remove }
+enum _TileAction { test, edit, users, admin, deploy, remove }
 
 class _ServerTile extends ConsumerWidget {
   const _ServerTile({required this.profile});
@@ -205,6 +207,9 @@ class _ServerTile extends ConsumerWidget {
               _TileAction.users => Navigator.of(
                 context,
               ).push(UsersScreen.route(profile)),
+              _TileAction.admin => Navigator.of(
+                context,
+              ).push(AdminPanelScreen.route(profile)),
               _TileAction.deploy => Navigator.of(
                 context,
               ).push(DeployScreen.route(profile)),
@@ -230,6 +235,13 @@ class _ServerTile extends ConsumerWidget {
                 child: ListTile(
                   leading: Icon(Icons.people_outline),
                   title: Text('Users'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _TileAction.admin,
+                child: ListTile(
+                  leading: Icon(Icons.admin_panel_settings_outlined),
+                  title: Text('Admin dashboard'),
                 ),
               ),
               PopupMenuItem(
