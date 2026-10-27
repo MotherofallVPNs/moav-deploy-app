@@ -1,0 +1,6 @@
+What is new in 0.2.6
+- Branded app-lock screen, and a generated key is saved the moment you create it.
+- Removed the slow connection test; logs are now scrollable and copyable.
+- A spinning activity icon shows background work and its live log.
+- New in-app Admin dashboard and Grafana, plus native charts for key metrics.
+- Safer, unattended server updates that work across MoaV versions.

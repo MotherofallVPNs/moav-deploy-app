@@ -1,6 +1,6 @@
-What is new in 0.2.5
-- Tap a user to see protocols, copy the subscription, or download their bundle.
-- Services, Health and Analytics load in the background, cache results, and refresh on demand.
-- More reliable analytics with a clear retry when the server is slow.
-- New Server tab: CPU, memory, disk, versions, and check/apply updates.
-- Pick services at install; start, stop, restart, enable or disable each one.
+What is new in 0.2.6
+- Branded app-lock screen, and a generated key is saved the moment you create it.
+- Removed the slow connection test; logs are now scrollable and copyable.
+- A spinning activity icon shows background work and its live log.
+- New in-app Admin dashboard and Grafana, plus native charts for key metrics.
+- Safer, unattended server updates that work across MoaV versions.
