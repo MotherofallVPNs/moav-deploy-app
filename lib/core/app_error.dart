@@ -95,7 +95,7 @@ class AppError implements Exception {
         AppErrorKind.timeout,
         'The server did not respond in time.',
         hint: 'Check the connection and try again. Long commands such as '
-            'moav test can take several minutes on a cold server.',
+            'moav doctor or a service restart can take a minute or more.',
         cause: e,
       );
     }

@@ -167,7 +167,8 @@ class _FakeController implements MoavController {
       );
 
   @override
-  Future<void> service(ServiceAction action) async {
+  Future<void> service(ServiceAction action, {OutputSink? onOutput}) async {
+    onOutput?.call('${action.kind.name} ${action.service ?? 'all'}: ok\n');
     log.add('service ${action.kind.name} ${action.service}');
   }
 
@@ -282,21 +283,6 @@ class _FakeController implements MoavController {
         : updateStatuses.length - 1;
     updateStatusCalls++;
     return updateStatuses[i];
-  }
-
-  @override
-  Future<TestMatrix> testUser(String name) async {
-    log.add('test $name');
-    return TestMatrix(
-      user: name,
-      ranAt: DateTime(2026),
-      overall: CheckResult.fail,
-      results: const [
-        ProtocolTest(protocol: 'reality', result: CheckResult.pass, detail: 'Connected'),
-        ProtocolTest(protocol: 'telemt', result: CheckResult.fail, detail: 'port blocked'),
-        ProtocolTest(protocol: 'anytls', result: CheckResult.skip, detail: 'no config'),
-      ],
-    );
   }
 
   @override
@@ -638,15 +624,15 @@ void main() {
     expect(find.text('bob'), findsOneWidget);
     expect(find.textContaining('Bundle ready'), findsOneWidget);
 
-    // Tapping a row opens the detail view: protocols, subscription, bundle
-    // and test buttons. It fetches the bundle but never runs a test.
+    // Tapping a row opens the detail view: protocols, subscription and
+    // bundle. It fetches the bundle; there is no connectivity test anymore.
     await tester.tap(find.text('alice'));
     await tester.pumpAndSettle();
     expect(find.text('BUNDLE READY'), findsOneWidget);
     expect(find.text('SING-BOX'), findsOneWidget);
     expect(find.text('Copy subscription'), findsOneWidget);
     expect(find.text('Download connection bundle'), findsOneWidget);
-    expect(find.text('Run connection test'), findsOneWidget);
+    expect(find.text('Run connection test'), findsNothing);
     expect(find.byType(QrImageView), findsNothing);
     expect(controller.log, ['bundle alice']);
 
@@ -779,36 +765,6 @@ void main() {
     await _scrollTo(tester, find.text('Grafana preview is not available here'));
     await _scrollTo(tester, find.text('Admin dashboard'));
     expect(find.text('Admin dashboard'), findsOneWidget);
-  });
-
-  testWidgets('user connectivity test shows the protocol matrix',
-      (tester) async {
-    final store = MemoryCredStore()..profiles = [_profile];
-    final controller = _FakeController(const []);
-    await tester.pumpWidget(_app(
-      store,
-      overrides: [
-        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
-      ],
-    ));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Demo'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Users'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('alice'));
-    await tester.pumpAndSettle();
-    // Opening the detail view runs nothing; the test is an explicit action.
-    expect(controller.log, isNot(contains('test alice')));
-    await _scrollTo(tester, find.text('Run connection test'));
-    await tester.tap(find.text('Run connection test'));
-    await tester.pumpAndSettle();
-
-    expect(controller.log, contains('test alice'));
-    expect(find.text('Some protocols need attention'), findsOneWidget);
-    expect(find.text('1 pass · 0 warn · 1 fail · 1 skipped'), findsOneWidget);
-    expect(find.text('reality'), findsOneWidget);
-    expect(find.text('port blocked'), findsOneWidget);
   });
 
   testWidgets('users screen: timeout shows a hint and Retry recovers',
@@ -1270,11 +1226,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.log, isNot(contains('start update')));
 
-    // Confirmed: the job starts and its log streams until done.
+    // Confirmed: the job starts and its log streams until done. Bounded
+    // pumps: the spinning activity indicator would let pumpAndSettle poll.
     await tester.tap(find.text('Update to v2.3.1'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Update'));
-    await tester.pumpAndSettle();
+    await _pumpFor(tester);
     expect(controller.log, contains('start update'));
     expect(find.text('RUNNING'), findsOneWidget);
     expect(find.textContaining('Pulling latest changes'), findsOneWidget);

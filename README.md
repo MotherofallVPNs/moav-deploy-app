@@ -40,7 +40,7 @@ the bundles this app produces.
   and show every phone link (Reality, Hysteria2, Trojan, Shadowsocks, XHTTP,
   WireGuard, AmneziaWG, MTProxy) as a QR code with copy and share.
 - **Operate.** Start, stop and restart services, run `moav doctor`, read the
-  live service table, and run per-user connectivity tests.
+  live service table, and open the admin dashboard inside the app.
 - **Monitor.** Headline metrics from Prometheus and Grafana embedded in the
   app, with an open-in-browser fallback for self-signed certificates.
 - **Keys and servers.** On-device ed25519 key generation, a reusable keyring,

@@ -7,6 +7,7 @@ import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/cached_view.dart';
 import '../../widgets/error_view.dart';
+import '../admin/admin_panel_screen.dart';
 import 'grafana_screen.dart';
 import 'operate_provider.dart';
 import 'operate_screen.dart';
@@ -93,7 +94,8 @@ class AnalyticsView extends ConsumerWidget {
               const SizedBox(height: 12),
               MoavCard(
                 padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
-                onTap: () => launchUrl(m.adminUrl!, mode: LaunchMode.externalApplication),
+                onTap: () =>
+                    Navigator.of(context).push(AdminPanelScreen.route(profile)),
                 child: Row(
                   children: [
                     const IconBadge(Icons.admin_panel_settings_outlined, size: 34),
@@ -115,7 +117,7 @@ class AnalyticsView extends ConsumerWidget {
                         ],
                       ),
                     ),
-                    const Icon(Icons.open_in_new, size: 18, color: MoavColors.textMuted),
+                    const Icon(Icons.chevron_right, size: 18, color: MoavColors.textMuted),
                   ],
                 ),
               ),

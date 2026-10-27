@@ -47,7 +47,7 @@ class _Controller implements MoavController {
   }
 
   @override
-  Future<void> service(ServiceAction action) async {
+  Future<void> service(ServiceAction action, {OutputSink? onOutput}) async {
     final e = nextServiceError;
     if (e != null) {
       nextServiceError = null;

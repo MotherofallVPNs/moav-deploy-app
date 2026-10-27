@@ -30,8 +30,7 @@ abstract class MoavController {
   Future<MoavUser> addUser(String name);
   Future<void> removeUser(String name);
   Future<Bundle> getBundle(String user);           // configs and QR payloads
-  Future<TestMatrix> testUser(String name);        // per-protocol pass/fail
-  Future<void> service(ServiceAction a);           // start/stop/restart/regenerate-users
+  Future<void> service(ServiceAction a, {OutputSink? onOutput}); // start/stop/restart/regenerate-users, streamed
   Future<ServiceStatusReport> status();            // moav status table and dashboard URLs
   Future<ServiceFlags> serviceFlags();             // ENABLE_* and DEFAULT_PROFILES from .env
   Future<Monitoring> monitoring();                 // Grafana health and dashboard URLs (fast)
@@ -40,6 +39,8 @@ abstract class MoavController {
   Future<UpdateCheck> checkForUpdates();           // moav doctor updates
   Future<void> startUpdate();                      // detached moav update job
   Future<InstallStatus?> updateStatus();           // progress of that job
+  Future<AdminPanelAccess> adminPanelAccess();     // PORT_ADMIN + ADMIN_PASSWORD from .env (memory only)
+  Future<ServerTunnel> openTunnel(int remotePort); // ssh -L for server-local web UIs
 }
 ```
 

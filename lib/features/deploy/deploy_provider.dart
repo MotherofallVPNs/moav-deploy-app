@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/moav_controller.dart';
 import '../../core/app_error.dart';
+import '../activity/activity_provider.dart';
 import '../servers/servers_provider.dart';
 
 /// Screen state for a server's detached install job.
@@ -58,14 +59,41 @@ class DeployNotifier extends Notifier<DeployState> {
 
   Timer? _timer;
 
+  /// Activity entry for the job being watched, if any.
+  OperationHandle? _op;
+
   MoavController get _controller =>
       ref.read(moavControllerProvider(serverId));
 
   @override
   DeployState build() {
-    ref.onDispose(_stopPolling);
+    ref.onDispose(() {
+      _stopPolling();
+      // Other providers must not change inside a dispose callback.
+      final op = _op;
+      _op = null;
+      if (op != null) scheduleMicrotask(op.detach);
+    });
     Future<void>.microtask(_restore);
     return const DeployState();
+  }
+
+  OperationHandle _beginOp() {
+    _op?.detach();
+    return _op = ref
+        .read(activityProvider.notifier)
+        .begin('Install MoaV · ${serverLabelOf(ref, serverId)}');
+  }
+
+  void _endOp(InstallStatus status) {
+    final op = _op;
+    if (op == null) return;
+    if (status.phase == InstallPhase.failed) {
+      op.fail(status.message ?? 'Install failed');
+    } else {
+      op.finish();
+    }
+    _op = null;
   }
 
   Future<void> _restore() async {
@@ -73,6 +101,7 @@ class DeployNotifier extends Notifier<DeployState> {
     if (json == null) return;
     if (!ref.mounted) return;
     state = state.copyWith(handle: InstallHandle.fromJson(json));
+    _beginOp();
     await refresh();
     _startPolling();
   }
@@ -81,6 +110,7 @@ class DeployNotifier extends Notifier<DeployState> {
   Future<void> start(InstallSpec spec) async {
     if (state.starting) return;
     state = state.copyWith(starting: true, clearError: true, clearStatus: true);
+    final op = _beginOp();
     try {
       final handle = await _controller.install(spec);
       await ref
@@ -91,11 +121,11 @@ class DeployNotifier extends Notifier<DeployState> {
       await refresh();
       _startPolling();
     } on Object catch (e) {
+      final error = AppError.from(e);
+      op.fail(error.summary);
+      _op = null;
       if (!ref.mounted) return;
-      state = state.copyWith(
-        starting: false,
-        error: AppError.from(e),
-      );
+      state = state.copyWith(starting: false, error: error);
     }
   }
 
@@ -107,8 +137,12 @@ class DeployNotifier extends Notifier<DeployState> {
     try {
       final status = await _controller.installStatus(handle);
       if (!ref.mounted) return;
+      _op?.setLog(status.logTail);
       state = state.copyWith(status: status, clearError: true);
-      if (status.isTerminal) _stopPolling();
+      if (status.isTerminal || status.phase == InstallPhase.unknown) {
+        _stopPolling();
+        _endOp(status);
+      }
     } on Object catch (e) {
       if (!ref.mounted) return;
       state = state.copyWith(error: AppError.from(e));
@@ -118,6 +152,8 @@ class DeployNotifier extends Notifier<DeployState> {
   /// Forgets the finished job so a new install can be started.
   Future<void> reset() async {
     _stopPolling();
+    _op?.detach();
+    _op = null;
     await ref.read(secureCredStoreProvider).deleteInstallHandle(serverId);
     if (!ref.mounted) return;
     state = const DeployState();

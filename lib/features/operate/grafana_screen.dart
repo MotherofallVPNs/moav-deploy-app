@@ -4,6 +4,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/app_error.dart';
 import '../../theme/moav_theme.dart';
+import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
 
 /// Grafana embedded in a webview. Login is Grafana's own; nothing is stored.
@@ -25,7 +26,7 @@ class _GrafanaScreenState extends State<GrafanaScreen> {
   @override
   Widget build(BuildContext context) {
     return MoavScaffold(
-      appBar: AppBar(
+      appBar: MoavAppBar(
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [

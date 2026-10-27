@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
+import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
+import '../admin/admin_panel_screen.dart';
 import '../deploy/deploy_screen.dart';
 import '../operate/operate_screen.dart';
 import '../servers/servers_provider.dart';
@@ -22,12 +24,12 @@ class ServerScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = switch (profile.authMethod) {
-      SshAuthMethod.generatedKey => 'device key',
+      SshAuthMethod.generatedKey => 'key',
       SshAuthMethod.importedKey => 'imported key',
       SshAuthMethod.password => 'password',
     };
     return MoavScaffold(
-      appBar: AppBar(title: Text(profile.label)),
+      appBar: MoavAppBar(title: Text(profile.label)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: [
@@ -114,6 +116,13 @@ class ServerScreen extends StatelessWidget {
             subtitle: 'CPU, RAM, disk, versions and MoaV updates',
             onTap: () => Navigator.of(context)
                 .push(OperateScreen.route(profile, tab: OperateTab.server)),
+          ),
+          _HubTile(
+            icon: Icons.admin_panel_settings_outlined,
+            title: 'Admin dashboard',
+            subtitle: 'The MoaV web panel, through this SSH connection',
+            onTap: () =>
+                Navigator.of(context).push(AdminPanelScreen.route(profile)),
           ),
           const SectionHeader('Install'),
           _HubTile(

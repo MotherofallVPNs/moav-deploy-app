@@ -31,6 +31,16 @@ final moavControllerProvider = Provider.family<MoavController, String>((
   return ref.read(moavControllerFactoryProvider).forServer(profile);
 });
 
+/// Label of a saved server for activity entries; the id when unknown.
+String serverLabelOf(Ref ref, String serverId) =>
+    ref
+        .read(serversProvider)
+        .value
+        ?.where((p) => p.id == serverId)
+        .firstOrNull
+        ?.label ??
+    serverId;
+
 /// The saved servers. Loaded from the secure store on first read.
 class ServersNotifier extends AsyncNotifier<List<ServerProfile>> {
   SecureCredStore get _store => ref.read(secureCredStoreProvider);

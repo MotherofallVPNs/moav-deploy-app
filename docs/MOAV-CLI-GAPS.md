@@ -69,8 +69,8 @@ Captured verbatim from v2.3.1 into `test/fixtures/json/`.
   [{user, ok, error?, bundle_dir?}]}` or `{ok: false, action, error}` when
   the request never reached the scripts. Exit code is non-zero when `ok`
   is false (including `already exists` on add and an unknown user on remove).
-- `moav test USER --json`: `{overall_status, summary, tests: {proto: {status,
-  detail}}}`, unchanged from 2.2.x.
+- `moav test USER --json` exists upstream but the app no longer runs it (the
+  per-protocol client test was removed as slow and low value).
 
 ## What the text parsers rely on (MoaV 2.2.x)
 
@@ -81,7 +81,7 @@ Captured verbatim from v2.3.1 into `test/fixtures/json/`.
 | `install.sh`: "Start Docker now?" defaulted to **no** | on a fresh box where Docker was just installed but not started, a non-interactive run continued without Docker | fixed in 2.3.0 for non-interactive runs (defaults to yes). On a 2.2.x installer the app's install job inherits the old default and does not check Docker separately. |
 | `moav bootstrap --yes` | idempotent re-run; preserves keys/users, regenerates configs | exists in 2.2.x; on 2.2.x it still entered interactive service selection afterwards (fixed in 2.3.0) |
 | Env-driven config (`DOMAIN`, `ACME_EMAIL`, `ADMIN_PASSWORD`) | app fills them before bootstrap | plain `KEY="value"` lines in `/opt/moav/.env` (template `.env.example`). The app only fills empty/placeholder values so an existing box is never reconfigured silently. |
-| Stable machine-readable `moav test` result codes | per-protocol pass/fail UI | `moav test USER --json` exists on 2.2.x. On 2.2.x the JSON is the *tail* of stdout after `docker build` chatter, so the app scans backwards for the last decodable `{…}`; harmless on 2.3.x where stdout is clean. |
+| Admin dashboard settings | in-app admin panel over an SSH tunnel | `PORT_ADMIN`, `ENABLE_ADMIN_UI` and `ADMIN_PASSWORD` are read from `/opt/moav/.env` (`MoavCli.adminPanel`). The password is held in memory only and answers the panel's HTTP Basic challenge (any username, see upstream `admin/main.py`). |
 | `moav user list --json` | user list | 2.2.x: sectioned text (`=== sing-box Users … ===`, `• name [bundle ready]`, `• name (10.66.66.106)`). Parsed by section; a user is "bundle ready" when listed under `=== User Bundles ===`. |
 | `moav user revoke` exit code | detect failure | `cmd_user revoke` loops `user-revoke.sh "$u" \|\| true`, so the text path exits 0 even for an unknown user. The app re-lists users afterwards to confirm. |
 | `moav doctor --json` | health view | 2.2.x: text grouped by `name - description` headers with `✓ ! ○ ✗ ℹ` markers, some checks (dns) print unindented. The app derives fail/warn/pass per check from the markers. |

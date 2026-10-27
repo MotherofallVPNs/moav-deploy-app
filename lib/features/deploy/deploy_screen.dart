@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/moav_controller.dart';
 import '../../core/moav_services.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
+import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
+import '../../widgets/log_view.dart';
 import 'deploy_provider.dart';
 
 /// Deploy MoaV on a server: collects installer inputs, launches the detached
@@ -25,7 +26,7 @@ class DeployScreen extends ConsumerWidget {
     final notifier = ref.read(deployProvider(profile.id).notifier);
 
     return MoavScaffold(
-      appBar: AppBar(
+      appBar: MoavAppBar(
         title: Text('Deploy · ${profile.label}'),
         actions: [
           if (state.handle != null)
@@ -281,40 +282,15 @@ class ServiceSelection extends StatelessWidget {
   }
 }
 
-class _JobView extends StatefulWidget {
+class _JobView extends StatelessWidget {
   const _JobView({required this.state, required this.onReset});
 
   final DeployState state;
   final Future<void> Function() onReset;
 
   @override
-  State<_JobView> createState() => _JobViewState();
-}
-
-class _JobViewState extends State<_JobView> {
-  final _scroll = ScrollController();
-
-  @override
-  void didUpdateWidget(covariant _JobView old) {
-    super.didUpdateWidget(old);
-    if (old.state.status?.logTail.length != widget.state.status?.logTail.length) {
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        if (_scroll.hasClients) {
-          _scroll.jumpTo(_scroll.position.maxScrollExtent);
-        }
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final s = widget.state;
+    final s = state;
     final status = s.status;
     final phase = status?.phase ?? InstallPhase.pending;
     final lines = status?.logTail ?? const <String>[];
@@ -366,48 +342,14 @@ class _JobViewState extends State<_JobView> {
             ),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: SectionHeader(
-            'deploy.log',
-            padding: const EdgeInsets.only(bottom: 8),
-            trailing: Text(
-              '${lines.length} lines',
-              style: moavLabel(size: 10, color: MoavColors.textMuted),
-            ),
-          ),
-        ),
         Expanded(
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-            decoration: BoxDecoration(
-              color: MoavColors.codeBg,
-              borderRadius: MoavRadius.control,
-              border: Border.all(color: MoavColors.border),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: LogView(
+              lines: lines,
+              title: 'deploy.log',
+              highlightPrefix: '[moav-deploy]',
             ),
-            child: lines.isEmpty
-                ? Center(
-                    child: Text(
-                      'No output yet',
-                      style: moavMono(size: 12, color: MoavColors.textMuted),
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _scroll,
-                    padding: const EdgeInsets.all(12),
-                    itemCount: lines.length,
-                    itemBuilder: (_, i) => Text(
-                      lines[i],
-                      style: moavMono(
-                        size: 11,
-                        weight: FontWeight.w400,
-                        color: lines[i].startsWith('[moav-deploy]')
-                            ? MoavColors.cyan
-                            : MoavColors.codeText,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
           ),
         ),
         if ((status?.isTerminal ?? false) || phase == InstallPhase.unknown)
@@ -418,7 +360,7 @@ class _JobViewState extends State<_JobView> {
               child: SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: widget.onReset,
+                  onPressed: onReset,
                   child: const Text('Start another install'),
                 ),
               ),

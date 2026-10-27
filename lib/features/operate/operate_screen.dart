@@ -5,7 +5,9 @@ import '../../core/moav_controller.dart';
 import '../../core/moav_services.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
+import '../../widgets/moav_app_bar.dart';
 import '../../widgets/cached_view.dart';
+import '../../widgets/log_view.dart';
 import 'analytics_view.dart';
 import 'operate_provider.dart';
 import 'server_info_view.dart';
@@ -36,7 +38,7 @@ class OperateScreen extends ConsumerWidget {
       length: OperateTab.values.length,
       initialIndex: initialTab.index,
       child: MoavScaffold(
-        appBar: AppBar(
+        appBar: MoavAppBar(
           title: Text(profile.label),
           actions: [
             Builder(
@@ -141,7 +143,10 @@ class _ServicesTab extends ConsumerWidget {
                   context: context,
                   builder: (ctx) => AlertDialog(
                     title: Text(error.message),
-                    content: SingleChildScrollView(child: CodeBlock(detail, size: 11)),
+                    content: SizedBox(
+                      width: double.maxFinite,
+                      child: LogView(lines: detail.split('\n'), height: 260),
+                    ),
                     actions: [
                       TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
                     ],

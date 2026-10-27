@@ -73,35 +73,38 @@ void main() {
     });
   });
 
-  group('parseTest', () {
-    test('extracts trailing JSON after docker noise', () {
-      final m = MoavCli.parseTest('carol', fixture('test_json.txt'));
-      expect(m.user, 'carol');
-      expect(m.overall, CheckResult.fail);
-      expect(m.results.length, 4);
-      expect(m.results.first.protocol, 'reality');
-      expect(m.results.first.result, CheckResult.pass);
-      expect(m.count(CheckResult.warn), 1);
-      expect(m.count(CheckResult.skip), 1);
-      expect(m.allPass, isFalse);
-      expect(
-        m.results.firstWhere((r) => r.protocol == 'telemt').detail,
-        contains('port blocked'),
+  group('parseAdminPanel', () {
+    test('reads port, flag and a quoted password', () {
+      final a = MoavCli.parseAdminPanel(
+        '__ADMIN__\nport=9443\nenabled=true\npassword="s3cret=pw"\n__END__\n',
       );
+      expect(a, isNotNull);
+      expect(a!.port, 9443);
+      expect(a.enabled, isTrue);
+      expect(a.password, 's3cret=pw');
+      expect(a.toString(), isNot(contains('s3cret')));
     });
 
-    test('allPass ignores skips', () {
-      final m = MoavCli.parseTest(
-        'u',
-        '{"overall_status":"pass","tests":{"a":{"status":"pass"},'
-        '"b":{"status":"skip","detail":"none"}}}',
-      );
-      expect(m.allPass, isTrue);
+    test('defaults when values are empty, null without markers', () {
+      final a = MoavCli.parseAdminPanel(
+        '__ADMIN__\nport=\nenabled=\npassword=\n__END__\n',
+      )!;
+      expect(a.port, MoavCli.defaultAdminPort);
+      expect(a.enabled, isTrue);
+      expect(a.password, isNull);
+      expect(MoavCli.parseAdminPanel(''), isNull);
+      final off = MoavCli.parseAdminPanel(
+        '__ADMIN__\nenabled=false\npassword=\'plain\'\n__END__',
+      )!;
+      expect(off.enabled, isFalse);
+      expect(off.password, 'plain');
     });
 
-    test('no JSON throws FormatException', () {
-      expect(() => MoavCli.parseTest('u', 'nothing here {'),
-          throwsFormatException);
+    test('snippet reads the documented .env keys and never fails', () {
+      expect(MoavCli.adminPanel, contains("grep -m1 '^ADMIN_PASSWORD='"));
+      expect(MoavCli.adminPanel, contains('ev PORT_ADMIN'));
+      expect(MoavCli.adminPanel, contains('ev ENABLE_ADMIN_UI'));
+      expect(MoavCli.adminPanel, isNot(contains('exit 1')));
     });
   });
 
@@ -395,7 +398,6 @@ void jsonMain() {
     expect(MoavCli.userListJson, endsWith('user list --json'));
     expect(MoavCli.userAddJson("a'b"), endsWith("user add 'a'\\''b' --json"));
     expect(MoavCli.userRemoveJson('x'), endsWith("user remove 'x' --json"));
-    expect(MoavCli.test('x'), contains("test 'x' --json"));
     // JSON commands must not merge stderr into the document.
     for (final c in [MoavCli.statusJson, MoavCli.doctorJson, MoavCli.userListJson]) {
       expect(c, isNot(contains('2>&1')));

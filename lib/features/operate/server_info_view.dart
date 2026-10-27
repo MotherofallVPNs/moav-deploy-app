@@ -6,6 +6,7 @@ import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/cached_view.dart';
 import '../../widgets/error_view.dart';
+import '../../widgets/log_view.dart';
 import 'operate_provider.dart';
 import 'operate_screen.dart';
 
@@ -243,7 +244,6 @@ class _UpdateJobCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final job = state.job!;
     final lines = job.logTail;
-    final tail = lines.length > 40 ? lines.sublist(lines.length - 40) : lines;
     final (label, tone, icon) = switch (job.phase) {
       InstallPhase.pending => ('Starting', StatusTone.neutral, Icons.schedule),
       InstallPhase.running => ('Running', StatusTone.accent, Icons.sync),
@@ -293,10 +293,11 @@ class _UpdateJobCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 12),
-          CodeBlock(
-            tail.isEmpty ? 'No output yet' : tail.join('\n'),
-            size: 11,
-            selectable: false,
+          LogView(
+            lines: lines,
+            height: 220,
+            title: 'update.log',
+            highlightPrefix: '[moav-deploy]',
           ),
           if (job.isTerminal || job.phase == InstallPhase.unknown) ...[
             const SizedBox(height: 10),

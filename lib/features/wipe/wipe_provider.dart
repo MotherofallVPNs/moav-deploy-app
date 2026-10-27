@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/app_error.dart';
 import '../../core/ssh_moav_controller.dart';
 import '../../security/wipe_service.dart';
+import '../activity/activity_provider.dart';
 import '../deploy/deploy_provider.dart';
 import '../operate/operate_provider.dart';
 import '../servers/servers_provider.dart';
@@ -56,7 +57,7 @@ class WipeNotifier extends Notifier<WipeState> {
   void _dropInMemoryState() {
     ref.invalidate(bundleProvider);
     ref.invalidate(usersProvider);
-    ref.invalidate(userTestProvider);
+    ref.invalidate(activityProvider);
     ref.invalidate(statusProvider);
     ref.invalidate(doctorProvider);
     ref.invalidate(monitoringProvider);

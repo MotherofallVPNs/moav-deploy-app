@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_error.dart';
 import '../../core/moav_controller.dart';
+import '../activity/activity_provider.dart';
 import '../servers/servers_provider.dart';
 import '../users/users_provider.dart';
 
@@ -61,6 +62,9 @@ abstract class CachedFetchNotifier<T> extends Notifier<FetchState<T>> {
 
   Future<T> fetch();
 
+  /// Shown in the activity panel while the fetch runs.
+  String get activityLabel;
+
   @override
   FetchState<T> build() {
     Future<void>.microtask(refresh);
@@ -87,8 +91,12 @@ abstract class CachedFetchNotifier<T> extends Notifier<FetchState<T>> {
 
   Future<void> _fetch() async {
     state = state.copyWith(loading: true);
+    final op = ref
+        .read(activityProvider.notifier)
+        .begin('$activityLabel · ${serverLabelOf(ref, serverId)}');
     try {
       final value = await fetch();
+      op.finish();
       if (!ref.mounted) return;
       state = FetchState<T>(
         data: value,
@@ -96,8 +104,10 @@ abstract class CachedFetchNotifier<T> extends Notifier<FetchState<T>> {
         loading: false,
       );
     } on Object catch (e) {
+      final error = AppError.from(e);
+      op.fail(error.summary);
       if (!ref.mounted) return;
-      state = state.copyWith(loading: false, error: AppError.from(e));
+      state = state.copyWith(loading: false, error: error);
     }
   }
 }
@@ -107,6 +117,9 @@ class StatusNotifier extends CachedFetchNotifier<ServiceStatusReport> {
 
   @override
   Future<ServiceStatusReport> fetch() => controller.status();
+
+  @override
+  String get activityLabel => 'moav status';
 }
 
 class DoctorNotifier extends CachedFetchNotifier<DoctorReport> {
@@ -114,6 +127,9 @@ class DoctorNotifier extends CachedFetchNotifier<DoctorReport> {
 
   @override
   Future<DoctorReport> fetch() => controller.doctor();
+
+  @override
+  String get activityLabel => 'moav doctor';
 }
 
 class MonitoringNotifier extends CachedFetchNotifier<Monitoring> {
@@ -121,6 +137,9 @@ class MonitoringNotifier extends CachedFetchNotifier<Monitoring> {
 
   @override
   Future<Monitoring> fetch() => controller.monitoring();
+
+  @override
+  String get activityLabel => 'Grafana health';
 }
 
 class MetricsNotifier extends CachedFetchNotifier<MetricsSnapshot> {
@@ -128,6 +147,9 @@ class MetricsNotifier extends CachedFetchNotifier<MetricsSnapshot> {
 
   @override
   Future<MetricsSnapshot> fetch() => controller.metrics();
+
+  @override
+  String get activityLabel => 'Prometheus metrics';
 }
 
 class ServerInfoNotifier extends CachedFetchNotifier<ServerInfo> {
@@ -135,6 +157,9 @@ class ServerInfoNotifier extends CachedFetchNotifier<ServerInfo> {
 
   @override
   Future<ServerInfo> fetch() => controller.serverInfo();
+
+  @override
+  String get activityLabel => 'Host info';
 }
 
 /// `ENABLE_*` flags from `.env`; the Services tab reads enabled/disabled
@@ -144,6 +169,9 @@ class ServiceFlagsNotifier extends CachedFetchNotifier<ServiceFlags> {
 
   @override
   Future<ServiceFlags> fetch() => controller.serviceFlags();
+
+  @override
+  String get activityLabel => '.env service flags';
 }
 
 final statusProvider = NotifierProvider.family<StatusNotifier,
@@ -167,12 +195,6 @@ final serviceFlagsProvider = NotifierProvider.family<ServiceFlagsNotifier,
 /// A cached value is re-fetched in the background when a tab reopens and
 /// the value is older than this.
 const tabStaleAfter = Duration(minutes: 2);
-
-/// Runs `moav test <user>` when first watched (minutes on a cold image).
-final userTestProvider =
-    FutureProvider.autoDispose.family<TestMatrix, BundleKey>(
-  (ref, key) => ref.read(moavControllerProvider(key.serverId)).testUser(key.user),
-);
 
 class ServiceActionState {
   const ServiceActionState({this.running, this.message, this.error});
@@ -199,16 +221,26 @@ class ServiceActionsNotifier extends Notifier<ServiceActionState> {
   @override
   ServiceActionState build() => const ServiceActionState();
 
+  /// Runs [action] as a tracked operation: the activity indicator spins
+  /// and the command output streams into the activity panel meanwhile.
   Future<void> run(ServiceAction action) async {
     if (state.busy) return;
     state = ServiceActionState(running: action);
+    final op = ref
+        .read(activityProvider.notifier)
+        .begin('${describe(action)} · ${serverLabelOf(ref, serverId)}');
     try {
-      await ref.read(moavControllerProvider(serverId)).service(action);
+      await ref
+          .read(moavControllerProvider(serverId))
+          .service(action, onOutput: op.log);
+      op.finish();
       if (!ref.mounted) return;
       state = ServiceActionState(message: '${describe(action)} done');
     } on Object catch (e) {
+      final error = AppError.from(e);
+      op.fail(error.summary);
       if (!ref.mounted) return;
-      state = ServiceActionState(error: AppError.from(e));
+      state = ServiceActionState(error: error);
     } finally {
       // Same cached refresh the tab uses: the row re-renders from the
       // next `moav status`, the old report stays visible meanwhile.
@@ -303,13 +335,42 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
   Timer? _timer;
 
+  /// Activity entry for the job being watched, if any.
+  OperationHandle? _op;
+
   MoavController get _controller => ref.read(moavControllerProvider(serverId));
 
   @override
   UpdateState build() {
-    ref.onDispose(_stopPolling);
+    ref.onDispose(() {
+      _stopPolling();
+      // Other providers must not change inside a dispose callback.
+      final op = _op;
+      _op = null;
+      if (op != null) scheduleMicrotask(op.detach);
+    });
     Future<void>.microtask(attach);
     return const UpdateState();
+  }
+
+  OperationHandle _beginOp() {
+    _op?.detach();
+    return _op = ref
+        .read(activityProvider.notifier)
+        .begin('Update MoaV · ${serverLabelOf(ref, serverId)}');
+  }
+
+  void _endOp(InstallStatus? status) {
+    final op = _op;
+    if (op == null) return;
+    if (status == null) {
+      op.fail('No update log found on the server');
+    } else if (status.phase == InstallPhase.failed) {
+      op.fail(status.message ?? 'Update failed');
+    } else {
+      op.finish();
+    }
+    _op = null;
   }
 
   /// Picks up a job that is still running (e.g. after the app was killed).
@@ -319,6 +380,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
       if (!ref.mounted || status == null) return;
       if (status.phase == InstallPhase.pending ||
           status.phase == InstallPhase.running) {
+        _beginOp().setLog(status.logTail);
         state = state.copyWith(job: status);
         _startPolling();
       }
@@ -343,6 +405,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
   Future<void> start() async {
     if (state.starting || state.jobRunning) return;
     state = state.copyWith(starting: true, clearJobError: true, clearJob: true);
+    final op = _beginOp();
     try {
       await _controller.startUpdate();
       if (!ref.mounted) return;
@@ -350,8 +413,11 @@ class UpdateNotifier extends Notifier<UpdateState> {
       await poll();
       _startPolling();
     } on Object catch (e) {
+      final error = AppError.from(e);
+      op.fail(error.summary);
+      _op = null;
       if (!ref.mounted) return;
-      state = state.copyWith(starting: false, jobError: AppError.from(e));
+      state = state.copyWith(starting: false, jobError: error);
     }
   }
 
@@ -361,6 +427,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
     try {
       final status = await _controller.updateStatus();
       if (!ref.mounted) return;
+      if (status != null) _op?.setLog(status.logTail);
       state = state.copyWith(
         job: status ??
             const InstallStatus(
@@ -371,6 +438,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
       );
       if (status == null || status.isTerminal) {
         _stopPolling();
+        _endOp(status);
         if (status?.phase == InstallPhase.succeeded) _afterSuccess();
       }
     } on Object catch (e) {
@@ -382,6 +450,8 @@ class UpdateNotifier extends Notifier<UpdateState> {
   /// Forgets the finished job so the card returns to the check/update view.
   void dismiss() {
     _stopPolling();
+    _op?.detach();
+    _op = null;
     state = state.copyWith(clearJob: true, clearJobError: true);
   }
 

@@ -7,8 +7,8 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
+import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
-import '../operate/user_test_screen.dart';
 import 'users_provider.dart';
 
 /// One user's client configs: a QR per phone-friendly link, copy and share.
@@ -28,14 +28,9 @@ class UserBundleScreen extends ConsumerWidget {
     final key = (serverId: profile.id, user: user);
     final bundle = ref.watch(bundleProvider(key));
     return MoavScaffold(
-      appBar: AppBar(
+      appBar: MoavAppBar(
         title: Text(user, style: moavMono(size: 17, weight: FontWeight.w600)),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.network_check),
-            tooltip: 'Test connectivity',
-            onPressed: () => Navigator.of(context).push(UserTestScreen.route(profile, user)),
-          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Re-fetch bundle',

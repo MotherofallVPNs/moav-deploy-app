@@ -7,6 +7,7 @@ import '../../security/key_export_service.dart';
 import '../../security/key_service.dart';
 import '../../security/secure_cred_store.dart';
 import '../../theme/moav_theme.dart';
+import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
 import 'keyring_provider.dart';
 
@@ -20,7 +21,7 @@ class KeyringScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final keys = ref.watch(keyringProvider);
     return MoavScaffold(
-      appBar: AppBar(
+      appBar: MoavAppBar(
         title: const Text('SSH keys'),
         actions: [
           IconButton(
