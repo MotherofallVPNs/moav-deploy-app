@@ -4,13 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
-import '../../widgets/error_view.dart';
+import '../../widgets/cached_view.dart';
 import 'analytics_view.dart';
 import 'operate_provider.dart';
+import 'server_info_view.dart';
 
-enum OperateTab { services, health, monitoring }
+enum OperateTab { services, health, monitoring, server }
 
-/// Operate & monitor one server: service controls, doctor health, analytics.
+/// Operate & monitor one server: service controls, doctor health, analytics,
+/// host info and updates. Every tab reads a cached [FetchState]: switching
+/// away never cancels a fetch, coming back renders the last result at once.
 class OperateScreen extends ConsumerWidget {
   const OperateScreen({
     super.key,
@@ -34,20 +37,75 @@ class OperateScreen extends ConsumerWidget {
       child: MoavScaffold(
         appBar: AppBar(
           title: Text(profile.label),
-          bottom: const TabBar(tabs: [
-            Tab(text: 'Services'),
-            Tab(text: 'Health'),
-            Tab(text: 'Analytics'),
-          ]),
+          actions: [
+            Builder(
+              builder: (ctx) => IconButton(
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh',
+                onPressed: () => _refreshTab(ref, DefaultTabController.of(ctx).index),
+              ),
+            ),
+          ],
+          bottom: const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              Tab(text: 'Services'),
+              Tab(text: 'Health'),
+              Tab(text: 'Analytics'),
+              Tab(text: 'Server'),
+            ],
+          ),
         ),
         body: TabBarView(children: [
           _ServicesTab(profile: profile),
           _HealthTab(profile: profile),
           AnalyticsView(profile: profile),
+          ServerInfoView(profile: profile),
         ]),
       ),
     );
   }
+
+  void _refreshTab(WidgetRef ref, int index) {
+    final id = profile.id;
+    switch (OperateTab.values[index]) {
+      case OperateTab.services:
+        ref.read(statusProvider(id).notifier).refresh();
+      case OperateTab.health:
+        ref.read(doctorProvider(id).notifier).refresh();
+      case OperateTab.monitoring:
+        ref.read(monitoringProvider(id).notifier).refresh();
+        ref.read(metricsProvider(id).notifier).refresh();
+        ref.read(statusProvider(id).notifier).refresh();
+      case OperateTab.server:
+        ref.read(serverInfoProvider(id).notifier).refresh();
+    }
+  }
+}
+
+/// Kicks a background refresh when a tab (re)opens with a stale cache.
+class StaleRefresher extends ConsumerStatefulWidget {
+  const StaleRefresher({super.key, required this.onOpen, required this.child});
+
+  final void Function(WidgetRef ref) onOpen;
+  final Widget child;
+
+  @override
+  ConsumerState<StaleRefresher> createState() => _StaleRefresherState();
+}
+
+class _StaleRefresherState extends ConsumerState<StaleRefresher> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onOpen(ref);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 // --- Services ---
@@ -60,6 +118,7 @@ class _ServicesTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(statusProvider(profile.id));
+    final statusNotifier = ref.read(statusProvider(profile.id).notifier);
     final actions = ref.watch(serviceActionsProvider(profile.id));
     final notifier = ref.read(serviceActionsProvider(profile.id).notifier);
 
@@ -88,94 +147,94 @@ class _ServicesTab extends ConsumerWidget {
       await notifier.run(a);
     }
 
-    return RefreshIndicator(
-      onRefresh: () => ref.refresh(statusProvider(profile.id).future),
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-        children: [
-          if (actions.busy)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: MoavCard(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: Row(
-                  children: [
-                    const SizedBox(
-                      width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('${ServiceActionsNotifier.describe(actions.running!)}…'),
-                          Text('This can take a minute', style: Theme.of(context).textTheme.bodySmall),
-                        ],
+    return StaleRefresher(
+      onOpen: (ref) => ref
+          .read(statusProvider(profile.id).notifier)
+          .refreshIfStale(tabStaleAfter),
+      child: CachedView<ServiceStatusReport>(
+        state: status,
+        onRefresh: statusNotifier.refresh,
+        loadingLabel: 'Reading moav status…',
+        builder: (context, s) => ListView(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+          children: [
+            if (actions.busy)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: MoavCard(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('${ServiceActionsNotifier.describe(actions.running!)}…'),
+                            Text('This can take a minute', style: Theme.of(context).textTheme.bodySmall),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
+            _SummaryCard(report: s, fetchedAt: status.fetchedAt),
+            const SectionHeader('Actions', padding: EdgeInsets.only(top: 16, bottom: 8)),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: actions.busy ? null : () => confirmAndRun(ServiceAction.start),
+                  icon: const Icon(Icons.play_arrow, size: 18),
+                  label: const Text('Start all'),
+                ),
+                FilledButton.tonalIcon(
+                  onPressed: actions.busy
+                      ? null
+                      : () => confirmAndRun(
+                            ServiceAction.restart,
+                            warning: 'Every client will briefly disconnect while '
+                                'services restart.',
+                          ),
+                  icon: const Icon(Icons.restart_alt, size: 18),
+                  label: const Text('Restart all'),
+                ),
+                FilledButton.tonalIcon(
+                  onPressed: actions.busy
+                      ? null
+                      : () => confirmAndRun(
+                            ServiceAction.stop,
+                            warning: 'All VPN services stop and every client '
+                                'loses connectivity until you start them again.',
+                          ),
+                  icon: const Icon(Icons.stop, size: 18),
+                  label: const Text('Stop all'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: actions.busy
+                      ? null
+                      : () => confirmAndRun(
+                            ServiceAction.regenerateUsers,
+                            warning: 'Rebuilds every user bundle from the current '
+                                '.env. Existing keys are kept; users may need to '
+                                're-import configs if server settings changed.',
+                          ),
+                  icon: const Icon(Icons.autorenew, size: 18),
+                  label: const Text('Regenerate users'),
+                ),
+              ],
             ),
-          status.when(
-            loading: () => const Center(child: Padding(
-              padding: EdgeInsets.all(24), child: CircularProgressIndicator())),
-            error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(statusProvider(profile.id))),
-            data: (s) => _SummaryCard(report: s),
-          ),
-          const SectionHeader('Actions', padding: EdgeInsets.only(top: 16, bottom: 8)),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              FilledButton.tonalIcon(
-                onPressed: actions.busy ? null : () => confirmAndRun(ServiceAction.start),
-                icon: const Icon(Icons.play_arrow, size: 18),
-                label: const Text('Start all'),
-              ),
-              FilledButton.tonalIcon(
-                onPressed: actions.busy
-                    ? null
-                    : () => confirmAndRun(
-                          ServiceAction.restart,
-                          warning: 'Every client will briefly disconnect while '
-                              'services restart.',
-                        ),
-                icon: const Icon(Icons.restart_alt, size: 18),
-                label: const Text('Restart all'),
-              ),
-              FilledButton.tonalIcon(
-                onPressed: actions.busy
-                    ? null
-                    : () => confirmAndRun(
-                          ServiceAction.stop,
-                          warning: 'All VPN services stop and every client '
-                              'loses connectivity until you start them again.',
-                        ),
-                icon: const Icon(Icons.stop, size: 18),
-                label: const Text('Stop all'),
-              ),
-              OutlinedButton.icon(
-                onPressed: actions.busy
-                    ? null
-                    : () => confirmAndRun(
-                          ServiceAction.regenerateUsers,
-                          warning: 'Rebuilds every user bundle from the current '
-                              '.env. Existing keys are kept; users may need to '
-                              're-import configs if server settings changed.',
-                        ),
-                icon: const Icon(Icons.autorenew, size: 18),
-                label: const Text('Regenerate users'),
-              ),
-            ],
-          ),
-          if (status.hasValue) ...[
             const SectionHeader('Services', padding: EdgeInsets.only(top: 20, bottom: 8)),
             MoavCard(
               padding: EdgeInsets.zero,
               child: Column(
                 children: [
-                  for (final (i, svc) in status.value!.services.indexed) ...[
+                  for (final (i, svc) in s.services.indexed) ...[
                     if (i > 0) const Divider(),
                     _ServiceRow(
                       service: svc,
@@ -193,16 +252,17 @@ class _ServicesTab extends ConsumerWidget {
               ),
             ),
           ],
-        ],
+        ),
       ),
     );
   }
 }
 
 class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.report});
+  const _SummaryCard({required this.report, this.fetchedAt});
 
   final ServiceStatusReport report;
+  final DateTime? fetchedAt;
 
   @override
   Widget build(BuildContext context) {
@@ -247,6 +307,8 @@ class _SummaryCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+              if (s.defaultProfiles.isEmpty) const Spacer(),
+              updatedAt(context, fetchedAt),
             ],
           ),
         ],
@@ -331,25 +393,20 @@ class _HealthTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final doctor = ref.watch(doctorProvider(profile.id));
-    return doctor.when(
-      loading: () => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Text('Running moav doctor… (about 30 s)', style: Theme.of(context).textTheme.bodyMedium),
-          ],
-        ),
-      ),
-      error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(doctorProvider(profile.id))),
-      data: (r) {
-        final pass = r.checks.where((c) => c.result == CheckResult.pass).length;
-        final fails = r.checks.where((c) => c.result == CheckResult.fail).length;
-        final warns = r.checks.where((c) => c.result == CheckResult.warn).length;
-        return RefreshIndicator(
-          onRefresh: () => ref.refresh(doctorProvider(profile.id).future),
-          child: ListView(
+    final notifier = ref.read(doctorProvider(profile.id).notifier);
+    return StaleRefresher(
+      onOpen: (ref) => ref
+          .read(doctorProvider(profile.id).notifier)
+          .refreshIfStale(tabStaleAfter),
+      child: CachedView<DoctorReport>(
+        state: doctor,
+        onRefresh: notifier.refresh,
+        loadingLabel: 'Running moav doctor… (about 30 s)',
+        builder: (context, r) {
+          final pass = r.checks.where((c) => c.result == CheckResult.pass).length;
+          final fails = r.checks.where((c) => c.result == CheckResult.fail).length;
+          final warns = r.checks.where((c) => c.result == CheckResult.warn).length;
+          return ListView(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
             children: [
               MoavCard(
@@ -408,9 +465,9 @@ class _HealthTab extends ConsumerWidget {
                 ),
               ),
             ],
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

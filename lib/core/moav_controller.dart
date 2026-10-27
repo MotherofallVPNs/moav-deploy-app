@@ -41,8 +41,25 @@ abstract class MoavController {
   /// Per-service state (`moav status`) plus the dashboard URLs it prints.
   Future<ServiceStatusReport> status();
 
-  /// Grafana URL, its health, plus a few headline metrics from Prometheus.
+  /// Grafana URL and its health, plus the dashboard URLs. Fast.
   Future<Monitoring> monitoring();
+
+  /// Headline metrics from Prometheus. Slow on a busy box, so it is fetched
+  /// and refreshed independently of [monitoring].
+  Future<MetricsSnapshot> metrics();
+
+  /// Host CPU, RAM and disk plus the MoaV and component versions.
+  Future<ServerInfo> serverInfo();
+
+  /// Asks the server whether a newer MoaV release exists.
+  Future<UpdateCheck> checkForUpdates();
+
+  /// Starts the MoaV self-update **detached** on the server. Re-attaches to a
+  /// job that is still running instead of starting a second one.
+  Future<void> startUpdate();
+
+  /// Progress of the detached update job; `null` when none was ever started.
+  Future<InstallStatus?> updateStatus();
 }
 
 // --- Models ---
@@ -119,6 +136,7 @@ class InstallHandle {
 
 enum InstallPhase { pending, running, succeeded, failed, unknown }
 
+/// Progress of a detached server-side job (the install or the self-update).
 class InstallStatus {
   const InstallStatus({
     required this.phase,
@@ -334,6 +352,128 @@ class Monitoring {
   final String? grafanaVersion;
   final List<Metric> metrics;
   final DateTime? collectedAt;
+}
+
+/// Headline Prometheus metrics, fetched separately from [Monitoring].
+class MetricsSnapshot {
+  const MetricsSnapshot({required this.metrics, required this.collectedAt});
+
+  final List<Metric> metrics;
+  final DateTime collectedAt;
+}
+
+/// CPU, RAM, swap and disk of the host, read from `/proc` and `df`.
+class HostMetrics {
+  const HostMetrics({
+    this.cpuCount,
+    this.cpuUsage,
+    this.load1,
+    this.load5,
+    this.load15,
+    this.memTotalBytes,
+    this.memAvailableBytes,
+    this.swapTotalBytes,
+    this.swapFreeBytes,
+    this.diskTotalBytes,
+    this.diskAvailableBytes,
+    this.uptime,
+  });
+
+  final int? cpuCount;
+
+  /// 0.0 to 1.0 over a one-second sample, `null` when not sampled.
+  final double? cpuUsage;
+  final double? load1;
+  final double? load5;
+  final double? load15;
+  final int? memTotalBytes;
+  final int? memAvailableBytes;
+  final int? swapTotalBytes;
+  final int? swapFreeBytes;
+  final int? diskTotalBytes;
+  final int? diskAvailableBytes;
+  final Duration? uptime;
+
+  static double? _used(int? total, int? free) {
+    if (total == null || free == null || total <= 0) return null;
+    return ((total - free) / total).clamp(0, 1);
+  }
+
+  /// Fraction of RAM in use (1 minus available), `null` when unknown.
+  double? get memUsage => _used(memTotalBytes, memAvailableBytes);
+  double? get swapUsage => _used(swapTotalBytes, swapFreeBytes);
+  double? get diskUsage => _used(diskTotalBytes, diskAvailableBytes);
+
+  bool get isEmpty =>
+      cpuUsage == null &&
+      load1 == null &&
+      memTotalBytes == null &&
+      diskTotalBytes == null;
+}
+
+/// One row of the `moav --version` component table.
+class ComponentVersion {
+  const ComponentVersion({
+    required this.name,
+    required this.version,
+    this.source,
+  });
+
+  final String name;
+  final String version;
+  final String? source;
+}
+
+/// What `moav --version` and the git checkout say about the install.
+class VersionInfo {
+  const VersionInfo({
+    this.moavVersion,
+    this.branch,
+    this.commit,
+    this.components = const [],
+  });
+
+  /// e.g. `2.3.0`.
+  final String? moavVersion;
+  final String? branch;
+  final String? commit;
+  final List<ComponentVersion> components;
+}
+
+class ServerInfo {
+  const ServerInfo({
+    required this.host,
+    required this.version,
+    required this.collectedAt,
+  });
+
+  final HostMetrics host;
+  final VersionInfo version;
+  final DateTime collectedAt;
+}
+
+/// Result of `moav doctor updates`.
+class UpdateCheck {
+  const UpdateCheck({
+    required this.updateAvailable,
+    required this.checkedAt,
+    this.currentVersion,
+    this.latestVersion,
+    this.message,
+  });
+
+  final bool updateAvailable;
+  final DateTime checkedAt;
+  final String? currentVersion;
+
+  /// Newest published release, `null` when the server could not look it up.
+  final String? latestVersion;
+
+  /// The check's own wording, e.g. `Up to date (v2.3.1)`.
+  final String? message;
+
+  /// The lookup itself failed (no internet on the box, GitHub unreachable).
+  bool get unknown => latestVersion == null;
 }
 
 enum ServiceState {

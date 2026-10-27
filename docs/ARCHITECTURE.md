@@ -33,9 +33,22 @@ abstract class MoavController {
   Future<TestMatrix> testUser(String name);        // per-protocol pass/fail
   Future<void> service(ServiceAction a);           // start/stop/restart/regenerate-users
   Future<ServiceStatusReport> status();            // moav status table and dashboard URLs
-  Future<Monitoring> monitoring();                 // Grafana health and key metrics
+  Future<Monitoring> monitoring();                 // Grafana health and dashboard URLs (fast)
+  Future<MetricsSnapshot> metrics();               // Prometheus headline metrics (slow, own timeout)
+  Future<ServerInfo> serverInfo();                 // host CPU/RAM/disk + moav and component versions
+  Future<UpdateCheck> checkForUpdates();           // moav doctor updates
+  Future<void> startUpdate();                      // detached moav update job
+  Future<InstallStatus?> updateStatus();           // progress of that job
 }
 ```
+
+Screens that read the server (Services, Health, Analytics, Server) go through
+`CachedFetchNotifier` in `lib/features/operate/operate_provider.dart`: one
+non-autoDispose notifier per server and data kind that keeps the last good
+value, exposes `loading`/`error` next to it, and coalesces refreshes. A tab
+therefore renders cached data at once, refreshes in the background when the
+cache is older than two minutes, and never blocks on a spinner after the
+first load.
 
 The concrete models live in `lib/core/moav_controller.dart`.
 

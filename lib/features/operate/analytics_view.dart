@@ -5,13 +5,19 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
+import '../../widgets/cached_view.dart';
 import '../../widgets/error_view.dart';
 import 'grafana_screen.dart';
 import 'operate_provider.dart';
+import 'operate_screen.dart';
 
 /// Analytics tab: Grafana health, a grid of headline metric tiles from
 /// Prometheus, per-protocol status derived from `moav status`, and Grafana
-/// embedded inline. Read-only; everything comes from existing providers.
+/// embedded inline. Read-only.
+///
+/// Three independent caches feed it: Grafana URLs/health (fast), Prometheus
+/// metrics (slow, its own timeout and Retry) and `moav status`. A slow or
+/// failing one never blocks the others.
 class AnalyticsView extends ConsumerWidget {
   const AnalyticsView({super.key, required this.profile});
 
@@ -19,57 +25,52 @@ class AnalyticsView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mon = ref.watch(monitoringProvider(profile.id));
-    final status = ref.watch(statusProvider(profile.id));
-    return mon.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => ErrorView(
-        error: e,
-        onRetry: () => ref.invalidate(monitoringProvider(profile.id)),
-      ),
-      data: (m) => RefreshIndicator(
-        onRefresh: () {
-          ref.invalidate(statusProvider(profile.id));
-          return ref.refresh(monitoringProvider(profile.id).future);
-        },
-        child: ListView(
+    final id = profile.id;
+    final mon = ref.watch(monitoringProvider(id));
+    final metrics = ref.watch(metricsProvider(id));
+    final status = ref.watch(statusProvider(id));
+
+    Future<void> refreshAll() => Future.wait([
+          ref.read(monitoringProvider(id).notifier).refresh(),
+          ref.read(metricsProvider(id).notifier).refresh(),
+          ref.read(statusProvider(id).notifier).refresh(),
+        ]);
+
+    return StaleRefresher(
+      onOpen: (ref) {
+        ref.read(monitoringProvider(id).notifier).refreshIfStale(tabStaleAfter);
+        ref.read(metricsProvider(id).notifier).refreshIfStale(tabStaleAfter);
+        ref.read(statusProvider(id).notifier).refreshIfStale(tabStaleAfter);
+      },
+      child: CachedView<Monitoring>(
+        state: mon,
+        onRefresh: refreshAll,
+        loadingLabel: 'Checking Grafana…',
+        builder: (context, m) => ListView(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
           children: [
             _GrafanaCard(monitoring: m),
             SectionHeader(
               'Headline metrics',
-              trailing: m.collectedAt == null
-                  ? null
-                  : Text(
-                      TimeOfDay.fromDateTime(m.collectedAt!).format(context),
-                      style: moavLabel(size: 10, color: MoavColors.textMuted),
-                    ),
+              trailing: _SectionRefresh(
+                state: metrics,
+                onRefresh: ref.read(metricsProvider(id).notifier).refresh,
+              ),
             ),
-            if (m.metrics.isNotEmpty)
-              _MetricGrid(tiles: analyticsTiles(m.metrics))
-            else
-              const MoavCard(
-                child: Text(
-                  'No Prometheus metrics. Enable the monitoring profile '
-                  '(moav start monitoring) to see headline numbers here.',
-                ),
+            _MetricsSection(
+              state: metrics,
+              onRetry: ref.read(metricsProvider(id).notifier).refresh,
+            ),
+            SectionHeader(
+              'Protocols',
+              trailing: _SectionRefresh(
+                state: status,
+                onRefresh: ref.read(statusProvider(id).notifier).refresh,
               ),
-            const SectionHeader('Protocols'),
-            status.when(
-              loading: () => const MoavCard(
-                child: Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(8),
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-                ),
-              ),
-              error: (e, _) => MoavCard(child: ErrorBanner(error: e)),
-              data: (s) => _ProtocolMatrix(report: s),
+            ),
+            _StatusSection(
+              state: status,
+              onRetry: ref.read(statusProvider(id).notifier).refresh,
             ),
             if (m.grafanaUrl != null) ...[
               SectionHeader(
@@ -120,6 +121,146 @@ class AnalyticsView extends ConsumerWidget {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Section-header trailing: "updated hh:mm" plus a refresh icon, or a tiny
+/// spinner while that section is refreshing.
+class _SectionRefresh extends StatelessWidget {
+  const _SectionRefresh({required this.state, required this.onRefresh});
+
+  final FetchState<Object> state;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        updatedAt(context, state.fetchedAt),
+        const SizedBox(width: 4),
+        if (state.loading)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          )
+        else
+          IconButton(
+            icon: const Icon(Icons.refresh, size: 18),
+            tooltip: 'Refresh',
+            visualDensity: VisualDensity.compact,
+            onPressed: onRefresh,
+          ),
+      ],
+    );
+  }
+}
+
+class _MetricsSection extends StatelessWidget {
+  const _MetricsSection({required this.state, required this.onRetry});
+
+  final FetchState<MetricsSnapshot> state;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final data = state.data;
+    final error = state.error;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (error != null) ...[
+          ErrorBanner(
+            error: error,
+            trailing: data == null ? null : 'Showing the last result.',
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Retry'),
+            ),
+          ),
+        ],
+        if (data != null)
+          data.metrics.isNotEmpty
+              ? _MetricGrid(tiles: analyticsTiles(data.metrics))
+              : const MoavCard(
+                  child: Text(
+                    'No Prometheus metrics. Enable the monitoring profile '
+                    '(moav start monitoring) to see headline numbers here.',
+                  ),
+                )
+        else if (error == null)
+          MoavCard(
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Querying Prometheus… this can take a while on a busy box.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _StatusSection extends StatelessWidget {
+  const _StatusSection({required this.state, required this.onRetry});
+
+  final FetchState<ServiceStatusReport> state;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final data = state.data;
+    final error = state.error;
+    if (data != null) return _ProtocolMatrix(report: data);
+    if (error != null) {
+      return MoavCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ErrorBanner(error: error),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Retry'),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return const MoavCard(
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(8),
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
         ),
       ),
     );

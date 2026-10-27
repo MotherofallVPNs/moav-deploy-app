@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -128,6 +129,12 @@ class _FakeController implements MoavController {
           fileName: 'trusttunnel.toml',
           content: '# tt',
         ),
+        BundleEntry(
+          protocol: 'subscription',
+          fileName: 'subscription.txt',
+          content: 'c3Vic2NyaXB0aW9uLWZvci0k$user\n',
+          qrPayload: 'c3Vic2NyaXB0aW9uLWZvci0k$user',
+        ),
       ],
     );
   }
@@ -164,17 +171,118 @@ class _FakeController implements MoavController {
     log.add('service ${action.kind.name} ${action.service}');
   }
 
+  int monitoringCalls = 0;
+  int metricsCalls = 0;
+  int serverInfoCalls = 0;
+
+  /// Completes the next [metrics] call only when resolved by the test.
+  Completer<MetricsSnapshot>? metricsGate;
+
   @override
-  Future<Monitoring> monitoring() async => Monitoring(
-        grafanaUrl: Uri.parse('https://example.org:9444'),
-        adminUrl: Uri.parse('https://example.org:9443'),
-        grafanaHealthy: true,
-        grafanaVersion: '13.1.3',
-        metrics: const [
-          Metric(name: 'Load (1m)', value: '1.18'),
-          Metric(name: 'Inbound', value: '33 B', unit: '/s'),
+  Future<Monitoring> monitoring() async {
+    _maybeFail();
+    monitoringCalls++;
+    return Monitoring(
+      grafanaUrl: Uri.parse('https://example.org:9444'),
+      adminUrl: Uri.parse('https://example.org:9443'),
+      grafanaHealthy: true,
+      grafanaVersion: '13.1.3',
+      collectedAt: DateTime(2026, 9, 14, 8),
+    );
+  }
+
+  /// Thrown by the next [metrics] call only, then cleared.
+  Object? nextMetricsError;
+
+  @override
+  Future<MetricsSnapshot> metrics() async {
+    _maybeFail();
+    metricsCalls++;
+    final me = nextMetricsError;
+    if (me != null) {
+      nextMetricsError = null;
+      throw me;
+    }
+    final gate = metricsGate;
+    if (gate != null) return gate.future;
+    return MetricsSnapshot(
+      collectedAt: DateTime(2026, 9, 14, 8),
+      metrics: const [
+        Metric(name: 'Load (1m)', value: '1.18'),
+        Metric(name: 'Inbound', value: '33 B', unit: '/s'),
+      ],
+    );
+  }
+
+  @override
+  Future<ServerInfo> serverInfo() async {
+    _maybeFail();
+    serverInfoCalls++;
+    return ServerInfo(
+      collectedAt: DateTime(2026, 9, 14, 8),
+      host: const HostMetrics(
+        cpuCount: 2,
+        cpuUsage: 0.42,
+        load1: 2.3,
+        load5: 1.9,
+        load15: 1.7,
+        memTotalBytes: 2057842688,
+        memAvailableBytes: 698351616,
+        swapTotalBytes: 2147479552,
+        swapFreeBytes: 1036640256,
+        diskTotalBytes: 61255049216,
+        diskAvailableBytes: 43789910016,
+        uptime: Duration(days: 80, hours: 3),
+      ),
+      version: const VersionInfo(
+        moavVersion: '2.3.0',
+        branch: 'dev',
+        commit: 'e218483',
+        components: [
+          ComponentVersion(name: 'sing-box', version: '1.14.3', source: 'github.com/SagerNet/sing-box'),
+          ComponentVersion(name: 'xray-core', version: 'v26.10.21', source: 'github.com/XTLS/Xray-core'),
         ],
-      );
+      ),
+    );
+  }
+
+  UpdateCheck updateCheck = UpdateCheck(
+    updateAvailable: true,
+    checkedAt: DateTime(2026, 9, 14, 8),
+    currentVersion: '2.3.0',
+    latestVersion: '2.3.1',
+    message: 'Update available: v2.3.1',
+  );
+
+  @override
+  Future<UpdateCheck> checkForUpdates() async {
+    _maybeFail();
+    log.add('check updates');
+    return updateCheck;
+  }
+
+  /// Statuses returned by successive [updateStatus] calls after [startUpdate].
+  List<InstallStatus> updateStatuses = const [];
+  int updateStatusCalls = 0;
+  bool updateStarted = false;
+
+  @override
+  Future<void> startUpdate() async {
+    _maybeFail();
+    log.add('start update');
+    updateStarted = true;
+    updateStatusCalls = 0;
+  }
+
+  @override
+  Future<InstallStatus?> updateStatus() async {
+    if (!updateStarted || updateStatuses.isEmpty) return null;
+    final i = updateStatusCalls < updateStatuses.length
+        ? updateStatusCalls
+        : updateStatuses.length - 1;
+    updateStatusCalls++;
+    return updateStatuses[i];
+  }
 
   @override
   Future<TestMatrix> testUser(String name) async {
@@ -225,16 +333,23 @@ const _profile = ServerProfile(
 );
 
 /// Scrolls the current page's ListView until [f] is on screen.
-Future<void> _scrollTo(WidgetTester tester, Finder f) async {
+Future<void> _scrollTo(WidgetTester tester, Finder f, {double delta = 120}) async {
   await tester.scrollUntilVisible(
     f,
-    120,
+    delta,
     scrollable: find
         .descendant(of: find.byType(ListView).last, matching: find.byType(Scrollable))
         .first,
   );
   // scrollUntilVisible ends with ensureVisible but no frame; lay it out.
   await tester.pumpAndSettle();
+}
+
+/// Pumps a few frames; for screens with a spinner that must keep spinning.
+Future<void> _pumpFor(WidgetTester tester, [int ms = 400]) async {
+  await tester.pump();
+  await tester.pump(Duration(milliseconds: ms));
+  await tester.pump();
 }
 
 void main() {
@@ -520,14 +635,44 @@ void main() {
     expect(find.text('bob'), findsOneWidget);
     expect(find.textContaining('Bundle ready'), findsOneWidget);
 
-    // Bundle screen renders a QR for the link and lists the rest.
+    // Tapping a row opens the detail view: protocols, subscription, bundle
+    // and test buttons. It fetches the bundle but never runs a test.
     await tester.tap(find.text('alice'));
     await tester.pumpAndSettle();
-    expect(find.byType(QrImageView), findsOneWidget);
+    expect(find.text('BUNDLE READY'), findsOneWidget);
+    expect(find.text('SING-BOX'), findsOneWidget);
+    expect(find.text('Copy subscription'), findsOneWidget);
+    expect(find.text('Download connection bundle'), findsOneWidget);
+    expect(find.text('Run connection test'), findsOneWidget);
+    expect(find.byType(QrImageView), findsNothing);
+    expect(controller.log, ['bundle alice']);
+
+    // Copy puts the subscription blob on the clipboard.
+    final clipboard = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          clipboard.add((call.arguments as Map)['text'] as String);
+        }
+        return null;
+      },
+    );
+    await tester.tap(find.text('Copy subscription'));
+    await tester.pumpAndSettle();
+    expect(clipboard, ['c3Vic2NyaXB0aW9uLWZvci0kalice']);
+    expect(find.text('Subscription copied'), findsOneWidget);
+
+    // Bundle screen renders a QR per link and lists the rest.
+    await tester.tap(find.text('Download connection bundle'));
+    await tester.pumpAndSettle();
+    expect(find.byType(QrImageView), findsNWidgets(2));
     expect(find.text('VLESS Reality'), findsOneWidget);
     await _scrollTo(tester, find.text('TrustTunnel'));
     expect(find.text('TrustTunnel'), findsOneWidget);
     expect(controller.log, ['bundle alice']);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();
 
@@ -547,7 +692,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.log, contains('add carol'));
     expect(find.text('carol'), findsOneWidget); // bundle screen title
-    expect(find.byType(QrImageView), findsOneWidget);
+    expect(find.byType(QrImageView), findsNWidgets(2));
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('carol'), findsOneWidget);
@@ -650,7 +795,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('alice'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.network_check));
+    // Opening the detail view runs nothing; the test is an explicit action.
+    expect(controller.log, isNot(contains('test alice')));
+    await _scrollTo(tester, find.text('Run connection test'));
+    await tester.tap(find.text('Run connection test'));
     await tester.pumpAndSettle();
 
     expect(controller.log, contains('test alice'));
@@ -714,6 +862,14 @@ void main() {
     await tester.tap(find.text('alice'));
     await tester.pumpAndSettle();
 
+    // The detail view shows the failure inline next to its Retry; the rest
+    // of the screen (bundle and test buttons) stays usable.
+    expect(find.text('The command failed on the server (exit 2).'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Download connection bundle'), findsOneWidget);
+    await tester.tap(find.text('Download connection bundle'));
+    await tester.pumpAndSettle();
+
     expect(find.text('The command failed on the server (exit 2).'), findsOneWidget);
     await tester.tap(find.text('Details'));
     await tester.pumpAndSettle();
@@ -723,7 +879,7 @@ void main() {
 
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
-    expect(find.byType(QrImageView), findsOneWidget);
+    expect(find.byType(QrImageView), findsNWidgets(2));
   });
 
   testWidgets('services tab: unreachable host shows Retry; deploy shows a banner',
@@ -931,5 +1087,203 @@ void main() {
 
     const badPort = AddServerFormState(host: 'h', port: '70000');
     expect(badPort.portError, isNotNull);
+  });
+
+  testWidgets('analytics: slow metrics never block the tab and survive a tab switch',
+      (tester) async {
+    final store = MemoryCredStore()..profiles = [_profile];
+    final controller = _FakeController(const [])
+      ..metricsGate = Completer<MetricsSnapshot>();
+    await tester.pumpWidget(_app(
+      store,
+      overrides: [
+        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+      ],
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Demo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Analytics'));
+    await _pumpFor(tester);
+
+    // Grafana and protocols render while Prometheus is still being queried.
+    expect(find.text('Grafana 13.1.3 is up'), findsOneWidget);
+    expect(find.textContaining('Querying Prometheus'), findsOneWidget);
+    expect(find.text('LOAD (1M)'), findsNothing);
+    expect(controller.metricsCalls, 1);
+
+    // Switching away and back keeps the cached cards and the one fetch.
+    await tester.tap(find.widgetWithText(Tab, 'Health'));
+    await _pumpFor(tester);
+    expect(find.text('1 check failing'), findsOneWidget);
+    await tester.tap(find.widgetWithText(Tab, 'Analytics'));
+    await _pumpFor(tester);
+    expect(find.text('Grafana 13.1.3 is up'), findsOneWidget);
+    expect(controller.metricsCalls, 1);
+    expect(controller.monitoringCalls, 1);
+
+    // The slow query lands and fills the grid in place.
+    controller.metricsGate!.complete(MetricsSnapshot(
+      collectedAt: DateTime(2026, 9, 14, 8, 5),
+      metrics: const [Metric(name: 'Load (1m)', value: '2.15')],
+    ));
+    controller.metricsGate = null;
+    await tester.pumpAndSettle();
+    expect(find.text('LOAD (1M)'), findsOneWidget);
+    expect(find.text('2.15'), findsOneWidget);
+
+    // The app bar refresh re-fetches every section of the open tab.
+    await tester.tap(find.descendant(
+      of: find.byType(AppBar),
+      matching: find.byIcon(Icons.refresh),
+    ));
+    await tester.pumpAndSettle();
+    expect(controller.metricsCalls, 2);
+    expect(controller.monitoringCalls, 2);
+  });
+
+  testWidgets('analytics: metrics timeout shows the cause with Retry, grafana stays',
+      (tester) async {
+    final store = MemoryCredStore()..profiles = [_profile];
+    final controller = _FakeController(const [])
+      ..nextMetricsError = TimeoutException('prometheus');
+    await tester.pumpWidget(_app(
+      store,
+      overrides: [
+        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+      ],
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Demo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Analytics'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Grafana 13.1.3 is up'), findsOneWidget);
+    expect(find.text('The server did not respond in time.'), findsOneWidget);
+    expect(find.byIcon(Icons.timer_off_outlined), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(find.text('The server did not respond in time.'), findsNothing);
+    expect(find.text('LOAD (1M)'), findsOneWidget);
+    expect(controller.metricsCalls, 2);
+  });
+
+  testWidgets('services tab: a failed refresh keeps the last result and offers Retry',
+      (tester) async {
+    final store = MemoryCredStore()..profiles = [_profile];
+    final controller = _FakeController(const []);
+    await tester.pumpWidget(_app(
+      store,
+      overrides: [
+        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+      ],
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Demo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Services'));
+    await tester.pumpAndSettle();
+    expect(find.text('sing-box'), findsOneWidget);
+
+    controller.nextError = TimeoutException('status');
+    await tester.tap(find.descendant(
+      of: find.byType(AppBar),
+      matching: find.byIcon(Icons.refresh),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('sing-box'), findsOneWidget);
+    expect(find.textContaining('Showing the last result.'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Showing the last result.'), findsNothing);
+    expect(find.text('sing-box'), findsOneWidget);
+  });
+
+  testWidgets('server tab: host metrics, versions, check for updates and confirmed update',
+      (tester) async {
+    final store = MemoryCredStore()..profiles = [_profile];
+    final controller = _FakeController(const [])
+      ..updateStatuses = const [
+        InstallStatus(
+          phase: InstallPhase.running,
+          progress: 2 / 3,
+          message: 'Run moav update',
+          logTail: ['[moav-deploy] step 2/3: Run moav update', 'Pulling latest changes...'],
+        ),
+        InstallStatus(
+          phase: InstallPhase.succeeded,
+          progress: 1,
+          message: 'Install finished',
+          logTail: ['Updated: e218483 -> f00ba47', '[moav-deploy] exit=0'],
+        ),
+      ];
+    await tester.pumpWidget(_app(
+      store,
+      overrides: [
+        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+      ],
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Demo'));
+    await tester.pumpAndSettle();
+    await _scrollTo(tester, find.text('Server info'));
+    await tester.tap(find.text('Server info'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('MoaV v2.3.0'), findsOneWidget);
+    expect(find.text('dev @ e218483'), findsOneWidget);
+    expect(find.text('Not checked yet'), findsOneWidget);
+    expect(find.text('CPU'), findsOneWidget);
+    expect(find.text('42%'), findsOneWidget);
+    expect(find.text('2 vCPU, 1 s sample'), findsOneWidget);
+    expect(find.text('RAM'), findsOneWidget);
+    expect(find.text('66%'), findsOneWidget);
+    expect(find.text('DISK'), findsOneWidget);
+    expect(find.text('29%'), findsOneWidget);
+    await _scrollTo(tester, find.text('xray-core'));
+    expect(find.text('v26.10.21'), findsOneWidget);
+    expect(controller.serverInfoCalls, 1);
+
+    // Check for updates: verdict plus an Update button.
+    await _scrollTo(tester, find.text('Check for updates'), delta: -120);
+    await tester.tap(find.text('Check for updates'));
+    await tester.pumpAndSettle();
+    expect(controller.log, contains('check updates'));
+    expect(find.text('Update available: v2.3.1'), findsOneWidget);
+    expect(find.text('Update to v2.3.1'), findsOneWidget);
+
+    // Update asks first; cancel starts nothing.
+    await tester.tap(find.text('Update to v2.3.1'));
+    await tester.pumpAndSettle();
+    expect(find.text('Update MoaV to v2.3.1?'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(controller.log, isNot(contains('start update')));
+
+    // Confirmed: the job starts and its log streams until done.
+    await tester.tap(find.text('Update to v2.3.1'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Update'));
+    await tester.pumpAndSettle();
+    expect(controller.log, contains('start update'));
+    expect(find.text('RUNNING'), findsOneWidget);
+    expect(find.textContaining('Pulling latest changes'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(find.text('DONE'), findsOneWidget);
+    expect(find.textContaining('f00ba47'), findsOneWidget);
+    // Success re-reads versions and forgets the stale verdict.
+    expect(controller.serverInfoCalls, 2);
+    expect(find.text('Update to v2.3.1'), findsNothing);
+    await _scrollTo(tester, find.text('Dismiss'));
+    await tester.tap(find.text('Dismiss'));
+    await tester.pumpAndSettle();
+    expect(find.text('DONE'), findsNothing);
   });
 }

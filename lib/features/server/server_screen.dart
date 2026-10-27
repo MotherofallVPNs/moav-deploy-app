@@ -108,6 +108,13 @@ class ServerScreen extends StatelessWidget {
             onTap: () => Navigator.of(context)
                 .push(OperateScreen.route(profile, tab: OperateTab.monitoring)),
           ),
+          _HubTile(
+            icon: Icons.dns_outlined,
+            title: 'Server info',
+            subtitle: 'CPU, RAM, disk, versions and MoaV updates',
+            onTap: () => Navigator.of(context)
+                .push(OperateScreen.route(profile, tab: OperateTab.server)),
+          ),
           const SectionHeader('Install'),
           _HubTile(
             icon: Icons.rocket_launch_outlined,
