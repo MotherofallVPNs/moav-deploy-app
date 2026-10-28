@@ -153,8 +153,9 @@ grep -E '^($keys)=' .env
     );
   }
 
-  /// Shared by [monitoring] and [prometheus]: reads a `.env` value.
-  static const _envReader = '''
+  /// Shared by [monitoring], [prometheus] and `DonateCli`: defines `ev`,
+  /// which reads one `.env` value (unquoted, comment stripped).
+  static const envReader = '''
 cd $root 2>/dev/null || exit 0
 ev() { grep -E "^\$1=" .env 2>/dev/null | head -1 | cut -d= -f2- | sed -E 's/[[:space:]]+#.*\$//; s/^"//; s/"\$//; s/^'"'"'//; s/'"'"'\$//' | tr -d '[:space:]'; }
 ''';
@@ -164,7 +165,7 @@ ev() { grep -E "^\$1=" .env 2>/dev/null | head -1 | cut -d= -f2- | sed -E 's/[[:
   /// body. The Prometheus section is left empty; see [prometheus].
   // TODO(#8): no `moav metrics` upstream; this shell snippet is the text path.
   static const monitoring = '''
-$_envReader
+$envReader
 DOMAIN=\$(ev DOMAIN); SERVER_IP=\$(ev SERVER_IP); PG=\$(ev PORT_GRAFANA); PA=\$(ev PORT_ADMIN); GS=\$(ev GRAFANA_SUBDOMAIN); CDN=\$(ev ENABLE_CDN); PC=\$(ev PORT_GRAFANA_CDN)
 H="\${DOMAIN:-\${SERVER_IP:-localhost}}"
 echo "__URLS__"
@@ -193,7 +194,7 @@ echo "__END__"
   /// are stripped in [parseAdminPanel], as upstream's entrypoint does) and
   /// the snippet always exits 0, so the value never lands in an exception.
   static const adminPanel = '''
-$_envReader
+$envReader
 echo "__ADMIN__"
 echo "port=\$(ev $adminPortKey)"
 echo "enabled=\$(ev $adminEnabledKey)"
@@ -257,7 +258,7 @@ echo "__END__"
   /// Prints Grafana's port, enable flag, the scheme it answers on and the
   /// admin password from `.env` between markers; same rules as [adminPanel].
   static const grafanaPanel = '''
-$_envReader
+$envReader
 PG=\$(ev $grafanaPortKey); PG=\${PG:-$defaultGrafanaPort}
 echo "__GRAFANA__"
 echo "port=\$PG"
@@ -337,7 +338,7 @@ echo "__END__"
 
   static String _prometheusRangeSnippet() {
     final b = StringBuffer()
-      ..writeln(_envReader)
+      ..writeln(envReader)
       ..writeln('echo "__RANGE__"')
       ..writeln(
           "if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx moav-prometheus; then")
@@ -428,7 +429,7 @@ echo "__END__"
   /// seconds times seven. Same markers as [monitoring]; URL/health empty.
   // TODO(#8): no `moav metrics` upstream; this shell snippet is the text path.
   static const prometheus = '''
-$_envReader
+$envReader
 echo "__URLS__"
 echo "__HEALTH__"
 echo

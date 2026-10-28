@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/moav_controller.dart';
+import '../../core/moav_links.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/moav_app_bar.dart';
@@ -11,6 +12,7 @@ import '../deploy/deploy_screen.dart';
 import '../keys/keyring_screen.dart';
 import '../operate/grafana_screen.dart';
 import '../server/server_screen.dart';
+import '../support/support_sheet.dart';
 import '../users/users_screen.dart';
 import '../wipe/wipe_dialog.dart';
 import 'add_server_screen.dart';
@@ -105,21 +107,6 @@ class ServersHomeScreen extends ConsumerWidget {
 
 enum _HomeAction { keys, docs, support, github, x, telegram, wipe }
 
-/// Where the menu links go. One place to change when a URL moves.
-class MoavLinks {
-  MoavLinks._();
-
-  static final docs = Uri.parse('https://moav.sh/docs');
-
-  // TODO: confirm the exact support/donate page with the project owner.
-  static final support = Uri.parse(supportUrl);
-  static const supportUrl = 'https://moav.sh/support';
-
-  static final github = Uri.parse('https://github.com/MotherofallVPNs');
-  static final x = Uri.parse('https://x.com/motherofallvpns');
-  static final telegram = Uri.parse('https://t.me/motherofallvpns');
-}
-
 Future<void> _handleHomeAction(
   BuildContext context,
   WidgetRef ref,
@@ -134,7 +121,7 @@ Future<void> _handleHomeAction(
     case _HomeAction.docs:
       await _open(MoavLinks.docs);
     case _HomeAction.support:
-      await _open(MoavLinks.support);
+      await showSupportSheet(context);
     case _HomeAction.github:
       await _open(MoavLinks.github);
     case _HomeAction.x:

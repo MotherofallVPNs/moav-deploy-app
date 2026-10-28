@@ -6,6 +6,7 @@
 library;
 
 import 'app_error.dart';
+import 'donate.dart';
 import 'moav_services.dart';
 
 /// Every server operation the app can perform, expressed once.
@@ -78,6 +79,30 @@ abstract class MoavController {
   /// Time series for the native charts (Prometheus range queries). Slow,
   /// like [metrics], and cached independently of it.
   Future<ChartsSnapshot> metricSeries();
+
+  /// Whether `MAHSANET_API_KEY` is set in the server's `.env`, plus the
+  /// donation settings. Presence only: the key itself is never read.
+  Future<DonateEnv> donateEnv();
+
+  /// `moav donate status`: MahsaNet totals, Conduit and Snowflake state.
+  Future<DonationStatus> donateStatus();
+
+  /// `moav donate list`: the donated configs' state, share links dropped.
+  Future<List<DonatedConfig>> donateList();
+
+  /// Saves a MahsaNet API key through `moav donate setup`, which validates
+  /// it and writes it to `.env`. The key reaches the server in a mode-0600
+  /// file only and is never logged. [onOutput] streams setup's output.
+  Future<void> saveMahsaNetKey(String key, {OutputSink? onOutput});
+
+  /// `moav donate submit`: creates [count] donate-mode users and submits
+  /// their configs to MahsaNet. [onOutput] streams the run's output.
+  Future<DonateResult> donateConfigs({
+    required int count,
+    String prefix,
+    bool force,
+    OutputSink? onOutput,
+  });
 }
 
 /// Receives chunks of command output as they arrive.

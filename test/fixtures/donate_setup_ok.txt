@@ -1,0 +1,14 @@
+
+[0;34mℹ[0m MahsaNet API Key Setup
+
+  To get an API key:
+  1. Register at https://www.mahsaserver.com/
+  2. Verify your email
+  3. Fill out the verified donor form
+  4. Go to https://www.mahsaserver.com/user/api
+  5. Generate an API key
+
+  API Key: [0;34mℹ[0m Validating API key...
+[0;32m✓[0m API key is valid!
+[0;32m✓[0m API key saved to .env
+[0;34mℹ[0m Recreating admin container to pick up API key...

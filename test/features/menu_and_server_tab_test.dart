@@ -5,8 +5,8 @@ import 'package:moav_deploy/app.dart';
 import 'package:moav_deploy/core/app_error.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
 import 'package:moav_deploy/core/moav_controller_factory.dart';
+import 'package:moav_deploy/core/moav_links.dart';
 import 'package:moav_deploy/core/server_profile.dart';
-import 'package:moav_deploy/features/servers/servers_home_screen.dart';
 import 'package:moav_deploy/features/servers/servers_provider.dart';
 
 import '../support/memory_cred_store.dart';
@@ -90,9 +90,10 @@ void main() {
     expect(wipe.dy, greaterThan(tg.dy));
     expect(find.byType(PopupMenuDivider), findsOneWidget);
 
-    // Links are constants in one place; the support URL is a placeholder.
+    // Links are constants in one place; "Support us" opens a popup instead
+    // of a URL (see support_sheet_test.dart).
     expect(MoavLinks.docs.toString(), 'https://moav.sh/docs');
-    expect(MoavLinks.supportUrl, 'https://moav.sh/support');
+    expect(MoavLinks.supportMoreUrl, 'https://moav.sh/docs/support/');
     expect(MoavLinks.github.toString(), 'https://github.com/MotherofallVPNs');
     expect(MoavLinks.x.toString(), 'https://x.com/motherofallvpns');
     expect(MoavLinks.telegram.toString(), 'https://t.me/motherofallvpns');

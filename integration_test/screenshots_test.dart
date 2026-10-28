@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:moav_deploy/app.dart';
 import 'package:moav_deploy/core/app_error.dart';
+import 'package:moav_deploy/core/donate.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
 import 'package:moav_deploy/core/moav_controller_factory.dart';
 import 'package:moav_deploy/core/server_profile.dart';
@@ -500,6 +501,65 @@ class _FakeController implements MoavController {
   @override
   Future<GrafanaAccess> grafanaAccess() =>
       _lag(const GrafanaAccess(port: 9444, password: 'gallery'));
+
+  // Donate screen: a configured MahsaNet key with a few donated configs,
+  // Conduit and Snowflake both running.
+  @override
+  Future<DonateEnv> donateEnv() => _lag(DonateEnv(
+        mahsaNetKeyPresent: true,
+        protocols: const ['reality', 'hysteria2', 'xhttp'],
+        pool: 'mahsa',
+        collectedAt: DateTime.now(),
+      ));
+
+  @override
+  Future<DonationStatus> donateStatus() => _lag(DonationStatus(
+        mahsaNet: const MahsaNetStats(configured: true, total: 12, active: 11, inactive: 1),
+        conduit: const BandwidthDonation(
+          enabled: true,
+          running: true,
+          bandwidthMbps: 100,
+          maxClients: 200,
+          connected: 37,
+          uploaded: '41.2 GB',
+          downloaded: '118.6 GB',
+        ),
+        snowflake: const BandwidthDonation(
+          enabled: true,
+          running: true,
+          bandwidthMbps: 5,
+          maxClients: 50,
+          served: 1284,
+          uploaded: '6.1 GB',
+          downloaded: '9.8 GB',
+        ),
+        collectedAt: DateTime.now(),
+      ));
+
+  @override
+  Future<List<DonatedConfig>> donateList() => _lag([
+        for (var i = 1; i <= 4; i++)
+          DonatedConfig(
+            index: i,
+            scheme: i.isOdd ? 'vless' : 'hysteria2',
+            active: i != 4,
+            healthPercent: i == 4 ? null : 100 - i * 3,
+            used: 40 - i * 7,
+          ),
+      ]);
+
+  @override
+  Future<void> saveMahsaNetKey(String key, {OutputSink? onOutput}) =>
+      _lag(null, 600);
+
+  @override
+  Future<DonateResult> donateConfigs({
+    required int count,
+    String prefix = 'mahsa',
+    bool force = false,
+    OutputSink? onOutput,
+  }) =>
+      _lag(DonateResult(usersCreated: count, donated: count * 3), 900);
 
   /// An hour of plausible demo curves at one-minute steps.
   @override

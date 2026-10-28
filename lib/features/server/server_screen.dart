@@ -8,6 +8,7 @@ import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
 import '../admin/admin_panel_screen.dart';
 import '../deploy/deploy_screen.dart';
+import '../donate/donate_screen.dart';
 import '../operate/grafana_screen.dart';
 import '../operate/operate_screen.dart';
 import '../servers/servers_provider.dart';
@@ -131,6 +132,13 @@ class ServerScreen extends StatelessWidget {
             subtitle: 'The MoaV web panel, through this SSH connection',
             onTap: () =>
                 Navigator.of(context).push(AdminPanelScreen.route(profile)),
+          ),
+          const SectionHeader('Give back'),
+          _HubTile(
+            icon: Icons.volunteer_activism_outlined,
+            title: 'Donate',
+            subtitle: 'Conduit and Snowflake bandwidth, MahsaNet configs',
+            onTap: () => Navigator.of(context).push(DonateScreen.route(profile)),
           ),
           const SectionHeader('Install'),
           _HubTile(

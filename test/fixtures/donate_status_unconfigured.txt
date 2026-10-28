@@ -1,0 +1,14 @@
+
+[1;37m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1;37m  Donation Status[0m
+[1;37m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+  [1;37mMahsaNet[0m
+    [2m○ Not configured — run: moav donate setup[0m
+
+  [1;37mPsiphon Conduit[0m
+    [1;33m○[0m Enabled but not running — start with: moav start conduit
+
+  [1;37mTor Snowflake[0m
+    [2m○ Disabled — enable in .env: ENABLE_SNOWFLAKE=true[0m
+
