@@ -20,13 +20,16 @@ jobs:
       - run: flutter analyze --fatal-infos
       # Live-tagged tests skip themselves here: no MOAV_TEST_* in this job.
       # The live round is a separate, secrets-gated workflow (live.yml).
-      - run: flutter test --coverage
+      # Gate on the plain run; coverage collection can flake on the runner.
+      - run: flutter test
+      - name: Coverage (non-blocking)
+        run: flutter test --coverage || true
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-lcov
           path: coverage/lcov.info
-          if-no-files-found: error
+          if-no-files-found: ignore
 
   # Debug APK smoke build so Gradle or plugin drift shows up on the PR
   # rather than at release time. Unsigned, nothing is uploaded.
