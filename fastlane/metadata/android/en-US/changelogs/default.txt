@@ -1,4 +1,3 @@
-What is new in 0.2.10
-- Share a whole user bundle as a single .zip from the config detail screen.
-- The main menu now shows the real GitHub, X and Telegram logos.
-- Tidied the menu: the admin dashboard now lives on the Server tab.
+What is new in 0.2.11
+- Fixed install on a server without a domain: the headless setup now completes and starts services correctly.
+- More reliable first-time deploy, verified end to end against a fresh server.
