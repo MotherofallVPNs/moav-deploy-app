@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Theme applied to the Android Window while the process is starting.
-         The app is dark-only, so the launch theme is dark regardless of the
-         OS Dark Mode setting (values-night mirrors this file). -->
+         The app is dark-only, so this one file serves light and dark mode.
+         There is deliberately no values-night copy: the night qualifier
+         outranks the version qualifier, so it would hide values-v31. -->
     <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <!-- Show a splash screen on the activity. Automatically removed when
              the Flutter engine draws its first frame -->

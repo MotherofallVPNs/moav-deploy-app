@@ -180,9 +180,7 @@ class PrivacyShield extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const MoavMark(size: 120),
-              const SizedBox(height: 24),
-              const MoavWordmark(suffix: 'Deploy', size: 26),
+              const MoavLockup(),
               if (lock != null) ...[
                 const SizedBox(height: 8),
                 Text(

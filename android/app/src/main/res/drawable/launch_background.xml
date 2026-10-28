@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Launch window shown until Flutter draws its first frame: MoaV dark
-     background with the adaptive-icon mark centred. A designed splash is a
-     follow-up (issue #27, "Designed launch/splash screen"). -->
+<!-- Launch window shown until Flutter draws its first frame: the MoaV lockup
+     (mark + wordmark) centred on the dark background. splash_logo.png matches
+     the Flutter MoavLockup widget, regenerate with tool/splash_assets.py. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/launch_background" />
     <item>
         <bitmap
             android:gravity="center"
-            android:src="@drawable/ic_launcher_foreground" />
+            android:src="@drawable/splash_logo" />
     </item>
 </layer-list>
