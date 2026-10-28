@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'moav_controller.dart';
 import 'moav_services.dart';
@@ -698,6 +699,44 @@ echo "__END__"
       ));
     }
     return files;
+  }
+
+  /// Whole bundle directories above this many kilobytes are not zipped on
+  /// the box; the app zips the fetched configs instead.
+  static const maxBundleArchiveKb = 8 * 1024;
+
+  /// Zips a user's bundle directory on the box (`zip -r -` to stdout) and
+  /// prints it as one base64 line between `__ZIP__` and `__END__`.
+  /// `__NOZIP__` when the box has no `zip`, `__TOOBIG__` over
+  /// [maxBundleArchiveKb]: both tell the app to assemble the zip itself.
+  static String bundleArchive(String user) {
+    if (!MoavUser.validName.hasMatch(user)) {
+      throw ArgumentError.value(user, 'user', 'not a valid user name');
+    }
+    final dir = SshConnection.shellQuote('$bundlesDir/$user');
+    return '''
+cd $dir 2>/dev/null || { echo "__NOBUNDLE__"; exit 0; }
+command -v zip >/dev/null 2>&1 || { echo "__NOZIP__"; exit 0; }
+[ "\$(du -sk . | cut -f1)" -gt $maxBundleArchiveKb ] && { echo "__TOOBIG__"; exit 0; }
+echo "__ZIP__"
+zip -qr - . | base64 | tr -d '\\n'; echo
+echo "__END__"
+''';
+  }
+
+  /// The zip bytes from [bundleArchive] output, or `null` when the box did
+  /// not produce one (no directory, no `zip`, too big, truncated transfer).
+  static Uint8List? parseBundleArchive(String raw) {
+    final lines = raw.split('\n').map((l) => l.trim()).toList();
+    final start = lines.indexOf('__ZIP__');
+    if (start < 0 || start + 2 >= lines.length) return null;
+    if (lines[start + 2] != '__END__') return null;
+    try {
+      final bytes = base64.decode(lines[start + 1]);
+      return bytes.isEmpty ? null : bytes;
+    } on FormatException {
+      return null;
+    }
   }
 
   /// Maps a bundle file to its protocol and whether its content is a QR

@@ -10,6 +10,7 @@ import '../../theme/moav_theme.dart';
 import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
 import '../operate/operate_provider.dart';
+import 'bundle_share.dart';
 import 'user_bundle_screen.dart';
 import 'users_provider.dart';
 
@@ -86,6 +87,21 @@ class UserDetailScreen extends ConsumerWidget {
                   icon: Icons.qr_code_2,
                   label: 'Download connection bundle',
                   expand: true,
+                ),
+                const SizedBox(height: 8),
+                Builder(
+                  builder: (ctx) => FilledButton.tonalIcon(
+                    onPressed: bundle.value == null
+                        ? null
+                        : () => shareBundleZip(
+                              ctx,
+                              ref,
+                              serverId: profile.id,
+                              bundle: bundle.value!,
+                            ),
+                    icon: const Icon(Icons.folder_zip_outlined, size: 18),
+                    label: const Text('Share .zip'),
+                  ),
                 ),
               ],
             ),

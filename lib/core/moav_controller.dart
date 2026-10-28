@@ -5,6 +5,8 @@
 /// See docs/ARCHITECTURE.md.
 library;
 
+import 'dart:typed_data';
+
 import 'app_error.dart';
 import 'donate.dart';
 import 'moav_services.dart';
@@ -33,6 +35,11 @@ abstract class MoavController {
 
   /// A user's client configs and QR payloads.
   Future<Bundle> getBundle(String user);
+
+  /// The user's whole bundle directory zipped on the server, or `null` when
+  /// the box cannot produce one; the app then zips the fetched entries
+  /// itself (`encodeBundleZip`).
+  Future<Uint8List?> getBundleArchive(String user);
 
   /// Start / stop / restart services, enable / disable one in `.env`, or
   /// regenerate all users. [onOutput] receives command output as it streams.

@@ -6,7 +6,6 @@ import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
-import '../admin/admin_panel_screen.dart';
 import '../deploy/deploy_screen.dart';
 import '../donate/donate_screen.dart';
 import '../operate/grafana_screen.dart';
@@ -125,13 +124,6 @@ class ServerScreen extends StatelessWidget {
             subtitle: 'Full dashboards, through this SSH connection',
             onTap: () =>
                 Navigator.of(context).push(GrafanaScreen.route(profile)),
-          ),
-          _HubTile(
-            icon: Icons.admin_panel_settings_outlined,
-            title: 'Admin dashboard',
-            subtitle: 'The MoaV web panel, through this SSH connection',
-            onTap: () =>
-                Navigator.of(context).push(AdminPanelScreen.route(profile)),
           ),
           const SectionHeader('Give back'),
           _HubTile(

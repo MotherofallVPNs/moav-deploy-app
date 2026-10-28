@@ -9,6 +9,7 @@ import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
+import 'bundle_share.dart';
 import 'qr_layout.dart';
 import 'users_provider.dart';
 
@@ -32,6 +33,20 @@ class UserBundleScreen extends ConsumerWidget {
       appBar: MoavAppBar(
         title: Text(user, style: moavMono(size: 17, weight: FontWeight.w600)),
         actions: [
+          Builder(
+            builder: (ctx) => IconButton(
+              icon: const Icon(Icons.folder_zip_outlined),
+              tooltip: 'Share .zip',
+              onPressed: bundle.value == null
+                  ? null
+                  : () => shareBundleZip(
+                        ctx,
+                        ref,
+                        serverId: profile.id,
+                        bundle: bundle.value!,
+                      ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Re-fetch bundle',
