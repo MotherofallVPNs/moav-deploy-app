@@ -6,16 +6,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app.dart';
 import 'core/app_error.dart';
 import 'security/app_log.dart';
+import 'security/decoy/decoy_provider.dart';
+import 'security/secure_cred_store.dart';
 import 'theme/moav_theme.dart';
 
-void main() {
+Future<void> main() async {
   final binding = WidgetsFlutterBinding.ensureInitialized();
   // No telemetry, no crash reporter: errors are scrubbed and, in release,
   // never printed anywhere.
   AppLog.installGlobalHandlers();
   registerFontLicenses();
-  holdFirstFrameForMark(binding);
-  runApp(const ProviderScope(retry: noProviderRetry, child: MoavDeployApp()));
+  // Disguise is decided before the first frame: a disguised launch must
+  // never paint the MoaV lockup, not even for one frame.
+  binding.deferFirstFrame();
+  final decoy = await loadDecoyConfig(SecureCredStore());
+  if (!decoy.enabled) holdFirstFrameForMark(binding);
+  binding.allowFirstFrame();
+  runApp(ProviderScope(
+    retry: noProviderRetry,
+    overrides: [decoyBootProvider.overrideWithValue(decoy)],
+    child: const MoavDeployApp(),
+  ));
 }
 
 /// Keeps the native splash up until the MoaV mark is decoded.

@@ -10,6 +10,7 @@ import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
 import '../about/about_screen.dart';
 import '../deploy/deploy_screen.dart';
+import '../disguise/disguise_screen.dart';
 import '../keys/keyring_screen.dart';
 import '../operate/grafana_screen.dart';
 import '../server/server_screen.dart';
@@ -42,6 +43,13 @@ class ServersHomeScreen extends ConsumerWidget {
                 child: ListTile(
                   leading: Icon(Icons.key_outlined),
                   title: Text('SSH keys'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _HomeAction.disguise,
+                child: ListTile(
+                  leading: Icon(Icons.visibility_off_outlined),
+                  title: Text('Disguise mode'),
                 ),
               ),
               PopupMenuItem(
@@ -113,7 +121,17 @@ class ServersHomeScreen extends ConsumerWidget {
   }
 }
 
-enum _HomeAction { keys, docs, support, about, github, x, telegram, wipe }
+enum _HomeAction {
+  keys,
+  disguise,
+  docs,
+  support,
+  about,
+  github,
+  x,
+  telegram,
+  wipe,
+}
 
 Future<void> _handleHomeAction(
   BuildContext context,
@@ -124,6 +142,8 @@ Future<void> _handleHomeAction(
   switch (action) {
     case _HomeAction.keys:
       await Navigator.of(context).push(KeyringScreen.route());
+    case _HomeAction.disguise:
+      await Navigator.of(context).push(DisguiseScreen.route());
     case _HomeAction.wipe:
       await showWipeDialog(context, ref, serverCount: serverCount);
     case _HomeAction.docs:

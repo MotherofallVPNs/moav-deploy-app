@@ -11,6 +11,7 @@ class MemoryCredStore implements SecureCredStore {
   final Map<String, String> secrets = {};
   final Map<String, String> sshKeySecrets = {};
   final Map<String, Map<String, Object?>> installHandles = {};
+  Map<String, Object?>? decoy;
 
   @override
   Future<List<ServerProfile>> loadProfiles() async => profiles;
@@ -42,6 +43,12 @@ class MemoryCredStore implements SecureCredStore {
   @override
   Future<void> deleteInstallHandle(String id) async =>
       installHandles.remove(id);
+  @override
+  Future<Map<String, Object?>?> readDecoy() async => decoy;
+  @override
+  Future<void> writeDecoy(Map<String, Object?> json) async => decoy = json;
+  @override
+  Future<void> deleteDecoy() async => decoy = null;
   @override
   Future<List<String>> listKeys() async => [
         ...secrets.keys,

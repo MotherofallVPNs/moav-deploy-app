@@ -117,7 +117,7 @@ class _LockedService extends AppLockService {
   Future<bool> canLock() async => true;
 
   @override
-  Future<bool> authenticate() async => false;
+  Future<bool> authenticate({bool disguised = false}) async => false;
 }
 
 const _profile = ServerProfile(

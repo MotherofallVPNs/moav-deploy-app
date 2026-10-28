@@ -13,4 +13,14 @@
     <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">@color/launch_background</item>
     </style>
+    <!-- Disguise mode: the Android 12+ system splash shows the Notes icon on
+         paper, never the MoaV mark. -->
+    <style name="DecoyLaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowSplashScreenBackground">@color/decoy_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_notes</item>
+        <item name="android:windowBackground">@color/decoy_background</item>
+    </style>
+    <style name="DecoyNormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@color/decoy_background</item>
+    </style>
 </resources>

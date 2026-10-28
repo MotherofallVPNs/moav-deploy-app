@@ -31,6 +31,10 @@ class SecureCredStore {
   static String _sshKeySecret(String keyId) => 'moav.sshkey.v1.$keyId';
   static String _installKey(String serverId) => 'moav.install.v1.$serverId';
 
+  /// Disguise settings (`DecoyConfig` JSON). The only key [wipeAll] keeps:
+  /// a wipe under duress must not turn the Notes icon back into MoaV.
+  static const decoyKey = 'moav.decoy.v1';
+
   Future<List<ServerProfile>> loadProfiles() async {
     final raw = await _storage.read(key: _profilesKey);
     if (raw == null || raw.isEmpty) return const [];
@@ -91,29 +95,48 @@ class SecureCredStore {
   Future<void> deleteInstallHandle(String serverId) =>
       _storage.delete(key: _installKey(serverId));
 
+  Future<Map<String, Object?>?> readDecoy() async {
+    final raw = await _storage.read(key: decoyKey);
+    if (raw == null || raw.isEmpty) return null;
+    return jsonDecode(raw) as Map<String, Object?>;
+  }
+
+  Future<void> writeDecoy(Map<String, Object?> json) =>
+      _storage.write(key: decoyKey, value: jsonEncode(json));
+
+  Future<void> deleteDecoy() => _storage.delete(key: decoyKey);
+
   /// Every key currently held, for the wipe report and for tests.
   Future<List<String>> listKeys() async =>
       (await _storage.readAll()).keys.toList();
 
   /// Device-seizure quick wipe: removes every server, secret and install
-  /// handle from the platform secure store.
+  /// handle from the platform secure store. The disguise config
+  /// ([decoyKey]) is the one entry written back afterwards, so the app
+  /// keeps its Notes identity (and the passcode that reveals it) after a
+  /// wipe; the disguise screen can turn it off deliberately.
   ///
   /// Deletes each key individually **and** calls `deleteAll`, then reads the
-  /// store back and refuses to report success while anything is left.
+  /// store back and refuses to report success while anything else is left.
   /// Returns the number of entries removed.
   Future<int> wipeAll() async {
     final before = await _storage.readAll();
+    final decoy = before[decoyKey];
     for (final key in before.keys) {
       await _storage.delete(key: key);
     }
     await _storage.deleteAll();
-    final after = await _storage.readAll();
+    if (decoy != null) {
+      await _storage.write(key: decoyKey, value: decoy);
+    }
+    final after = await _storage.readAll()
+      ..remove(decoyKey);
     if (after.isNotEmpty) {
       throw StateError(
         'Secure storage still holds ${after.length} item(s) after wipe',
       );
     }
-    return before.length;
+    return before.length - (decoy == null ? 0 : 1);
   }
 }
 

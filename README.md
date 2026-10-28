@@ -52,6 +52,10 @@ the bundles this app produces.
 - **Built for at-risk users.** Biometric app lock, secrets only in the
   platform secure store, scrubbed logs, no telemetry, no backend, and an
   emergency wipe that clears every stored server and key.
+- **Disguise mode.** The app can present itself as a plain Notes app (name
+  and icon on Android, icon on iOS) with a working notes screen in front; a
+  secret gesture plus a per-device passcode reveals the real app behind its
+  usual lock. See [docs/DISGUISE.md](docs/DISGUISE.md).
 
 ## Get the app
 
@@ -147,6 +151,8 @@ purple accent, Inter for UI, JetBrains Mono for values) as a dark-only Material
   channels and what each one needs.
 - [docs/MOAV-CLI-GAPS.md](docs/MOAV-CLI-GAPS.md): upstream CLI gaps the app
   works around.
+- [docs/DISGUISE.md](docs/DISGUISE.md): disguise mode (Notes decoy), its
+  threat model and what each platform can and cannot hide.
 
 ## Contributing
 
