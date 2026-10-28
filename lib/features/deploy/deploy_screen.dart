@@ -72,10 +72,15 @@ class _InstallFormState extends State<_InstallForm> {
     super.dispose();
   }
 
+  /// Upstream install.sh's own rules (ni_validate): it fails the install on
+  /// anything shorter than 12 or containing quotes, \ $ ` # or whitespace.
   String? get _passwordError {
     final p = _password.text;
-    if (p.contains(RegExp(r'["\\$`]'))) {
-      return 'Avoid " \\ \$ ` in the admin password';
+    if (p.contains(RegExp('["\'\\\\\$`#\\s]'))) {
+      return 'Avoid quotes, \\ \$ ` # and spaces in the admin password';
+    }
+    if (p.isNotEmpty && p.length < 12) {
+      return 'At least 12 characters';
     }
     return null;
   }
@@ -173,9 +178,10 @@ class _InstallFormState extends State<_InstallForm> {
           ),
         ),
         Text(
-          'Written to DEFAULT_PROFILES before moav bootstrap --yes; the '
-          'matching ENABLE_* flags are set only in a .env this install '
-          'creates. Change them later from the Services tab.',
+          'Passed to the MoaV installer as ENABLE_* flags for a .env this '
+          'install creates; without a domain the installer turns off the '
+          'certificate-dependent ones itself. Change them later from the '
+          'Services tab.',
           style: theme.textTheme.bodySmall,
         ),
         const SizedBox(height: 10),

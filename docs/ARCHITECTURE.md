@@ -69,24 +69,31 @@ The concrete models live in `lib/core/moav_controller.dart`.
   stdin so secrets never appear in `ps`), launches it with `setsid nohup`,
   stores the PID as a job handle in the secure store, and polls
   `installStatus` by tailing `~/.moav-deploy/deploy.log` on reconnect. The
-  log carries `[moav-deploy] step N/5` and `[moav-deploy] exit=<code>`
+  log carries `[moav-deploy] step N/3` and `[moav-deploy] exit=<code>`
   markers so status is derivable from the log alone. The phone can suspend
   the app; the server keeps working; the app reattaches.
 - **Install is idempotent and never destructive.** On a box that already has
-  `/opt/moav` the job keeps the checkout untouched (no `git pull`), fills only
-  empty or placeholder `.env` values, skips `moav bootstrap` when the box was
-  already bootstrapped, and leaves running services alone. The live suite
-  re-runs the installer against an installed server and checks that git
-  HEAD, `.env`, users, bundles and the container set are identical before
-  and after.
-- **The upstream installer is interactive.** `install.sh` has no `--yes`, but
-  every prompt falls back to a sane default when `/dev/tty` cannot be opened,
-  which is the case under `setsid`. Domain, email and admin password are not
-  installer inputs; they live in `/opt/moav/.env`, which the job writes
-  before `moav bootstrap --yes`. The services picked in the app go the same
-  way: `DEFAULT_PROFILES` (what `bootstrap --yes` and `moav start` use
-  without a TTY) plus the `ENABLE_*` flags, the latter only into a `.env`
-  the job itself created. The catalog of profiles and flags is
+  `/opt/moav` the installer keeps the checkout untouched (a non-interactive
+  run never updates it), fills only empty or placeholder `.env` values, and
+  the job asks for a bootstrap only when the box was never bootstrapped, so
+  running services are left alone. The live suite re-runs the installer
+  against an installed server and checks that git HEAD, `.env`, users,
+  bundles and the container set are identical before and after.
+- **The job drives the upstream installer's own automation contract.**
+  `deploy.sh` exports `MOAV_NONINTERACTIVE=1`, `MOAV_DOMAIN` plus
+  `MOAV_EMAIL` (or `MOAV_DOMAINLESS=1` when the domain is blank),
+  `MOAV_ADMIN_PASSWORD`, the `ENABLE_*` flags for the services picked in the
+  app (only when no `.env` exists yet, so an existing box keeps its flags),
+  then pipes `install.sh` to bash inside a subshell. The installer creates
+  `.env` (mode 0600), disables the certificate-dependent protocols itself in
+  domainless mode, and derives `DEFAULT_PROFILES` with the repo's own
+  `derive_enabled_profiles`. `moav bootstrap --yes` + `moav start` then run in
+  a clean environment (step 3), so bootstrap reads the services from `.env`
+  instead of the exported `ENABLE_*` (which would otherwise re-enable the
+  cert protocols domainless mode just disabled). The app writes nothing into
+  `.env` itself. `deploy.sh` runs under `umask 022` (the launcher keeps its own
+  files at 077) because unprivileged containers such as xray and admin read
+  the clone. The catalog of profiles and flags is
   `lib/core/moav_services.dart`, mirrored from upstream `lib/service.sh`.
 - **Parsing.** Command strings and parsers live in `lib/core/moav_cli.dart`,
   separate from the transport, with fixture-based unit tests. `user list`,

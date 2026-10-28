@@ -269,9 +269,9 @@ class _FakeController implements MoavController {
   Future<InstallStatus> installStatus(InstallHandle handle) => _lag(
         const InstallStatus(
           phase: InstallPhase.running,
-          progress: 0.6,
-          message: 'Bootstrap',
-          logTail: ['[moav-deploy] step 3/5: Bootstrap'],
+          progress: 2 / 3,
+          message: 'Run MoaV installer',
+          logTail: ['[moav-deploy] step 2/3: Run MoaV installer'],
         ),
       );
 

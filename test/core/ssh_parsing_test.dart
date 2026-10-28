@@ -32,23 +32,23 @@ void main() {
 
   group('parseInstallStatus', () {
     const log = '''
-[moav-deploy] step 1/5: Preflight
+[moav-deploy] step 1/3: Preflight
 Existing MoaV install found
-[moav-deploy] step 2/5: Run MoaV installer (non-interactive)
+[moav-deploy] step 2/3: Run MoaV installer (non-interactive)
 \x1b[0;34mUsing existing installation.\x1b[0m
 ''';
 
     test('running with progress', () {
       final s = SshMoavController.parseInstallStatus('ALIVE\n__LOG__\n$log');
       expect(s.phase, InstallPhase.running);
-      expect(s.progress, closeTo(0.4, 0.001));
+      expect(s.progress, closeTo(2 / 3, 0.001));
       expect(s.message, 'Run MoaV installer (non-interactive)');
       expect(s.logTail, contains('Using existing installation.'));
     });
 
     test('succeeded', () {
       final s = SshMoavController.parseInstallStatus(
-        'DEAD\n__LOG__\n$log\n[moav-deploy] step 5/5: Start services\n'
+        'DEAD\n__LOG__\n$log\n[moav-deploy] step 3/3: Verify\n'
         '[moav-deploy] exit=0\n',
       );
       expect(s.phase, InstallPhase.succeeded);
@@ -98,11 +98,12 @@ Existing MoaV install found
       expect(text, isNot(contains('X=1')));
     });
 
-    test('script never wipes /opt/moav and gates bootstrap/start', () {
+    test('script never wipes /opt/moav and gates the bootstrap', () {
       expect(InstallScript.script, isNot(contains('rm -rf')));
-      expect(InstallScript.script, contains('bootstrap --yes'));
-      expect(InstallScript.script, contains('Already bootstrapped - skipping'));
-      expect(InstallScript.script, contains('BOOTSTRAPPED_NOW'));
+      expect(InstallScript.script, contains('if [ "\$BOOTSTRAP" = 1 ]; then'));
+      expect(InstallScript.script, contains('moav_cmd bootstrap --yes'));
+      expect(InstallScript.script, contains('Already bootstrapped - bootstrap and start will be skipped'));
+      expect(InstallScript.script, contains('BOOTSTRAP=0'));
       expect(InstallScript.script, contains(InstallScript.exitMarker));
       for (var i = 1; i <= InstallScript.totalSteps; i++) {
         expect(InstallScript.script, contains('step $i '));
