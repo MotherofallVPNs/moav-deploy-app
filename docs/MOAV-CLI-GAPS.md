@@ -80,7 +80,8 @@ Captured verbatim from v2.3.1 into `test/fixtures/json/`.
 | Need | Why | How the app copes |
 |---|---|---|
 | JSON output on `moav user list`, `doctor`, `status` | avoid fragile text parsing; `status` is a box-drawn table with ANSI colour | text parsers, see rows below |
-| Non-interactive `install.sh` | app drives it in the background | since 2.3.0 the app exports `MOAV_NONINTERACTIVE=1` with `MOAV_DOMAIN`/`MOAV_EMAIL` or `MOAV_DOMAINLESS=1`, `MOAV_ADMIN_PASSWORD`, `ENABLE_*` and `MOAV_BOOTSTRAP=1`; every `confirm` takes its default (install packages = yes, update existing checkout = **no**, install global command = yes, start services after bootstrap = yes). Swap/net-tuning are never touched unattended. On a 2.2.x installer the variables are ignored and the job stops at a `.env` without a domain or password. |
+| Non-interactive `install.sh` | app drives it in the background | since 2.3.0 the app exports `MOAV_NONINTERACTIVE=1` with `MOAV_DOMAIN`/`MOAV_EMAIL` or `MOAV_DOMAINLESS=1`, `MOAV_ADMIN_PASSWORD` and `ENABLE_*`, in a subshell; every `confirm` takes its default (install packages = yes, update existing checkout = **no**, install global command = yes). `MOAV_BOOTSTRAP` is not used (see env-leak row); the app runs bootstrap + start itself in a clean env. On a 2.2.x installer the variables are ignored and the job stops at a `.env` without a domain or password. |
+| `ENABLE_*` env leaks from `install.sh` into `moav bootstrap` (domainless) | install.sh disables cert protocols in `.env` for a domainless box, but leaves the exported `ENABLE_x=true` vars set; `moav bootstrap` reads `ENABLE_*` from the environment ahead of `.env`, so `MOAV_BOOTSTRAP=1` re-enables them and fails with "DOMAIN is required" | worked around app-side: install.sh runs in a subshell and bootstrap runs in a clean env. Candidate upstream hardening: `ni_configure_env` could `unset` the cert `ENABLE_*` it disables, or bootstrap could prefer `.env` over the environment. |
 | `install.sh`: "Start Docker now?" defaulted to **no** | on a fresh box where Docker was just installed but not started, a non-interactive run continued without Docker | fixed in 2.3.0 for non-interactive runs (defaults to yes). On a 2.2.x installer the app's install job inherits the old default and does not check Docker separately. |
 | `moav bootstrap --yes` | idempotent re-run; preserves keys/users, regenerates configs | exists in 2.2.x; on 2.2.x it still entered interactive service selection afterwards (fixed in 2.3.0) |
 | Env-driven config (`DOMAIN`, `ACME_EMAIL`, `ADMIN_PASSWORD`) | written to `.env` before bootstrap | `install.sh --non-interactive` writes them itself (`ni_configure_env`): a fresh `.env` from `.env.example`, an existing one only gets empty/placeholder values filled, so a configured box is never reconfigured silently. The app no longer edits `.env` during an install. |
@@ -97,15 +98,19 @@ Captured verbatim from v2.3.1 into `test/fixtures/json/`.
 
 1. Preflight: report whether `/opt/moav` exists (never removed or updated)
    and whether `outputs/bundles` is non-empty (already bootstrapped).
-2. `curl -fsSL https://moav.sh/install.sh | bash` with `MOAV_NONINTERACTIVE=1`,
-   `MOAV_DOMAIN` + `MOAV_EMAIL` or `MOAV_DOMAINLESS=1`, `MOAV_ADMIN_PASSWORD`,
-   the `ENABLE_*=true|false` flags for the services chosen in the app (only
-   when no `.env` exists yet, so an existing box keeps its flags) and
-   `MOAV_BOOTSTRAP=1` unless already bootstrapped. The installer creates or
-   fills `.env`, disables certificate-dependent protocols in domainless
-   mode, derives `DEFAULT_PROFILES` (`ni_default_profiles`) and runs
-   `moav bootstrap --yes`, which builds and starts the services.
-3. Verify: print `moav status`. On an already-bootstrapped box nothing was
+2. `curl -fsSL https://moav.sh/install.sh | bash` (in a subshell) with
+   `MOAV_NONINTERACTIVE=1`, `MOAV_DOMAIN` + `MOAV_EMAIL` or `MOAV_DOMAINLESS=1`,
+   `MOAV_ADMIN_PASSWORD`, and the `ENABLE_*=true|false` flags for the services
+   chosen in the app (only when no `.env` exists yet, so an existing box keeps
+   its flags). The installer creates or fills `.env`, disables
+   certificate-dependent protocols in domainless mode and derives
+   `DEFAULT_PROFILES` (`ni_default_profiles`). `MOAV_BOOTSTRAP` is deliberately
+   not used: bootstrap reads `ENABLE_*` from the environment ahead of `.env`,
+   so the exports would re-enable the cert protocols. See the env-leak note.
+3. Bootstrap + start in a clean environment (only on a fresh box):
+   `moav bootstrap --yes` then `moav start`, with no `ENABLE_*`/`MOAV_*`
+   exports left, so bootstrap reads the services from `.env`. Then print
+   `moav status`. On an already-bootstrapped box nothing was
    bootstrapped or started.
 
 There is no non-interactive profile argument on `moav bootstrap` or

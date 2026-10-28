@@ -83,13 +83,15 @@ The concrete models live in `lib/core/moav_controller.dart`.
   `deploy.sh` exports `MOAV_NONINTERACTIVE=1`, `MOAV_DOMAIN` plus
   `MOAV_EMAIL` (or `MOAV_DOMAINLESS=1` when the domain is blank),
   `MOAV_ADMIN_PASSWORD`, the `ENABLE_*` flags for the services picked in the
-  app (only when no `.env` exists yet, so an existing box keeps its flags)
-  and `MOAV_BOOTSTRAP=1`, then pipes `install.sh` to bash. The installer
-  creates `.env` (mode 0600), disables the certificate-dependent protocols
-  itself in domainless mode, derives `DEFAULT_PROFILES` with the repo's own
-  `derive_enabled_profiles`, and runs `moav bootstrap --yes`, which builds
-  and starts the selected services. The app writes nothing into `.env`
-  itself. `deploy.sh` runs under `umask 022` (the launcher keeps its own
+  app (only when no `.env` exists yet, so an existing box keeps its flags),
+  then pipes `install.sh` to bash inside a subshell. The installer creates
+  `.env` (mode 0600), disables the certificate-dependent protocols itself in
+  domainless mode, and derives `DEFAULT_PROFILES` with the repo's own
+  `derive_enabled_profiles`. `moav bootstrap --yes` + `moav start` then run in
+  a clean environment (step 3), so bootstrap reads the services from `.env`
+  instead of the exported `ENABLE_*` (which would otherwise re-enable the
+  cert protocols domainless mode just disabled). The app writes nothing into
+  `.env` itself. `deploy.sh` runs under `umask 022` (the launcher keeps its own
   files at 077) because unprivileged containers such as xray and admin read
   the clone. The catalog of profiles and flags is
   `lib/core/moav_services.dart`, mirrored from upstream `lib/service.sh`.

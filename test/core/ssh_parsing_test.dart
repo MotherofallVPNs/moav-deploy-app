@@ -100,7 +100,8 @@ Existing MoaV install found
 
     test('script never wipes /opt/moav and gates the bootstrap', () {
       expect(InstallScript.script, isNot(contains('rm -rf')));
-      expect(InstallScript.script, contains('export MOAV_BOOTSTRAP=1'));
+      expect(InstallScript.script, contains('if [ "\$BOOTSTRAP" = 1 ]; then'));
+      expect(InstallScript.script, contains('moav_cmd bootstrap --yes'));
       expect(InstallScript.script, contains('Already bootstrapped - bootstrap and start will be skipped'));
       expect(InstallScript.script, contains('BOOTSTRAP=0'));
       expect(InstallScript.script, contains(InstallScript.exitMarker));
