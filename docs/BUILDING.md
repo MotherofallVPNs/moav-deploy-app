@@ -64,7 +64,30 @@ already-installed box. The full policy is in
 (git-ignored). By default it uses built-in demo data. With the `MOAV_TEST_*`
 variables above it talks to the real server, read-only except for one
 throwaway `zzmoavdeploytest*` user created for the bundle shot and revoked
-afterwards.
+afterwards. A box that only has password auth works too: set
+`MOAV_TEST_PASSWORD` instead of `MOAV_TEST_SSH_KEY` (the script base64-encodes
+it into the `MOAV_TEST_PASSWORD_B64` define so shell metacharacters survive).
+
+## Live end-to-end run
+
+`tool/e2e_live.sh` drives the whole first-run flow through the real UI on a
+booted iOS simulator against a disposable box, with password auth: add the
+server, run the headless install from the Deploy screen, read the Services
+and Health tabs, add a user, open the bundle and share its zip. It is not
+read-only: it installs MoaV and leaves the user behind unless
+`MOAV_TEST_E2E_CLEANUP=true`.
+
+```
+MOAV_TEST_HOST=1.2.3.4 MOAV_TEST_USER=root MOAV_TEST_PASSWORD='...' \
+MOAV_TEST_E2E_DESELECT=proxy,dnstunnel,trusttunnel tool/e2e_live.sh ./e2e-evidence
+```
+
+`MOAV_TEST_E2E_DESELECT` unticks profiles on the Deploy form. Upstream's
+`moav bootstrap --yes` refuses a blank domain while any TLS-cert protocol is
+enabled (Trojan, Hysteria2, dnstt, Slipstream, MasterDNS, TrustTunnel), so a
+domainless box needs `proxy`, `dnstunnel` and `trusttunnel` unticked. The
+evidence directory gets every screenshot, `results.json` with a PASS/FAIL per
+step, the server-side `install-deploy.log` and the shared bundle zip.
 
 ## Launch screen
 
