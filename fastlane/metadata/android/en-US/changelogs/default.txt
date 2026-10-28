@@ -1,6 +1,5 @@
-What is new in 0.2.7
-- Much faster user bundle downloads.
-- User details now show all enabled protocols.
-- The app hides your content behind the lock screen when you switch away.
-- Fixed a crash when stopping a service.
-- Cleaner menu; the admin dashboard moved to the Server tab.
+What is new in 0.2.8
+- New Donate section: support Conduit, Snowflake and MahsaNet from the app.
+- Disguise mode: make the app look like a plain Notes app, hidden behind a secret unlock.
+- New About screen with version info and a way to verify your download.
+- Polished branded splash screen.
