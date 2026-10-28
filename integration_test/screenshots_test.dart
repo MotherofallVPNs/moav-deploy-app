@@ -2,6 +2,7 @@
 // Live mode is read-only apart from one throwaway zzmoavdeploytest* user.
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -280,6 +281,9 @@ class _FakeController implements MoavController {
   Future<void> removeUser(String name) async {
     users.removeWhere((u) => u.name == name);
   }
+
+  @override
+  Future<Uint8List?> getBundleArchive(String user) => _lag(null);
 
   @override
   Future<Bundle> getBundle(String user) => _lag(Bundle(

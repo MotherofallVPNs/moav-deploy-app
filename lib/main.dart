@@ -15,7 +15,7 @@ Future<void> main() async {
   // No telemetry, no crash reporter: errors are scrubbed and, in release,
   // never printed anywhere.
   AppLog.installGlobalHandlers();
-  registerFontLicenses();
+  registerBundledLicenses();
   // Disguise is decided before the first frame: a disguised launch must
   // never paint the MoaV lockup, not even for one frame.
   binding.deferFirstFrame();
@@ -52,19 +52,21 @@ void holdFirstFrameForMark(WidgetsBinding binding) {
   stream.addListener(listener);
 }
 
-/// Bundled font license texts, keyed by the package names shown on the
-/// Flutter licenses page. The SIL Open Font License requires the license to
-/// accompany the fonts wherever they are distributed.
-const fontLicenseAssets = <String, String>{
+/// Bundled license texts, keyed by the names shown on the Flutter licenses
+/// page. The SIL Open Font License requires the license to accompany the
+/// fonts wherever they are distributed; the brand marks come from Simple
+/// Icons (CC0).
+const bundledLicenseAssets = <String, String>{
   'Inter': 'assets/fonts/LICENSE-Inter.txt',
   'JetBrains Mono': 'assets/fonts/LICENSE-JetBrainsMono.txt',
+  'Simple Icons': 'assets/brand/LICENSE-simple-icons.txt',
 };
 
-/// Adds the bundled font licenses to [LicenseRegistry] so they appear in
+/// Adds the bundled licenses to [LicenseRegistry] so they appear in
 /// `showLicensePage` next to the Dart and Flutter package licenses.
-void registerFontLicenses() {
+void registerBundledLicenses() {
   LicenseRegistry.addLicense(() async* {
-    for (final entry in fontLicenseAssets.entries) {
+    for (final entry in bundledLicenseAssets.entries) {
       final text = await rootBundle.loadString(entry.value);
       yield LicenseEntryWithLineBreaks([entry.key], text);
     }

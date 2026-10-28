@@ -62,6 +62,13 @@ class _Controller extends StubMoavController {
       ServiceFlags(values: const {}, collectedAt: DateTime(2026));
 
   @override
+  Future<ServerInfo> serverInfo() async => ServerInfo(
+        host: const HostMetrics(cpuCount: 2, load1: 0.2),
+        version: const VersionInfo(moavVersion: '2.3.1'),
+        collectedAt: DateTime(2026),
+      );
+
+  @override
   Future<InstallStatus?> updateStatus() async => null;
 
   @override
@@ -104,12 +111,18 @@ Future<void> _pumpFor(WidgetTester tester,
 }
 
 /// Home, then the server hub, then the "Admin dashboard" tile.
+/// The hub no longer lists the admin dashboard; it lives on the Server tab.
 Future<void> _openAdminTile(WidgetTester tester) async {
   await tester.tap(find.text('Demo'));
   await tester.pumpAndSettle();
+  await tester.tap(find.text('Server info'));
+  await tester.pumpAndSettle();
   final tile = find.text('Admin dashboard');
   await tester.scrollUntilVisible(tile, 120,
-      scrollable: find.byType(Scrollable).first);
+      scrollable: find
+          .descendant(
+              of: find.byType(ListView).last, matching: find.byType(Scrollable))
+          .first);
   await tester.pumpAndSettle();
   await tester.tap(tile);
   await tester.pumpAndSettle();
@@ -356,8 +369,8 @@ void main() {
       await tester.pumpWidget(_app(store, controller));
       await tester.pumpAndSettle();
 
-      // No longer in the server card menu (user management lives in the
-      // Users tab); it is launched from the server hub and the Server tab.
+      // Not in the server card menu or the hub list; it is launched from
+      // the Server tab (and the Analytics tab).
       await tester.tap(find.byTooltip('Show menu'));
       await tester.pumpAndSettle();
       expect(find.text('Admin dashboard'), findsNothing);

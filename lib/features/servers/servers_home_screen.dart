@@ -6,6 +6,7 @@ import '../../core/moav_controller.dart';
 import '../../core/moav_links.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
+import '../../widgets/brand_icon.dart';
 import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
 import '../about/about_screen.dart';
@@ -164,7 +165,7 @@ Future<void> _handleHomeAction(
 Future<void> _open(Uri url) =>
     launchUrl(url, mode: LaunchMode.externalApplication);
 
-/// One menu row with the project's GitHub, X and Telegram as icon buttons.
+/// One menu row with the project's GitHub, X and Telegram brand marks.
 /// Tapping one closes the menu with that action, like a normal item.
 class _SocialRow extends PopupMenuEntry<_HomeAction> {
   const _SocialRow();
@@ -185,9 +186,9 @@ class _SocialRow extends PopupMenuEntry<_HomeAction> {
 class _SocialRowState extends State<_SocialRow> {
   @override
   Widget build(BuildContext context) {
-    Widget button(IconData icon, String label, _HomeAction action) =>
+    Widget button(String asset, String label, _HomeAction action) =>
         IconButton(
-          icon: Icon(icon),
+          icon: BrandIcon(asset),
           tooltip: label,
           onPressed: () => Navigator.pop(context, action),
         );
@@ -196,9 +197,9 @@ class _SocialRowState extends State<_SocialRow> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          button(Icons.code, 'GitHub', _HomeAction.github),
-          button(Icons.alternate_email, 'X', _HomeAction.x),
-          button(Icons.send_outlined, 'Telegram', _HomeAction.telegram),
+          button(BrandIcon.github, 'GitHub', _HomeAction.github),
+          button(BrandIcon.x, 'X', _HomeAction.x),
+          button(BrandIcon.telegram, 'Telegram', _HomeAction.telegram),
         ],
       ),
     );

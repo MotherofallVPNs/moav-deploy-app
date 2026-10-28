@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 
@@ -355,6 +356,18 @@ class SshMoavController implements MoavController {
       fetchedAt: DateTime.now(),
       path: '${MoavCli.bundlesDir}/$user',
     );
+  }
+
+  /// One shell round trip that zips `/opt/moav/outputs/bundles/<user>` on
+  /// the box, QR images and the HTML guide included (see
+  /// [MoavCli.bundleArchive]). `null` when the box has no `zip` or the
+  /// directory is over the size cap; the caller zips the fetched entries.
+  @override
+  Future<Uint8List?> getBundleArchive(String user) async {
+    _validateName(user);
+    final out = await _run(MoavCli.bundleArchive(user),
+        allowFailure: true, timeout: bundleTimeout);
+    return MoavCli.parseBundleArchive(out.stdout);
   }
 
   /// Bundle files larger than this are configs we never render (safety cap).
