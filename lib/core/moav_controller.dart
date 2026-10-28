@@ -375,6 +375,9 @@ class BundleEntry {
     'trojan': 'Trojan',
     'hysteria2': 'Hysteria2',
     'shadowsocks': 'Shadowsocks',
+    'anytls': 'AnyTLS',
+    'snell': 'Snell',
+    'cdn': 'VLESS over CDN',
     'xhttp': 'VLESS XHTTP',
     'telegram': 'Telegram MTProxy',
     'subscription': 'Subscription (v2rayNG / Streisand)',
@@ -384,6 +387,9 @@ class BundleEntry {
     'trusttunnel': 'TrustTunnel',
     'xdns': 'XDNS',
     'dnstt': 'dnstt',
+    'slipstream': 'Slipstream',
+    'masterdns': 'MasterDNS',
+    'gooserelay': 'GooseRelay',
   };
 }
 
