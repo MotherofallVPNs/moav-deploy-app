@@ -1,5 +1,7 @@
 // Demo screenshot gallery driven by tool/screenshots.sh (see docs/BUILDING.md).
 // Live mode is read-only apart from one throwaway zzmoavdeploytest* user.
+// Live auth is the key in MOAV_TEST_SSH_KEY_B64, or the SSH password in
+// MOAV_TEST_PASSWORD_B64 when no key is given.
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -24,7 +26,11 @@ const _host = String.fromEnvironment('MOAV_TEST_HOST');
 const _user = String.fromEnvironment('MOAV_TEST_USER', defaultValue: 'root');
 const _port = int.fromEnvironment('MOAV_TEST_PORT', defaultValue: 22);
 const _keyB64 = String.fromEnvironment('MOAV_TEST_SSH_KEY_B64');
-const live = _host != '' && _keyB64 != '';
+const _passwordB64 = String.fromEnvironment('MOAV_TEST_PASSWORD_B64');
+const live = _host != '' && (_keyB64 != '' || _passwordB64 != '');
+
+/// The live credential: the private key when given, else the SSH password.
+const _secretB64 = _keyB64 != '' ? _keyB64 : _passwordB64;
 
 const demo = ServerProfile(
   id: 'demo',
@@ -32,7 +38,9 @@ const demo = ServerProfile(
   host: live ? _host : 'vpn.example.org',
   port: _port,
   username: _user,
-  authMethod: SshAuthMethod.generatedKey,
+  authMethod: _keyB64 != '' || !live
+      ? SshAuthMethod.generatedKey
+      : SshAuthMethod.password,
 );
 
 const frankfurt = ServerProfile(
@@ -52,7 +60,7 @@ void main() {
     (tester) async {
       final store = MemoryCredStore()
         ..profiles = [demo, frankfurt]
-        ..secrets['demo'] = live ? utf8.decode(base64Decode(_keyB64)) : 'x'
+        ..secrets['demo'] = live ? utf8.decode(base64Decode(_secretB64)) : 'x'
         ..secrets['fra'] = 'x';
       final fake = _FakeController();
       final MoavController primary = live
