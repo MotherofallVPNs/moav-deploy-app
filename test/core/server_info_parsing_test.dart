@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/core/moav_cli.dart';
@@ -7,7 +5,7 @@ import 'package:moav_deploy/core/moav_controller.dart';
 import 'package:moav_deploy/features/operate/server_info_view.dart';
 import 'package:moav_deploy/theme/moav_theme.dart';
 
-String fixture(String name) => File('test/fixtures/$name').readAsStringSync();
+import '../support/fixtures.dart';
 
 void main() {
   group('parseHostInfo', () {

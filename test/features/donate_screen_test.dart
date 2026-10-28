@@ -6,21 +6,20 @@ import 'package:moav_deploy/core/app_error.dart';
 import 'package:moav_deploy/core/donate.dart';
 import 'package:moav_deploy/core/donate_cli.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
-import 'package:moav_deploy/core/moav_controller_factory.dart';
-import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/features/activity/activity_provider.dart';
 import 'package:moav_deploy/features/donate/donate_screen.dart';
 import 'package:moav_deploy/features/servers/servers_provider.dart';
 import 'package:moav_deploy/security/app_log.dart';
 import 'package:moav_deploy/theme/moav_theme.dart';
 
+import '../support/fake_controller.dart';
 import '../support/memory_cred_store.dart';
 
 const secretKey = 'mk_live_WIDGET_SECRET_987654321';
 
 /// A server whose `.env` state the test flips; records what the screen asks
 /// the controller to do and plays back the `moav donate setup` output.
-class _Controller implements MoavController {
+class _Controller extends StubMoavController {
   _Controller({required this.keyPresent});
 
   bool keyPresent;
@@ -87,31 +86,9 @@ class _Controller implements MoavController {
 
   @override
   Future<InstallStatus?> updateStatus() async => null;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnimplementedError('${invocation.memberName}');
 }
 
-class _Factory extends MoavControllerFactory {
-  _Factory(this.controller) : super(secretResolver: (_) async => null);
-
-  final MoavController controller;
-
-  @override
-  MoavController forServer(ServerProfile profile) => controller;
-}
-
-const _profile = ServerProfile(
-  id: 's1',
-  label: 'Demo',
-  host: 'demo.example.org',
-  port: 22,
-  username: 'root',
-  authMethod: SshAuthMethod.generatedKey,
-);
-
-MemoryCredStore _store() => MemoryCredStore()..profiles = [_profile];
+MemoryCredStore _store() => MemoryCredStore()..profiles = [demoKeyProfile];
 
 /// Pumps the screen on its own on a tall surface so every section is laid
 /// out (a `findsNothing` below is then meaningful), once the saved servers
@@ -128,14 +105,14 @@ Widget _screen(_Controller c, {List<Uri>? opened}) => ProviderScope(
       retry: noProviderRetry,
       overrides: [
         secureCredStoreProvider.overrideWithValue(_store()),
-        moavControllerFactoryProvider.overrideWithValue(_Factory(c)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(c)),
       ],
       child: MaterialApp(
         theme: moavDarkTheme(),
         home: Consumer(
           builder: (_, ref, _) => ref.watch(serversProvider).hasValue
               ? DonateScreen(
-                  profile: _profile,
+                  profile: demoKeyProfile,
                   openUrl: (u) async => opened?.add(u),
                 )
               : const SizedBox.shrink(),
@@ -158,7 +135,7 @@ void main() {
       overrides: [
         secureCredStoreProvider.overrideWithValue(_store()),
         moavControllerFactoryProvider
-            .overrideWithValue(_Factory(_Controller(keyPresent: true))),
+            .overrideWithValue(FakeControllerFactory(_Controller(keyPresent: true))),
       ],
       child: const MoavDeployApp(lockEnabled: false),
     ));

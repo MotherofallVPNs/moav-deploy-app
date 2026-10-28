@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,39 +8,18 @@ import 'package:moav_deploy/security/app_lock.dart';
 import 'package:moav_deploy/security/onboarding.dart';
 import 'package:moav_deploy/theme/moav_theme.dart';
 
+import '../support/fake_lock.dart';
 import '../support/memory_cred_store.dart';
 
 /// Device feedback: on resume the previous screen was visible behind the
 /// biometric prompt. The gate now covers the UI with the branded shield as
 /// soon as the app leaves the foreground and reveals it only after unlock.
 
-/// Each authenticate() call waits for the test to complete the gate.
-class _GatedLock extends AppLockService {
-  final gates = <Completer<bool>>[];
-
-  @override
-  Future<bool> canLock() async => true;
-
-  @override
-  Future<bool> authenticate({bool disguised = false}) {
-    final c = Completer<bool>();
-    gates.add(c);
-    return c.future;
-  }
-}
-
-class _Onboarded implements OnboardingStore {
-  @override
-  Future<bool> isComplete() async => true;
-  @override
-  Future<void> markComplete() async {}
-}
-
-Widget _app(_GatedLock lock) => ProviderScope(
+Widget _app(GatedLock lock) => ProviderScope(
       retry: noProviderRetry,
       overrides: [
         secureCredStoreProvider.overrideWithValue(MemoryCredStore()),
-        onboardingStoreProvider.overrideWithValue(_Onboarded()),
+        onboardingStoreProvider.overrideWithValue(OnboardedStore()),
         appLockServiceProvider.overrideWithValue(lock),
       ],
       child: const MoavDeployApp(),
@@ -69,7 +46,7 @@ Future<void> _lifecycle(WidgetTester tester, AppLifecycleState s) async {
 void main() {
   testWidgets('content is hidden until the launch unlock succeeds',
       (tester) async {
-    final lock = _GatedLock();
+    final lock = GatedLock();
     await tester.pumpWidget(_app(lock));
     await tester.pump();
     await tester.pump();
@@ -84,7 +61,7 @@ void main() {
 
   testWidgets('going inactive covers the UI at once; resuming reveals it',
       (tester) async {
-    final lock = _GatedLock();
+    final lock = GatedLock();
     await tester.pumpWidget(_app(lock));
     await tester.pump();
     await tester.pump();
@@ -107,7 +84,7 @@ void main() {
 
   testWidgets('background then resume re-authenticates before revealing',
       (tester) async {
-    final lock = _GatedLock();
+    final lock = GatedLock();
     await tester.pumpWidget(_app(lock));
     await tester.pump();
     await tester.pump();

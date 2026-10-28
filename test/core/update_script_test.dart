@@ -1,10 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:moav_deploy/core/server_profile.dart';
-import 'package:moav_deploy/core/ssh_connection.dart';
-import 'package:moav_deploy/core/ssh_moav_controller.dart';
 import 'package:moav_deploy/core/update_script.dart';
+
+import '../support/fake_box.dart';
 
 /// A stand-in `moav.sh` for the bash tests: the post-#345 build accepts
 /// `--yes` and ignores stdin; the older one rejects it exactly like
@@ -85,26 +84,10 @@ void main() {
     });
 
     test('startUpdate uploads that body and launches it detached', () async {
-      final uploads = <(String, String, String)>[];
-      final ran = <String>[];
-      final c = SshMoavController(
-        profile: const ServerProfile(
-          id: 't',
-          label: 't',
-          host: 'h',
-          port: 22,
-          username: 'root',
-          authMethod: SshAuthMethod.importedKey,
-        ),
-        secretResolver: (_) async => throw StateError('no ssh in unit tests'),
-        fileWriter: (path, content, {mode = '600'}) async =>
-            uploads.add((path, content, mode)),
-        runner: (command, {allowFailure = false, timeout = Duration.zero}) async {
-          ran.add(command);
-          return const SshOutput(stdout: 'STARTED 4242\n', stderr: '', exitCode: 0);
-        },
-      );
-      await c.startUpdate();
+      final box = FakeBox.always('STARTED 4242\n');
+      final uploads = box.uploads;
+      final ran = box.ran;
+      await box.controller.startUpdate();
       expect(uploads.single.$1, UpdateScript.scriptPath);
       expect(uploads.single.$1, '.moav-deploy/update.sh');
       expect(uploads.single.$3, '700');

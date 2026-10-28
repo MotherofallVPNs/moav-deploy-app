@@ -1,11 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/core/donate_cli.dart';
 import 'package:moav_deploy/core/moav_cli.dart';
 import 'package:moav_deploy/security/redactor.dart';
 
-String fixture(String name) => File('test/fixtures/$name').readAsStringSync();
+import '../support/fixtures.dart';
 
 /// `moav donate` has no `--json` (MoaV 2.3.1, lib/donate.sh); these pin the
 /// exact invocations and the text parsers against captured output shapes.

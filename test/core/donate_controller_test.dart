@@ -1,61 +1,14 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/core/donate_cli.dart';
-import 'package:moav_deploy/core/server_profile.dart';
-import 'package:moav_deploy/core/ssh_connection.dart';
-import 'package:moav_deploy/core/ssh_moav_controller.dart';
 import 'package:moav_deploy/security/app_log.dart';
 
-String fixture(String name) => File('test/fixtures/$name').readAsStringSync();
+import '../support/fake_box.dart';
+import '../support/fixtures.dart';
 
 const secretKey = 'mk_live_VERYSECRETKEY_0123456789';
 
-/// Scripts the remote box by exact command string and records every command
-/// and file upload, so a test can prove where the API key did and did not go.
-class FakeBox {
-  FakeBox(this.responses);
-
-  final Map<String, SshOutput> responses;
-  final ran = <String>[];
-  final uploads = <(String path, String content, String mode)>[];
-
-  Future<SshOutput> run(
-    String command, {
-    bool allowFailure = false,
-    Duration timeout = const Duration(seconds: 60),
-  }) async {
-    ran.add(command);
-    final out = responses[command];
-    if (out == null) throw StateError('unscripted command: $command');
-    if (!allowFailure && out.exitCode != 0) {
-      throw SshCommandException(command, out);
-    }
-    return out;
-  }
-
-  Future<void> write(String path, String content, {String mode = '600'}) async {
-    uploads.add((path, content, mode));
-  }
-}
-
-SshOutput ok(String stdout) => SshOutput(stdout: stdout, stderr: '', exitCode: 0);
-SshOutput failed(String stdout, {int code = 1}) =>
-    SshOutput(stdout: stdout, stderr: '', exitCode: code);
-
-SshMoavController controllerFor(FakeBox box) => SshMoavController(
-      profile: const ServerProfile(
-        id: 't',
-        label: 't',
-        host: 'h',
-        port: 22,
-        username: 'root',
-        authMethod: SshAuthMethod.importedKey,
-      ),
-      secretResolver: (_) async => throw StateError('no ssh in unit tests'),
-      runner: box.run,
-      fileWriter: box.write,
-    );
+/// The box is scripted by exact command string (see `FakeBox`), so a test
+/// can prove where the API key did and did not go.
 
 void main() {
   final logged = <String>[];

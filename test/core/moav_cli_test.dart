@@ -1,10 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/core/moav_cli.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
 
-String fixture(String name) => File('test/fixtures/$name').readAsStringSync();
+import '../support/fixtures.dart';
 
 void main() {
   jsonMain();
@@ -212,9 +210,6 @@ __END__
     expect(MoavCli.userAdd("a'b"), contains("'a'\\''b'"));
   });
 }
-
-String jsonFixture(String name) =>
-    File('test/fixtures/json/$name').readAsStringSync();
 
 void jsonMain() {
   group('decodeJsonDocument', () {

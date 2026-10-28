@@ -7,8 +7,10 @@ import 'package:moav_deploy/core/moav_controller.dart';
 import 'package:moav_deploy/features/operate/operate_provider.dart';
 import 'package:moav_deploy/features/servers/servers_provider.dart';
 
+import '../support/fake_controller.dart';
+
 /// `status()` answers from a queue of completers so tests control timing.
-class _StatusController implements MoavController {
+class _StatusController extends StubMoavController {
   final pending = <Completer<ServiceStatusReport>>[];
   int calls = 0;
 
@@ -19,10 +21,6 @@ class _StatusController implements MoavController {
     pending.add(c);
     return c.future;
   }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnimplementedError('${invocation.memberName}');
 }
 
 ServiceStatusReport report(int running) => ServiceStatusReport(

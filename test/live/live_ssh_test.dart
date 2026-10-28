@@ -1,52 +1,39 @@
 @Tags(['live'])
 library;
 
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
-import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/core/ssh_connection.dart';
 import 'package:moav_deploy/core/ssh_key_installer.dart';
 import 'package:moav_deploy/core/ssh_moav_controller.dart';
 import 'package:moav_deploy/security/key_service.dart';
 
+import '../support/live_env.dart';
+
 /// Live, additive-only checks against a real MoaV box. Skipped unless
-/// MOAV_TEST_HOST / MOAV_TEST_USER / MOAV_TEST_SSH_KEY are set. Never run in CI.
+/// MOAV_TEST_HOST / MOAV_TEST_USER / MOAV_TEST_SSH_KEY are set; CI runs
+/// them only from the opt-in live workflow (docs/LIVE-CI.md).
 ///
 ///   MOAV_TEST_SSH_KEY=~/.ssh/key MOAV_TEST_HOST=h MOAV_TEST_USER=root \
 ///     flutter test test/live
 void main() {
-  final env = Platform.environment;
-  final host = env['MOAV_TEST_HOST'];
-  final user = env['MOAV_TEST_USER'];
-  var keyPath = env['MOAV_TEST_SSH_KEY'];
-  final enabled = host != null && user != null && keyPath != null;
-  if (keyPath != null && keyPath.startsWith('~/')) {
-    keyPath = '${env['HOME']}/${keyPath.substring(2)}';
-  }
-  final port = int.tryParse(env['MOAV_TEST_PORT'] ?? '') ?? 22;
-  final skip = enabled ? null : 'MOAV_TEST_* env not set';
+  final live = LiveEnv.fromEnvironment();
+  final enabled = live != null;
+  final skip = live == null ? LiveEnv.skipReason : null;
 
   late final String keyPem;
-  late final ServerProfile profile;
+  late final String host;
+  late final String user;
+  late final int port;
   late final SshMoavController controller;
 
   setUpAll(() {
-    if (!enabled) return;
-    keyPem = File(keyPath!).readAsStringSync();
-    profile = ServerProfile(
-      id: 'live',
-      label: host,
-      host: host,
-      port: port,
-      username: user,
-      authMethod: SshAuthMethod.importedKey,
-    );
-    controller = SshMoavController(
-      profile: profile,
-      secretResolver: (_) async => keyPem,
-    );
+    if (live == null) return;
+    keyPem = live.keyPem;
+    host = live.host;
+    user = live.user;
+    port = live.port;
+    controller = live.controller();
   });
 
   tearDownAll(() {
@@ -68,9 +55,9 @@ void main() {
     );
     const installer = SshKeyInstaller();
     await installer.install(
-      host: host!,
+      host: host,
       port: port,
-      username: user!,
+      username: user,
       authPrivateKeyPem: keyPem,
       publicKeyLine: material.publicKeyOpenSsh,
       privateKeyPem: material.privateKeyPem,
@@ -113,9 +100,9 @@ void main() {
 
   test('idempotent install re-run leaves existing MoaV untouched', () async {
     final client = await SshConnection.open(
-      host: host!,
+      host: host,
       port: port,
-      username: user!,
+      username: user,
       privateKeyPem: keyPem,
     );
     Future<String> snapshot() async {
@@ -132,7 +119,7 @@ void main() {
     final before = await snapshot();
 
     // Values are only written when .env is empty; an installed box keeps its own.
-    final domain = env['MOAV_TEST_DOMAIN'] ?? host;
+    final domain = live?.domain ?? host;
     final handle = await controller.install(
       InstallSpec(
         domain: domain,
