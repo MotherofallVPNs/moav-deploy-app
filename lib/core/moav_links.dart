@@ -6,12 +6,10 @@ class MoavLinks {
 
   /// Money donations (the "Support us" popup). Dart spelling of the
   /// SUPPORT_GITHUB_SPONSORS_URL / SUPPORT_BUYMEACOFFEE_URL constants.
-  // TODO: confirm the GitHub Sponsors handle with the project owner.
   static const supportGithubSponsorsUrl =
-      'https://github.com/sponsors/MotherofallVPNs';
+      'https://github.com/sponsors/shayanb';
 
-  // TODO: confirm the Buy Me a Coffee handle with the project owner.
-  static const supportBuymeacoffeeUrl = 'https://buymeacoffee.com/moav';
+  static const supportBuymeacoffeeUrl = 'https://buymeacoffee.com/pangana';
 
   /// Every other way to help: translations, servers, code, spreading the word.
   static const supportMoreUrl = 'https://moav.sh/docs/support/';

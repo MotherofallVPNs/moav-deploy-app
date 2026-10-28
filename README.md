@@ -81,7 +81,15 @@ Install only if it prints `app-release.apk: OK`. Once installed, the menu's
 **About** screen shows the SHA-256 fingerprint of the certificate that signed
 the running build, read from Android at runtime. Official GitHub APKs all share
 one fingerprint, so it must not change between updates; a different value means
-the APK was re-signed by someone else.
+the APK was re-signed by someone else. The published fingerprint is:
+
+```
+SHA-256: BB:D5:65:A1:38:FE:28:83:16:73:F7:86:59:EC:A2:C3:13:9D:6B:86:21:16:C8:A1:B8:BB:9D:71:96:F8:0A:A6
+```
+
+This is the upload key that signs the APK and AAB attached to each GitHub
+release. Play Store installs show Google's own re-signing certificate instead,
+because Play App Signing re-signs every build Google distributes.
 
 ## How it works
 
