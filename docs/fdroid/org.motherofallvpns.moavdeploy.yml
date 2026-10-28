@@ -1,0 +1,62 @@
+# DRAFT fdroiddata recipe for MoaV Deploy. Reference copy kept in the app repo;
+# the live file lives at fdroiddata/metadata/org.motherofallvpns.moavdeploy.yml.
+#
+# Status, signing notes and the remaining steps: docs/DISTRIBUTION.md (F-Droid).
+# Not yet submitted. Run `fdroid lint` and `fdroid build` before opening the MR.
+
+Categories:
+  - Internet
+  - System
+License: MIT
+AuthorName: MotherofallVPNs
+WebSite: https://moav.sh
+SourceCode: https://github.com/MotherofallVPNs/moav-deploy-app
+IssueTracker: https://github.com/MotherofallVPNs/moav-deploy-app/issues
+Changelog: https://github.com/MotherofallVPNs/moav-deploy-app/releases
+
+AutoName: MoaV Deploy
+
+# Listing text, per-versionCode changelogs and the icon are read from
+# fastlane/metadata/android/<locale>/ in the app repo at the tagged commit.
+
+RepoType: git
+Repo: https://github.com/MotherofallVPNs/moav-deploy-app.git
+
+Builds:
+  - versionName: 0.2.7
+    versionCode: 10
+    # Releases are tagged vX.Y.Z on the merge commit; versionName/versionCode
+    # come from pubspec.yaml (`version: X.Y.Z+N`) via the Flutter Gradle plugin.
+    commit: v0.2.7
+    output: build/app/outputs/flutter-apk/app-release.apk
+    srclibs:
+      # Must match the Flutter the release was built with (see DISTRIBUTION.md).
+      - flutter@3.47.4
+    rm:
+      - ios
+      - integration_test
+      - test_driver
+    prebuild:
+      # Drop the release signingConfig (4 lines) so the APK comes out unsigned.
+      # Tied to the current shape of the block in android/app/build.gradle.kts.
+      - sed -i -e '/signingConfig = if (keystorePropertiesFile.exists())/,+3d'
+        android/app/build.gradle.kts
+    scandelete:
+      - .pub-cache
+    build:
+      - export PUB_CACHE=$(pwd)/.pub-cache
+      - $$flutter$$/bin/flutter --disable-analytics
+      - $$flutter$$/bin/flutter pub get
+      - $$flutter$$/bin/flutter build apk --release
+
+# Reproducible-build mode (not enabled yet): once the GitHub Release APK is
+# byte-identical to the F-Droid build, add the two fields below so F-Droid
+# ships the developer-signed APK instead of signing with its own key.
+# Binaries: https://github.com/MotherofallVPNs/moav-deploy-app/releases/download/v%v/app-release.apk
+# AllowedAPKSigningKeys: <sha256 of the GitHub Release signing certificate>
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
+CurrentVersion: 0.2.7
+CurrentVersionCode: 10
