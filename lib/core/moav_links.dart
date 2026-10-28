@@ -4,9 +4,21 @@ class MoavLinks {
 
   static final docs = Uri.parse('https://moav.sh/docs');
 
-  // TODO: confirm the exact support/donate page with the project owner.
-  static final support = Uri.parse(supportUrl);
-  static const supportUrl = 'https://moav.sh/support';
+  /// Money donations (the "Support us" popup). Dart spelling of the
+  /// SUPPORT_GITHUB_SPONSORS_URL / SUPPORT_BUYMEACOFFEE_URL constants.
+  // TODO: confirm the GitHub Sponsors handle with the project owner.
+  static const supportGithubSponsorsUrl =
+      'https://github.com/sponsors/MotherofallVPNs';
+
+  // TODO: confirm the Buy Me a Coffee handle with the project owner.
+  static const supportBuymeacoffeeUrl = 'https://buymeacoffee.com/moav';
+
+  /// Every other way to help: translations, servers, code, spreading the word.
+  static const supportMoreUrl = 'https://moav.sh/docs/support/';
+
+  static final supportGithubSponsors = Uri.parse(supportGithubSponsorsUrl);
+  static final supportBuymeacoffee = Uri.parse(supportBuymeacoffeeUrl);
+  static final supportMore = Uri.parse(supportMoreUrl);
 
   static final github = Uri.parse('https://github.com/MotherofallVPNs');
   static final x = Uri.parse('https://x.com/motherofallvpns');

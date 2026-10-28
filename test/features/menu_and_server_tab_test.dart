@@ -98,9 +98,10 @@ void main() {
     expect(wipe.dy, greaterThan(tg.dy));
     expect(find.byType(PopupMenuDivider), findsOneWidget);
 
-    // Links are constants in one place; the support URL is a placeholder.
+    // Links are constants in one place; "Support us" opens a popup instead
+    // of a URL (see support_sheet_test.dart).
     expect(MoavLinks.docs.toString(), 'https://moav.sh/docs');
-    expect(MoavLinks.supportUrl, 'https://moav.sh/support');
+    expect(MoavLinks.supportMoreUrl, 'https://moav.sh/docs/support/');
     expect(MoavLinks.github.toString(), 'https://github.com/MotherofallVPNs');
     expect(MoavLinks.x.toString(), 'https://x.com/motherofallvpns');
     expect(MoavLinks.telegram.toString(), 'https://t.me/motherofallvpns');

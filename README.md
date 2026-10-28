@@ -43,6 +43,10 @@ the bundles this app produces.
   live service table, and open the admin dashboard inside the app.
 - **Monitor.** Headline metrics from Prometheus and Grafana embedded in the
   app, with an open-in-browser fallback for self-signed certificates.
+- **Donate.** See what the server gives back (Psiphon Conduit and Tor
+  Snowflake bandwidth, configs donated to MahsaNet), save the MahsaNet API key
+  to the server once, and generate and donate a batch of configs with one
+  confirmed tap. Money donations live in the "Support us" popup.
 - **Keys and servers.** On-device ed25519 key generation, a reusable keyring,
   one-time password login to install your key, and multiple server profiles.
 - **Built for at-risk users.** Biometric app lock, secrets only in the

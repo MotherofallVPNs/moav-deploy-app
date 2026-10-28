@@ -1,0 +1,10 @@
+[0;34mℹ[0m Fetching donated configs from MahsaNet...
+
+    #  URL                                    Status     Health  Used
+  ──────────────────────────────────────────────────────────────────────────
+    1  vless://11111111-2222-3333-4444-5555..  active       100%    33
+    2  hysteria2://averysecretpassword@203...  active        97%    26
+    3  vless://66666666-7777-8888-9999-0000..  inactive        —     0
+
+[0;34mℹ[0m Total: 3 config(s)
+  [2mTo delete specific configs: moav donate delete[0m

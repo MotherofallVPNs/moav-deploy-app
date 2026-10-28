@@ -4,6 +4,8 @@ import 'package:dartssh2/dartssh2.dart';
 
 import '../security/app_log.dart';
 import 'app_error.dart';
+import 'donate.dart';
+import 'donate_cli.dart';
 import 'install_script.dart';
 import 'moav_cli.dart';
 import 'moav_controller.dart';
@@ -581,6 +583,90 @@ class SshMoavController implements MoavController {
     if (writer != null) return writer(path, content, mode: mode);
     final client = await _connected();
     await SshConnection.writeFile(client, path, content, mode: mode);
+  }
+
+  // --- Donate ---
+
+  /// `moav donate status|list` reach the MahsaNet API and `docker exec`.
+  static const donateStatusTimeout = Duration(minutes: 2);
+
+  /// `setup` validates against the API and recreates the admin container.
+  static const donateSetupTimeout = Duration(minutes: 5);
+
+  /// `submit` generates up to 50 users (keys and bundles) before posting.
+  static const donateSubmitTimeout = Duration(minutes: 20);
+
+  /// Presence of `MAHSANET_API_KEY` and the donation settings from `.env`
+  /// (see [DonateCli.env]); the snippet never prints the key.
+  @override
+  Future<DonateEnv> donateEnv() async {
+    final out = await _run(DonateCli.env, allowFailure: true, timeout: flagsTimeout);
+    final env = DonateCli.parseEnv(out.stdout);
+    if (env == null) {
+      throw StateError('Could not read the donation settings from .env');
+    }
+    return env;
+  }
+
+  // TODO(#8): `moav donate status` has no `--json`; text parsed.
+  @override
+  Future<DonationStatus> donateStatus() async {
+    final out = await _run(DonateCli.status,
+        allowFailure: true, timeout: donateStatusTimeout);
+    final status = DonateCli.parseStatus(out.stdout);
+    if (status == null) {
+      throw StateError(
+          'Could not read moav donate status: ${_short(out.combined)}');
+    }
+    return status;
+  }
+
+  /// `moav donate list`, rows only (see [DonateCli.parseList]).
+  @override
+  Future<List<DonatedConfig>> donateList() async {
+    final out = await _run(DonateCli.list,
+        allowFailure: true, timeout: donateStatusTimeout);
+    final rows = DonateCli.parseList(out.stdout);
+    if (rows == null) {
+      throw StateError(
+          'Could not read the donated configs: ${_short(out.combined)}');
+    }
+    return rows;
+  }
+
+  /// Uploads the key to [DonateCli.keyFile] (mode 0600, like the install
+  /// spec) and runs [DonateCli.setupMahsaNet], which feeds it to
+  /// `moav donate setup` on stdin and deletes the file. Neither the key nor
+  /// the output reaches [AppLog]; the error raised carries setup's own
+  /// `✗` line only.
+  @override
+  Future<void> saveMahsaNetKey(String key, {OutputSink? onOutput}) async {
+    final k = key.trim();
+    if (k.isEmpty || k.contains('\n') || k.contains('\r')) {
+      throw ArgumentError('Enter the MahsaNet API key');
+    }
+    await _writeFile(DonateCli.keyFile, '$k\n');
+    final out = await _run(DonateCli.setupMahsaNet,
+        allowFailure: true, timeout: donateSetupTimeout, onOutput: onOutput);
+    if (out.exitCode != 0 || !DonateCli.keySaved(out.combined)) {
+      throw StateError(DonateCli.setupFailure(out.combined));
+    }
+  }
+
+  /// [DonateCli.submit]; the result is the run's own summary block.
+  @override
+  Future<DonateResult> donateConfigs({
+    required int count,
+    String prefix = DonateCli.defaultPrefix,
+    bool force = false,
+    OutputSink? onOutput,
+  }) async {
+    final command = DonateCli.submit(count: count, prefix: prefix, force: force);
+    final out = await _run(command,
+        allowFailure: true, timeout: donateSubmitTimeout, onOutput: onOutput);
+    final result = DonateCli.parseSubmit(out.combined);
+    if (result == null) throw StateError(DonateCli.submitFailure(out.combined));
+    return result;
   }
 
   Future<SshOutput> _run(

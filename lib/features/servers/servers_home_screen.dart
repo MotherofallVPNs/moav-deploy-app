@@ -13,6 +13,7 @@ import '../deploy/deploy_screen.dart';
 import '../keys/keyring_screen.dart';
 import '../operate/grafana_screen.dart';
 import '../server/server_screen.dart';
+import '../support/support_sheet.dart';
 import '../users/users_screen.dart';
 import '../wipe/wipe_dialog.dart';
 import 'add_server_screen.dart';
@@ -128,7 +129,7 @@ Future<void> _handleHomeAction(
     case _HomeAction.docs:
       await _open(MoavLinks.docs);
     case _HomeAction.support:
-      await _open(MoavLinks.support);
+      await showSupportSheet(context);
     case _HomeAction.about:
       await Navigator.of(context).push(AboutScreen.route());
     case _HomeAction.github:

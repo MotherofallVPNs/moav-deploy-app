@@ -1,0 +1,30 @@
+[0;34mℹ[0m Validating API key...
+[0;32m✓[0m API key valid
+
+  [1;37mProtocols:[0m reality hysteria2
+  [1;37mPool:[0m mahsa
+  [1;37mAds link:[0m t.me/motherofallvpns
+
+  Number of users to create for donation (default: 1):   Username prefix (default: mahsa): 
+[0;34mℹ[0m Will create 2 user(s) with prefix 'mahsa' and donate reality hysteria2 configs
+Proceed? [Y/n]: 
+
+[0;34mℹ[0m Generating 2 donation user(s) (lightweight — only donated protocols)...
+[0;32m✓[0m Generated 2 user(s)
+
+[0;34mℹ[0m Donating configs to MahsaNet...
+  [1;37m→[0m mahsa01/reality: submitting to 'mahsa' pool...
+  [0;32m✓[0m mahsa01/reality → donated (id: 7f3a9c)
+  [1;37m→[0m mahsa01/hysteria2: submitting to 'mahsa' pool...
+  [0;32m✓[0m mahsa01/hysteria2 → donated (id: 81bb02)
+  [1;37m→[0m mahsa02/reality: submitting to 'mahsa' pool...
+  [0;32m✓[0m mahsa02/reality → donated (id: 92cd13)
+  [1;37m→[0m mahsa02/hysteria2: submitting to 'mahsa' pool...
+  [0;31m✗[0m mahsa02/hysteria2 → failed (500): unknown error
+
+[0;32m════════════════════════════════════════════════════════════════[0m
+  [1;37mDonation Summary[0m
+  Users created: [0;36m2[0m
+  Configs donated: [0;32m3[0m
+  Failed: [0;31m1[0m
+[0;32m════════════════════════════════════════════════════════════════[0m
