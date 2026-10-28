@@ -1,0 +1,6 @@
+What is new in 0.2.7
+- Much faster user bundle downloads.
+- User details now show all enabled protocols.
+- The app hides your content behind the lock screen when you switch away.
+- Fixed a crash when stopping a service.
+- Cleaner menu; the admin dashboard moved to the Server tab.
