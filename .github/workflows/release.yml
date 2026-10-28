@@ -220,7 +220,8 @@ jobs:
           printf '%s\n' "$MATCH_DEPLOY_KEY" > "$RUNNER_TEMP/match_deploy_key"
           grep -q 'BEGIN OPENSSH PRIVATE KEY' "$RUNNER_TEMP/match_deploy_key"
           mkdir -p ~/.ssh
-          curl -fsSL https://api.github.com/meta | jq -r '.ssh_keys[] | "github.com \(.)"' >> ~/.ssh/known_hosts
+          # ssh-keyscan avoids the unauthenticated api.github.com rate limit (403).
+          ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
           keychain_password="$(openssl rand -hex 24)"
           echo "::add-mask::$keychain_password"
           {
