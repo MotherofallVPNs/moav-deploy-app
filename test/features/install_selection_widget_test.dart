@@ -4,15 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/core/app_error.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
 import 'package:moav_deploy/core/moav_services.dart';
-import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/features/deploy/deploy_screen.dart';
 import 'package:moav_deploy/features/servers/servers_provider.dart';
 import 'package:moav_deploy/theme/moav_theme.dart';
 
+import '../support/fake_controller.dart';
 import '../support/memory_cred_store.dart';
 
 /// Captures the [InstallSpec] the deploy form submits.
-class _Controller implements MoavController {
+class _Controller extends StubMoavController {
   InstallSpec? installedSpec;
 
   @override
@@ -24,20 +24,7 @@ class _Controller implements MoavController {
   @override
   Future<InstallStatus> installStatus(InstallHandle handle) async =>
       const InstallStatus(phase: InstallPhase.succeeded, progress: 1);
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnimplementedError('${invocation.memberName}');
 }
-
-const _profile = ServerProfile(
-  id: 's1',
-  label: 'Demo',
-  host: 'demo.example.org',
-  port: 22,
-  username: 'root',
-  authMethod: SshAuthMethod.importedKey,
-);
 
 Future<_Controller> _pump(WidgetTester tester) async {
   final c = _Controller();
@@ -45,11 +32,11 @@ Future<_Controller> _pump(WidgetTester tester) async {
     retry: noProviderRetry,
     overrides: [
       secureCredStoreProvider.overrideWithValue(MemoryCredStore()),
-      moavControllerProvider(_profile.id).overrideWithValue(c),
+      moavControllerProvider(demoProfile.id).overrideWithValue(c),
     ],
     child: MaterialApp(
       theme: moavDarkTheme(),
-      home: const DeployScreen(profile: _profile),
+      home: const DeployScreen(profile: demoProfile),
     ),
   ));
   await tester.pumpAndSettle();

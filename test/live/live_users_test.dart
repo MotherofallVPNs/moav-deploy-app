@@ -1,12 +1,13 @@
 @Tags(['live'])
 library;
 
-import 'dart:io';
+import 'dart:io' show pid;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
-import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/core/ssh_moav_controller.dart';
+
+import '../support/live_env.dart';
 
 /// Live checks: user lifecycle and bundle fetch against a real MoaV box.
 ///
@@ -17,16 +18,9 @@ import 'package:moav_deploy/core/ssh_moav_controller.dart';
 ///   MOAV_TEST_SSH_KEY=~/.ssh/key MOAV_TEST_HOST=h MOAV_TEST_USER=root \
 ///     flutter test test/live/live_users_test.dart
 void main() {
-  final env = Platform.environment;
-  final host = env['MOAV_TEST_HOST'];
-  final user = env['MOAV_TEST_USER'];
-  var keyPath = env['MOAV_TEST_SSH_KEY'];
-  final enabled = host != null && user != null && keyPath != null;
-  if (keyPath != null && keyPath.startsWith('~/')) {
-    keyPath = '${env['HOME']}/${keyPath.substring(2)}';
-  }
-  final port = int.tryParse(env['MOAV_TEST_PORT'] ?? '') ?? 22;
-  final skip = enabled ? null : 'MOAV_TEST_* env not set';
+  final live = LiveEnv.fromEnvironment();
+  final enabled = live != null;
+  final skip = live == null ? LiveEnv.skipReason : null;
 
   final testUser = 'zzmoavdeploytest${pid % 100000}';
   late final SshMoavController controller;
@@ -49,19 +43,8 @@ void main() {
   }
 
   setUpAll(() async {
-    if (!enabled) return;
-    final keyPem = File(keyPath!).readAsStringSync();
-    controller = SshMoavController(
-      profile: ServerProfile(
-        id: 'live',
-        label: host,
-        host: host,
-        port: port,
-        username: user,
-        authMethod: SshAuthMethod.importedKey,
-      ),
-      secretResolver: (_) async => keyPem,
-    );
+    if (live == null) return;
+    controller = live.controller();
     before = await controller.listUsers();
   });
 

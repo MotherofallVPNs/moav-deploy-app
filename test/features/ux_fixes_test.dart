@@ -8,8 +8,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/app.dart';
 import 'package:moav_deploy/core/app_error.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
-import 'package:moav_deploy/core/moav_controller_factory.dart';
-import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/features/activity/activity_provider.dart';
 import 'package:moav_deploy/features/servers/add_server_form.dart';
 import 'package:moav_deploy/features/servers/servers_provider.dart';
@@ -19,6 +17,7 @@ import 'package:moav_deploy/theme/moav_theme.dart';
 import 'package:moav_deploy/widgets/log_view.dart';
 import 'package:moav_deploy/widgets/moav_app_bar.dart';
 
+import '../support/fake_controller.dart';
 import '../support/memory_cred_store.dart';
 
 /// Device-feedback batch: auth icon, key persistence, no client test,
@@ -26,34 +25,14 @@ import '../support/memory_cred_store.dart';
 
 const _secret = 'hunter2-never-shown';
 
-class _Tunnel implements ServerTunnel {
-  _Tunnel(this.remotePort);
-
-  final int remotePort;
-  var closed = false;
-
-  @override
-  int get localPort => 45000;
-
-  @override
-  Uri uri({String scheme = 'https', String path = '/'}) =>
-      Uri(scheme: scheme, host: '127.0.0.1', port: localPort, path: path);
-
-  @override
-  bool get isOpen => !closed;
-
-  @override
-  Future<void> close() async => closed = true;
-}
-
-class _Controller implements MoavController {
+class _Controller extends StubMoavController {
   final log = <String>[];
 
   /// Holds [service] open until completed by the test.
   Completer<void>? serviceGate;
   AdminPanelAccess access =
       const AdminPanelAccess(port: 9443, password: _secret);
-  _Tunnel? tunnel;
+  FakeTunnel? tunnel;
 
   @override
   Future<ConnectionCheck> ping() async => const ConnectionCheck(
@@ -94,21 +73,8 @@ class _Controller implements MoavController {
   @override
   Future<ServerTunnel> openTunnel(int remotePort) async {
     log.add('tunnel $remotePort');
-    return tunnel = _Tunnel(remotePort);
+    return tunnel = FakeTunnel(remotePort);
   }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnimplementedError('${invocation.memberName}');
-}
-
-class _Factory extends MoavControllerFactory {
-  _Factory(this.controller) : super(secretResolver: (_) async => null);
-
-  final MoavController controller;
-
-  @override
-  MoavController forServer(ServerProfile profile) => controller;
 }
 
 /// Never unlocks, so the lock screen stays up.
@@ -120,20 +86,11 @@ class _LockedService extends AppLockService {
   Future<bool> authenticate({bool disguised = false}) async => false;
 }
 
-const _profile = ServerProfile(
-  id: 's1',
-  label: 'Demo',
-  host: 'demo.example.org',
-  port: 22,
-  username: 'root',
-  authMethod: SshAuthMethod.generatedKey,
-);
-
 Widget _app(MemoryCredStore store, _Controller controller) => ProviderScope(
       retry: noProviderRetry,
       overrides: [
         secureCredStoreProvider.overrideWithValue(store),
-        moavControllerFactoryProvider.overrideWithValue(_Factory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
       ],
       child: const MoavDeployApp(lockEnabled: false),
     );
@@ -306,7 +263,7 @@ void main() {
   group('5. global activity indicator', () {
     testWidgets('a service stop spins the indicator and streams its log',
         (tester) async {
-      final store = MemoryCredStore()..profiles = [_profile];
+      final store = MemoryCredStore()..profiles = [demoKeyProfile];
       final controller = _Controller()..serviceGate = Completer<void>();
       await tester.pumpWidget(_app(store, controller));
       await tester.pumpAndSettle();
@@ -381,7 +338,7 @@ void main() {
   group('6. server card label', () {
     testWidgets('a generated key reads "key", not "device key"',
         (tester) async {
-      final store = MemoryCredStore()..profiles = [_profile];
+      final store = MemoryCredStore()..profiles = [demoKeyProfile];
       await tester.pumpWidget(_app(store, _Controller()));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Demo'));
@@ -394,7 +351,7 @@ void main() {
   group('7. in-app admin dashboard', () {
     testWidgets('opens a tunnel to PORT_ADMIN and keeps the password private',
         (tester) async {
-      final store = MemoryCredStore()..profiles = [_profile];
+      final store = MemoryCredStore()..profiles = [demoKeyProfile];
       final controller = _Controller();
       await tester.pumpWidget(_app(store, controller));
       await tester.pumpAndSettle();
@@ -439,7 +396,7 @@ void main() {
 
     testWidgets('a disabled panel is reported without opening a tunnel',
         (tester) async {
-      final store = MemoryCredStore()..profiles = [_profile];
+      final store = MemoryCredStore()..profiles = [demoKeyProfile];
       final controller = _Controller()
         ..access = const AdminPanelAccess(port: 9443, enabled: false);
       await tester.pumpWidget(_app(store, controller));

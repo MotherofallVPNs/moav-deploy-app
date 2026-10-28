@@ -10,7 +10,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/app.dart';
 import 'package:moav_deploy/core/app_error.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
-import 'package:moav_deploy/core/moav_controller_factory.dart';
 import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/core/ssh_connection.dart';
 import 'package:moav_deploy/core/ssh_key_installer.dart';
@@ -19,6 +18,7 @@ import 'package:moav_deploy/features/servers/servers_provider.dart';
 import 'package:moav_deploy/security/secure_cred_store.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import 'support/fake_controller.dart';
 import 'support/memory_cred_store.dart';
 
 class _FakeKeyInstaller extends SshKeyInstaller {
@@ -42,7 +42,7 @@ class _FakeKeyInstaller extends SshKeyInstaller {
 }
 
 /// Scripted controller: each `installStatus` call pops the next status.
-class _FakeController implements MoavController {
+class _FakeController extends StubMoavController {
   _FakeController(this.statuses);
 
   final List<InstallStatus> statuses;
@@ -290,19 +290,6 @@ class _FakeController implements MoavController {
     updateStatusCalls++;
     return updateStatuses[i];
   }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnimplementedError('${invocation.memberName}');
-}
-
-class _FakeFactory extends MoavControllerFactory {
-  _FakeFactory(this.controller) : super(secretResolver: (_) async => null);
-
-  final MoavController controller;
-
-  @override
-  MoavController forServer(ServerProfile profile) => controller;
 }
 
 Widget _app(MemoryCredStore store, {List<Override> overrides = const []}) =>
@@ -314,15 +301,6 @@ Widget _app(MemoryCredStore store, {List<Override> overrides = const []}) =>
       ],
       child: const MoavDeployApp(lockEnabled: false),
     );
-
-const _profile = ServerProfile(
-  id: 's1',
-  label: 'Demo',
-  host: 'demo.example.org',
-  port: 22,
-  username: 'root',
-  authMethod: SshAuthMethod.importedKey,
-);
 
 /// Scrolls the current page's ListView until [f] is on screen.
 Future<void> _scrollTo(WidgetTester tester, Finder f, {double delta = 120}) async {
@@ -446,12 +424,12 @@ void main() {
   });
 
   testWidgets('test connection reports the MoaV version', (tester) async {
-    final store = MemoryCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [demoProfile];
     final controller = _FakeController(const []);
     await tester.pumpWidget(_app(
       store,
       overrides: [
-        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
       ],
     ));
     await tester.pumpAndSettle();
@@ -466,8 +444,8 @@ void main() {
 
   testWidgets('editing a server keeps its saved credential', (tester) async {
     final store = MemoryCredStore()
-      ..profiles = [_profile]
-      ..secrets[_profile.id] = 'private-key';
+      ..profiles = [demoProfile]
+      ..secrets[demoProfile.id] = 'private-key';
     await tester.pumpWidget(_app(store));
     await tester.pumpAndSettle();
 
@@ -481,12 +459,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(store.profiles.single.host, 'fixed.example');
-    expect(store.secrets[_profile.id], 'private-key');
+    expect(store.secrets[demoProfile.id], 'private-key');
   });
 
   testWidgets('deploy screen starts a detached install and streams the log',
       (tester) async {
-    final store = MemoryCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [demoProfile];
     final controller = _FakeController(const [
       InstallStatus(
         phase: InstallPhase.running,
@@ -508,7 +486,7 @@ void main() {
     await tester.pumpWidget(_app(
       store,
       overrides: [
-        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
       ],
     ));
     await tester.pumpAndSettle();
@@ -555,7 +533,7 @@ void main() {
   testWidgets('deploy screen re-attaches to a saved job on open',
       (tester) async {
     final store = MemoryCredStore()
-      ..profiles = [_profile]
+      ..profiles = [demoProfile]
       ..installHandles['s1'] = {'jobId': '4242', 'logPath': 'x'};
     final controller = _FakeController(const [
       InstallStatus(phase: InstallPhase.running, message: 'Bootstrap'),
@@ -563,7 +541,7 @@ void main() {
     await tester.pumpWidget(_app(
       store,
       overrides: [
-        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
       ],
     ));
     await tester.pumpAndSettle();
@@ -584,7 +562,7 @@ void main() {
   testWidgets('deploy screen offers a new install when the job phase is unknown',
       (tester) async {
     final store = MemoryCredStore()
-      ..profiles = [_profile]
+      ..profiles = [demoProfile]
       ..installHandles['s1'] = {'jobId': '4242', 'logPath': 'x'};
     final controller = _FakeController(const [
       InstallStatus(
@@ -595,7 +573,7 @@ void main() {
     await tester.pumpWidget(_app(
       store,
       overrides: [
-        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
       ],
     ));
     await tester.pumpAndSettle();
@@ -611,12 +589,12 @@ void main() {
 
   testWidgets('users: list, open bundle with QR, add and revoke',
       (tester) async {
-    final store = MemoryCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [demoProfile];
     final controller = _FakeController(const []);
     await tester.pumpWidget(_app(
       store,
       overrides: [
-        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
       ],
     ));
     await tester.pumpAndSettle();
@@ -711,12 +689,12 @@ void main() {
 
   testWidgets('operate: services with confirmed restart, health, monitoring',
       (tester) async {
-    final store = MemoryCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [demoProfile];
     final controller = _FakeController(const []);
     await tester.pumpWidget(_app(
       store,
       overrides: [
-        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
       ],
     ));
     await tester.pumpAndSettle();
@@ -782,13 +760,13 @@ void main() {
 
   testWidgets('users screen: timeout shows a hint and Retry recovers',
       (tester) async {
-    final store = MemoryCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [demoProfile];
     final controller = _FakeController(const [])
       ..nextError = TimeoutException('listUsers');
     await tester.pumpWidget(_app(
       store,
       overrides: [
-        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
       ],
     ));
     await tester.pumpAndSettle();
@@ -810,12 +788,12 @@ void main() {
 
   testWidgets('bundle screen: failed command shows exit code, never the secret',
       (tester) async {
-    final store = MemoryCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [demoProfile];
     final controller = _FakeController(const []);
     await tester.pumpWidget(_app(
       store,
       overrides: [
-        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
       ],
     ));
     await tester.pumpAndSettle();
@@ -856,7 +834,7 @@ void main() {
 
   testWidgets('services tab: unreachable host shows Retry; deploy shows a banner',
       (tester) async {
-    final store = MemoryCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [demoProfile];
     final controller = _FakeController(const [])
       ..nextError = const SocketException(
         'Connection failed',
@@ -865,7 +843,7 @@ void main() {
     await tester.pumpWidget(_app(
       store,
       overrides: [
-        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
       ],
     ));
     await tester.pumpAndSettle();
@@ -967,7 +945,7 @@ void main() {
 
   testWidgets('test connection failure names the cause in a quiet snackbar',
       (tester) async {
-    final store = MemoryCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [demoProfile];
     final controller = _FakeController(const [])
       ..pingResult = ConnectionCheck(
         reachable: false,
@@ -984,7 +962,7 @@ void main() {
     await tester.pumpWidget(_app(
       store,
       overrides: [
-        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
       ],
     ));
     await tester.pumpAndSettle();
@@ -1002,7 +980,7 @@ void main() {
 
   testWidgets('server hub: Check connection shows the cause inline',
       (tester) async {
-    final store = MemoryCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [demoProfile];
     final controller = _FakeController(const [])
       ..pingResult = ConnectionCheck(
         reachable: false,
@@ -1012,7 +990,7 @@ void main() {
     await tester.pumpWidget(_app(
       store,
       overrides: [
-        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
       ],
     ));
     await tester.pumpAndSettle();
@@ -1065,13 +1043,13 @@ void main() {
 
   testWidgets('analytics: slow metrics never block the tab and survive a tab switch',
       (tester) async {
-    final store = MemoryCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [demoProfile];
     final controller = _FakeController(const [])
       ..metricsGate = Completer<MetricsSnapshot>();
     await tester.pumpWidget(_app(
       store,
       overrides: [
-        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
       ],
     ));
     await tester.pumpAndSettle();
@@ -1118,13 +1096,13 @@ void main() {
 
   testWidgets('analytics: metrics timeout shows the cause with Retry, grafana stays',
       (tester) async {
-    final store = MemoryCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [demoProfile];
     final controller = _FakeController(const [])
       ..nextMetricsError = TimeoutException('prometheus');
     await tester.pumpWidget(_app(
       store,
       overrides: [
-        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
       ],
     ));
     await tester.pumpAndSettle();
@@ -1147,12 +1125,12 @@ void main() {
 
   testWidgets('services tab: a failed refresh keeps the last result and offers Retry',
       (tester) async {
-    final store = MemoryCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [demoProfile];
     final controller = _FakeController(const []);
     await tester.pumpWidget(_app(
       store,
       overrides: [
-        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
       ],
     ));
     await tester.pumpAndSettle();
@@ -1180,7 +1158,7 @@ void main() {
 
   testWidgets('server tab: host metrics, versions, check for updates and confirmed update',
       (tester) async {
-    final store = MemoryCredStore()..profiles = [_profile];
+    final store = MemoryCredStore()..profiles = [demoProfile];
     final controller = _FakeController(const [])
       ..updateStatuses = const [
         InstallStatus(
@@ -1199,7 +1177,7 @@ void main() {
     await tester.pumpWidget(_app(
       store,
       overrides: [
-        moavControllerFactoryProvider.overrideWithValue(_FakeFactory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
       ],
     ));
     await tester.pumpAndSettle();

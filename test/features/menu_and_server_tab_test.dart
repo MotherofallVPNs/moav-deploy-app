@@ -7,18 +7,17 @@ import 'package:moav_deploy/app.dart';
 import 'package:moav_deploy/core/app_error.dart';
 import 'package:moav_deploy/core/app_identity.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
-import 'package:moav_deploy/core/moav_controller_factory.dart';
 import 'package:moav_deploy/core/moav_links.dart';
-import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/features/about/about_screen.dart';
 import 'package:moav_deploy/features/servers/servers_provider.dart';
 
+import '../support/fake_controller.dart';
 import '../support/memory_cred_store.dart';
 
 /// Device feedback batch 3: hamburger menu redesign and the admin
 /// dashboard launched from the Server tab instead of the card menu.
 
-class _Controller implements MoavController {
+class _Controller extends StubMoavController {
   @override
   Future<ServerInfo> serverInfo() async => ServerInfo(
         host: const HostMetrics(cpuCount: 2, load1: 0.2),
@@ -28,35 +27,13 @@ class _Controller implements MoavController {
 
   @override
   Future<InstallStatus?> updateStatus() async => null;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnimplementedError('${invocation.memberName}');
 }
-
-class _Factory extends MoavControllerFactory {
-  _Factory(this.controller) : super(secretResolver: (_) async => null);
-
-  final MoavController controller;
-
-  @override
-  MoavController forServer(ServerProfile profile) => controller;
-}
-
-const _profile = ServerProfile(
-  id: 's1',
-  label: 'Demo',
-  host: 'demo.example.org',
-  port: 22,
-  username: 'root',
-  authMethod: SshAuthMethod.generatedKey,
-);
 
 Widget _app(MemoryCredStore store) => ProviderScope(
       retry: noProviderRetry,
       overrides: [
         secureCredStoreProvider.overrideWithValue(store),
-        moavControllerFactoryProvider.overrideWithValue(_Factory(_Controller())),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(_Controller())),
       ],
       child: const MoavDeployApp(lockEnabled: false),
     );
@@ -140,7 +117,7 @@ void main() {
 
   testWidgets('admin dashboard is reachable from the Server tab',
       (tester) async {
-    await tester.pumpWidget(_app(MemoryCredStore()..profiles = [_profile]));
+    await tester.pumpWidget(_app(MemoryCredStore()..profiles = [demoKeyProfile]));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();

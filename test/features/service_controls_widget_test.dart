@@ -3,14 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/core/app_error.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
-import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/core/ssh_connection.dart';
 import 'package:moav_deploy/features/operate/operate_screen.dart';
 import 'package:moav_deploy/features/servers/servers_provider.dart';
 import 'package:moav_deploy/theme/moav_theme.dart';
 
+import '../support/fake_controller.dart';
+
 /// Answers `status` and `serviceFlags` from fields, records `service` calls.
-class _Controller implements MoavController {
+class _Controller extends StubMoavController {
   final log = <String>[];
   int statusCalls = 0;
   int flagsCalls = 0;
@@ -55,29 +56,16 @@ class _Controller implements MoavController {
     }
     log.add('${action.kind.name} ${action.service}');
   }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnimplementedError('${invocation.memberName}');
 }
-
-const _profile = ServerProfile(
-  id: 's1',
-  label: 'Demo',
-  host: 'demo.example.org',
-  port: 22,
-  username: 'root',
-  authMethod: SshAuthMethod.importedKey,
-);
 
 Future<_Controller> _pump(WidgetTester tester, {Map<String, String> flags = const {}}) async {
   final c = _Controller()..flags = flags;
   await tester.pumpWidget(ProviderScope(
     retry: noProviderRetry,
-    overrides: [moavControllerProvider(_profile.id).overrideWithValue(c)],
+    overrides: [moavControllerProvider(demoProfile.id).overrideWithValue(c)],
     child: MaterialApp(
       theme: moavDarkTheme(),
-      home: const OperateScreen(profile: _profile),
+      home: const OperateScreen(profile: demoProfile),
     ),
   ));
   await tester.pumpAndSettle();
@@ -233,8 +221,8 @@ void main() {
     final c = _Controller()..flagsError = StateError('no .env');
     await tester.pumpWidget(ProviderScope(
       retry: noProviderRetry,
-      overrides: [moavControllerProvider(_profile.id).overrideWithValue(c)],
-      child: MaterialApp(theme: moavDarkTheme(), home: const OperateScreen(profile: _profile)),
+      overrides: [moavControllerProvider(demoProfile.id).overrideWithValue(c)],
+      child: MaterialApp(theme: moavDarkTheme(), home: const OperateScreen(profile: demoProfile)),
     ));
     await tester.pumpAndSettle();
     expect(c.flagsCalls, 1);

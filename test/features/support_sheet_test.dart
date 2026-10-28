@@ -3,28 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/app.dart';
 import 'package:moav_deploy/core/app_error.dart';
-import 'package:moav_deploy/core/moav_controller.dart';
-import 'package:moav_deploy/core/moav_controller_factory.dart';
 import 'package:moav_deploy/core/moav_links.dart';
-import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/features/servers/servers_provider.dart';
 import 'package:moav_deploy/features/support/support_sheet.dart';
 import 'package:moav_deploy/theme/moav_theme.dart';
 
+import '../support/fake_controller.dart';
 import '../support/memory_cred_store.dart';
-
-class _Controller implements MoavController {
-  @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnimplementedError('${invocation.memberName}');
-}
-
-class _Factory extends MoavControllerFactory {
-  _Factory() : super(secretResolver: (_) async => null);
-
-  @override
-  MoavController forServer(ServerProfile profile) => _Controller();
-}
 
 void main() {
   testWidgets('"Support us" opens the popup instead of a web page',
@@ -33,7 +18,8 @@ void main() {
       retry: noProviderRetry,
       overrides: [
         secureCredStoreProvider.overrideWithValue(MemoryCredStore()),
-        moavControllerFactoryProvider.overrideWithValue(_Factory()),
+        moavControllerFactoryProvider.overrideWithValue(
+            FakeControllerFactory(StubMoavController())),
       ],
       child: const MoavDeployApp(lockEnabled: false),
     ));

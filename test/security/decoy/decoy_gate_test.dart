@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,15 +8,16 @@ import 'package:moav_deploy/features/notes/notes_app.dart';
 import 'package:moav_deploy/features/notes/notes_store.dart';
 import 'package:moav_deploy/features/servers/servers_provider.dart';
 import 'package:moav_deploy/security/app_lock.dart';
+import 'package:moav_deploy/security/onboarding.dart';
 import 'package:moav_deploy/security/decoy/decoy_config.dart';
 import 'package:moav_deploy/security/decoy/decoy_gate.dart';
 import 'package:moav_deploy/security/decoy/decoy_identity.dart';
 import 'package:moav_deploy/security/decoy/decoy_pin.dart';
 import 'package:moav_deploy/security/decoy/decoy_provider.dart';
-import 'package:moav_deploy/security/onboarding.dart';
 import 'package:moav_deploy/theme/moav_theme.dart';
 
 import '../../support/fake_decoy_identity.dart';
+import '../../support/fake_lock.dart';
 import '../../support/memory_cred_store.dart';
 
 /// Disguise mode (issue #15): a disguised launch is a Notes app and
@@ -27,29 +26,6 @@ import '../../support/memory_cred_store.dart';
 
 const _fast = 1000;
 const _pin = '2580';
-
-class _GatedLock extends AppLockService {
-  final gates = <Completer<bool>>[];
-  final reasons = <bool>[];
-
-  @override
-  Future<bool> canLock() async => true;
-
-  @override
-  Future<bool> authenticate({bool disguised = false}) {
-    reasons.add(disguised);
-    final c = Completer<bool>();
-    gates.add(c);
-    return c.future;
-  }
-}
-
-class _Onboarded implements OnboardingStore {
-  @override
-  Future<bool> isComplete() async => true;
-  @override
-  Future<void> markComplete() async {}
-}
 
 Future<DecoyConfig> _config({
   DecoyGesture gesture = DecoyGesture.longPressTitle,
@@ -68,7 +44,7 @@ Future<DecoyConfig> _config({
 
 Widget _app(
   DecoyConfig boot, {
-  required _GatedLock lock,
+  required GatedLock lock,
   required FakeDecoyIdentity identity,
   required MemoryNotesStore notes,
   MemoryCredStore? store,
@@ -77,7 +53,7 @@ Widget _app(
       retry: noProviderRetry,
       overrides: [
         secureCredStoreProvider.overrideWithValue(store ?? MemoryCredStore()),
-        onboardingStoreProvider.overrideWithValue(_Onboarded()),
+        onboardingStoreProvider.overrideWithValue(OnboardedStore()),
         appLockServiceProvider.overrideWithValue(lock),
         decoyIdentityProvider.overrideWithValue(identity),
         decoyBootProvider.overrideWithValue(boot),
@@ -116,12 +92,12 @@ Future<void> _enterPin(WidgetTester tester, String pin) async {
 }
 
 void main() {
-  late _GatedLock lock;
+  late GatedLock lock;
   late FakeDecoyIdentity identity;
   late MemoryNotesStore notes;
 
   setUp(() {
-    lock = _GatedLock();
+    lock = GatedLock();
     identity = FakeDecoyIdentity();
     notes = MemoryNotesStore();
   });

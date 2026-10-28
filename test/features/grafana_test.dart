@@ -8,44 +8,23 @@ import 'package:moav_deploy/core/app_error.dart';
 import 'package:moav_deploy/core/grafana_login.dart';
 import 'package:moav_deploy/core/moav_cli.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
-import 'package:moav_deploy/core/moav_controller_factory.dart';
-import 'package:moav_deploy/core/server_profile.dart';
 import 'package:moav_deploy/features/activity/activity_provider.dart';
 import 'package:moav_deploy/features/operate/charts_view.dart';
 import 'package:moav_deploy/features/operate/grafana_screen.dart';
 import 'package:moav_deploy/features/servers/servers_provider.dart';
 import 'package:moav_deploy/widgets/moav_app_bar.dart';
 
+import '../support/fake_controller.dart';
 import '../support/memory_cred_store.dart';
 
 /// In-app Grafana (tunnel + .env sign-in) and the native charts.
 
 const _secret = 'grafana-pw-never-shown';
 
-class _Tunnel implements ServerTunnel {
-  _Tunnel(this.remotePort);
-
-  final int remotePort;
-  var closed = false;
-
-  @override
-  int get localPort => 45001;
-
-  @override
-  Uri uri({String scheme = 'https', String path = '/'}) =>
-      Uri(scheme: scheme, host: '127.0.0.1', port: localPort, path: path);
-
-  @override
-  bool get isOpen => !closed;
-
-  @override
-  Future<void> close() async => closed = true;
-}
-
-class _Controller implements MoavController {
+class _Controller extends StubMoavController {
   final log = <String>[];
   GrafanaAccess access = const GrafanaAccess(port: 9444, password: _secret);
-  _Tunnel? tunnel;
+  FakeTunnel? tunnel;
 
   @override
   Future<ConnectionCheck> ping() async => const ConnectionCheck(
@@ -63,7 +42,7 @@ class _Controller implements MoavController {
   @override
   Future<ServerTunnel> openTunnel(int remotePort) async {
     log.add('tunnel $remotePort');
-    return tunnel = _Tunnel(remotePort);
+    return tunnel = FakeTunnel(remotePort, localPort: 45001);
   }
 
   @override
@@ -101,29 +80,7 @@ class _Controller implements MoavController {
 
   @override
   Future<InstallStatus?> updateStatus() async => null;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnimplementedError('${invocation.memberName}');
 }
-
-class _Factory extends MoavControllerFactory {
-  _Factory(this.controller) : super(secretResolver: (_) async => null);
-
-  final MoavController controller;
-
-  @override
-  MoavController forServer(ServerProfile profile) => controller;
-}
-
-const _profile = ServerProfile(
-  id: 's1',
-  label: 'Demo',
-  host: 'demo.example.org',
-  port: 22,
-  username: 'root',
-  authMethod: SshAuthMethod.generatedKey,
-);
 
 /// Records what the screen posts to Grafana; answers like the real helper.
 class _SignIn {
@@ -143,7 +100,7 @@ Widget _app(MemoryCredStore store, _Controller controller, _SignIn signIn) =>
       retry: noProviderRetry,
       overrides: [
         secureCredStoreProvider.overrideWithValue(store),
-        moavControllerFactoryProvider.overrideWithValue(_Factory(controller)),
+        moavControllerFactoryProvider.overrideWithValue(FakeControllerFactory(controller)),
         grafanaSignInProvider.overrideWithValue(signIn.call),
       ],
       child: const MoavDeployApp(lockEnabled: false),
@@ -170,7 +127,7 @@ void main() {
   group('Grafana over the tunnel', () {
     testWidgets('menu entry, tunnel to PORT_GRAFANA, sign-in with .env password',
         (tester) async {
-      final store = MemoryCredStore()..profiles = [_profile];
+      final store = MemoryCredStore()..profiles = [demoKeyProfile];
       final controller = _Controller();
       final signIn = _SignIn();
       await tester.pumpWidget(_app(store, controller, signIn));
@@ -214,7 +171,7 @@ void main() {
 
     testWidgets('honours the probed scheme (plain http, no certificate)',
         (tester) async {
-      final store = MemoryCredStore()..profiles = [_profile];
+      final store = MemoryCredStore()..profiles = [demoKeyProfile];
       final controller = _Controller()
         ..access = const GrafanaAccess(port: 9555, scheme: 'http', password: _secret);
       final signIn = _SignIn();
@@ -227,7 +184,7 @@ void main() {
 
     testWidgets('disabled monitoring is reported without a tunnel',
         (tester) async {
-      final store = MemoryCredStore()..profiles = [_profile];
+      final store = MemoryCredStore()..profiles = [demoKeyProfile];
       final controller = _Controller()
         ..access = const GrafanaAccess(port: 9444, enabled: false);
       final signIn = _SignIn();
@@ -242,7 +199,7 @@ void main() {
 
     testWidgets('a rejected password shows a notice and drops it',
         (tester) async {
-      final store = MemoryCredStore()..profiles = [_profile];
+      final store = MemoryCredStore()..profiles = [demoKeyProfile];
       final controller = _Controller();
       final signIn = _SignIn()..reject = true;
       await tester.pumpWidget(_app(store, controller, signIn));
@@ -258,7 +215,7 @@ void main() {
   group('native charts on the Analytics tab', () {
     testWidgets('draws the panels from the Prometheus series and links to Grafana',
         (tester) async {
-      final store = MemoryCredStore()..profiles = [_profile];
+      final store = MemoryCredStore()..profiles = [demoKeyProfile];
       final controller = _Controller();
       final signIn = _SignIn();
       await tester.pumpWidget(_app(store, controller, signIn));

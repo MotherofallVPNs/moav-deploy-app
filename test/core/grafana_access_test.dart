@@ -1,33 +1,15 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/core/moav_cli.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
-import 'package:moav_deploy/core/server_profile.dart';
-import 'package:moav_deploy/core/ssh_connection.dart';
 import 'package:moav_deploy/core/ssh_moav_controller.dart';
 import 'package:moav_deploy/features/operate/chart_panels.dart';
 
-String fixture(String name) =>
-    File('test/fixtures/json/$name').readAsStringSync();
+import '../support/fake_box.dart';
+import '../support/fixtures.dart';
 
 SshMoavController controllerAnswering(Map<String, String> stdoutByCommand) =>
-    SshMoavController(
-      profile: const ServerProfile(
-        id: 't',
-        label: 't',
-        host: 'h',
-        port: 22,
-        username: 'root',
-        authMethod: SshAuthMethod.importedKey,
-      ),
-      secretResolver: (_) async => throw StateError('no ssh in unit tests'),
-      runner: (command, {allowFailure = false, timeout = Duration.zero}) async {
-        final out = stdoutByCommand[command];
-        if (out == null) throw StateError('unscripted command');
-        return SshOutput(stdout: out, stderr: '', exitCode: 0);
-      },
-    );
+    FakeBox({for (final e in stdoutByCommand.entries) e.key: ok(e.value)})
+        .controller;
 
 void main() {
   group('Grafana access from .env', () {
@@ -106,7 +88,7 @@ void main() {
     });
 
     test('parses matrices, skips NaN, bad blocks and empty results', () {
-      final snap = MoavCli.parseMetricSeries(fixture('prometheus_range.txt'),
+      final snap = MoavCli.parseMetricSeries(jsonFixture('prometheus_range.txt'),
           now: DateTime(2026));
       expect(snap.window, const Duration(hours: 1));
       final cpu = snap.named('cpu_percent').single;
@@ -130,14 +112,14 @@ void main() {
 
     test('controller maps the snippet into a ChartsSnapshot', () async {
       final c = controllerAnswering(
-          {MoavCli.prometheusRange: fixture('prometheus_range.txt')});
+          {MoavCli.prometheusRange: jsonFixture('prometheus_range.txt')});
       final snap = await c.metricSeries();
       expect(snap.named('mem_percent').single.last, 62.8);
     });
   });
 
   group('chart panels', () {
-    final snap = MoavCli.parseMetricSeries(fixture('prometheus_range.txt'));
+    final snap = MoavCli.parseMetricSeries(jsonFixture('prometheus_range.txt'));
 
     test('builds the four panels, dropping series without data', () {
       final panels = chartPanels(snap);

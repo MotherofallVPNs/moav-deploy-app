@@ -1,43 +1,11 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/core/moav_cli.dart';
-import 'package:moav_deploy/core/server_profile.dart';
-import 'package:moav_deploy/core/ssh_connection.dart';
-import 'package:moav_deploy/core/ssh_moav_controller.dart';
+
+import '../support/fake_box.dart';
+import '../support/fixtures.dart';
 
 /// The bundle is fetched with one shell round trip (`MoavCli.bundleDump`)
 /// instead of an SFTP walk that cost four round trips per file.
-String _fixture(String name) => File('test/fixtures/$name').readAsStringSync();
-
-class _Box {
-  _Box(this.stdout);
-
-  final String stdout;
-  final ran = <String>[];
-
-  Future<SshOutput> run(
-    String command, {
-    bool allowFailure = false,
-    Duration timeout = const Duration(seconds: 60),
-  }) async {
-    ran.add(command);
-    return SshOutput(stdout: stdout, stderr: '', exitCode: 0);
-  }
-}
-
-SshMoavController _controller(_Box box) => SshMoavController(
-      profile: const ServerProfile(
-        id: 't',
-        label: 't',
-        host: 'h',
-        port: 22,
-        username: 'root',
-        authMethod: SshAuthMethod.importedKey,
-      ),
-      secretResolver: (_) async => throw StateError('no ssh in unit tests'),
-      runner: box.run,
-    );
 
 void main() {
   group('bundleDump command', () {
@@ -60,7 +28,7 @@ void main() {
 
   group('parseBundleDump', () {
     test('decodes every framed file of the fixture', () {
-      final files = MoavCli.parseBundleDump(_fixture('bundle_dump.txt'))!;
+      final files = MoavCli.parseBundleDump(fixture('bundle_dump.txt'))!;
       expect(files.map((f) => f.name), [
         'alice-awg.conf',
         'alice-wg.conf',
@@ -89,7 +57,7 @@ void main() {
     });
 
     test('a truncated dump keeps the files that arrived whole', () {
-      final full = _fixture('bundle_dump.txt').split('\n');
+      final full = fixture('bundle_dump.txt').split('\n');
       final cut = full.take(5).join('\n'); // two files, then a lone header
       final files = MoavCli.parseBundleDump(cut)!;
       expect(files.map((f) => f.name), ['alice-awg.conf', 'alice-wg.conf']);
@@ -103,8 +71,8 @@ void main() {
 
   group('getBundle', () {
     test('runs one command and maps files to sorted bundle entries', () async {
-      final box = _Box(_fixture('bundle_dump.txt'));
-      final bundle = await _controller(box).getBundle('alice');
+      final box = FakeBox.always(fixture('bundle_dump.txt'));
+      final bundle = await box.controller.getBundle('alice');
       expect(box.ran, hasLength(1));
       expect(box.ran.single, MoavCli.bundleDump('alice'));
       expect(bundle.path, '/opt/moav/outputs/bundles/alice');
@@ -128,18 +96,18 @@ void main() {
     });
 
     test('no bundle directory is a clear error, not an empty bundle', () async {
-      final box = _Box('__NOBUNDLE__\n');
+      final box = FakeBox.always('__NOBUNDLE__\n');
       await expectLater(
-        _controller(box).getBundle('alice'),
+        box.controller.getBundle('alice'),
         throwsA(isA<StateError>().having(
             (e) => e.message, 'message', contains("No bundle found for 'alice'"))),
       );
     });
 
     test('user names are validated before anything runs', () async {
-      final box = _Box('');
+      final box = FakeBox.always('');
       await expectLater(
-          _controller(box).getBundle('a;rm -rf /'), throwsArgumentError);
+          box.controller.getBundle('a;rm -rf /'), throwsArgumentError);
       expect(box.ran, isEmpty);
     });
   });

@@ -1,0 +1,10 @@
+{
+  "version": "2.3.1",
+  "admin_url": "https://vpn.example.com:9443",
+  "grafana_url": "https://vpn.example.com:9444",
+  "admin_port": 9443,
+  "grafana_port": 9444,
+  "default_profiles": ["proxy","wireguard","admin","monitoring"],
+  "services": [
+    {"name": "sing-box", "state": "running", "uptime": "7 days", "ports": [443,8443]},
+    {"name": "admin", "state": "run
