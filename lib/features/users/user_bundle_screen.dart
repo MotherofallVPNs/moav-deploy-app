@@ -9,6 +9,7 @@ import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
+import 'qr_layout.dart';
 import 'users_provider.dart';
 
 /// One user's client configs: a QR per phone-friendly link, copy and share.
@@ -163,29 +164,7 @@ class _QrCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: MoavRadius.card,
-                boxShadow: moavGlow(blur: 32, alpha: 0.12),
-              ),
-              padding: const EdgeInsets.all(10),
-              child: QrImageView(
-                data: payload,
-                size: 216,
-                errorCorrectionLevel: QrErrorCorrectLevel.M,
-                errorStateBuilder: (_, _) => const SizedBox(
-                  width: 216,
-                  height: 216,
-                  child: Center(
-                    child: Text(
-                      'Too large for a QR code',
-                      style: TextStyle(color: MoavColors.bg),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            BundleQr(payload: payload),
             const SizedBox(height: 12),
             CodeBlock(
               payload.length > 96 ? '${payload.substring(0, 96)}…' : payload,
@@ -196,6 +175,70 @@ class _QrCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// One bundle entry's QR on a white card, sized from its module count so
+/// dense codes (2 KB subscriptions) stay crisp instead of blurring grey.
+class BundleQr extends StatelessWidget {
+  const BundleQr({super.key, required this.payload});
+
+  final String payload;
+
+  /// White margin around the modules; the quiet zone scanners need.
+  static const quietZone = 12.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final code = encodeQr(payload);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final geometry = code == null
+            ? null
+            : qrGeometry(
+                modules: code.moduleCount,
+                maxWidth: constraints.maxWidth - 2 * quietZone,
+                dpr: MediaQuery.devicePixelRatioOf(context),
+              );
+        return Center(
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: MoavRadius.card,
+              boxShadow: moavGlow(blur: 32, alpha: 0.12),
+            ),
+            padding: const EdgeInsets.all(quietZone),
+            child: code == null || geometry == null
+                ? const SizedBox(
+                    width: 216,
+                    height: 216,
+                    child: Center(
+                      child: Text(
+                        'Too large for a QR code',
+                        style: TextStyle(color: MoavColors.bg),
+                      ),
+                    ),
+                  )
+                : RepaintBoundary(
+                    child: QrImageView.withQr(
+                      qr: code,
+                      size: geometry.size,
+                      padding: EdgeInsets.zero,
+                      backgroundColor: Colors.white,
+                      eyeStyle: const QrEyeStyle(
+                        eyeShape: QrEyeShape.square,
+                        color: Colors.black,
+                      ),
+                      dataModuleStyle: const QrDataModuleStyle(
+                        dataModuleShape: QrDataModuleShape.square,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ),
+          ),
+        );
+      },
     );
   }
 }

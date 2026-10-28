@@ -52,9 +52,9 @@ void main() {
       MoavLinks.supportBuymeacoffee,
       MoavLinks.supportMore,
     ]);
-    // Placeholders until the owner confirms the handles (see the PR).
-    expect(MoavLinks.supportGithubSponsorsUrl, 'https://github.com/sponsors/MotherofallVPNs');
-    expect(MoavLinks.supportBuymeacoffeeUrl, 'https://buymeacoffee.com/moav');
+    // Handles confirmed by the owner in #53.
+    expect(MoavLinks.supportGithubSponsorsUrl, 'https://github.com/sponsors/shayanb');
+    expect(MoavLinks.supportBuymeacoffeeUrl, 'https://buymeacoffee.com/pangana');
     expect(MoavLinks.supportMoreUrl, 'https://moav.sh/docs/support/');
   });
 }

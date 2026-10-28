@@ -23,6 +23,10 @@ import UIKit
 enum DecoyChannel {
   static let name = "org.motherofallvpns.moavdeploy/decoy"
   static let notesIcon = "NotesIcon"
+  static let coverKey = "privacyCoverNotes"
+
+  /// Last identity requested by Dart; styles the privacy cover.
+  static var coverIsNotes: Bool { UserDefaults.standard.bool(forKey: coverKey) }
 
   static func register(messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(name: name, binaryMessenger: messenger)
@@ -36,6 +40,7 @@ enum DecoyChannel {
       case "setIdentity":
         let args = call.arguments as? [String: Any]
         let notes = args?["notes"] as? Bool ?? false
+        UserDefaults.standard.set(notes, forKey: coverKey)
         guard app.supportsAlternateIcons else {
           result(FlutterError(code: "unsupported", message: "Alternate icons unavailable", details: nil))
           return
