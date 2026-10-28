@@ -64,6 +64,21 @@ the bundles this app produces.
 You need your own server with SSH access. MoaV itself is free and open source;
 see the [MoaV docs](https://moav.sh/docs/) for server requirements.
 
+### Verify a sideloaded APK
+
+Every release carries a `SHA256SUMS` file written by the same CI run that
+built the APK. Download it next to `app-release.apk` and run:
+
+```sh
+sha256sum --ignore-missing -c SHA256SUMS   # macOS: shasum -a 256 --ignore-missing -c SHA256SUMS
+```
+
+Install only if it prints `app-release.apk: OK`. Once installed, the menu's
+**About** screen shows the SHA-256 fingerprint of the certificate that signed
+the running build, read from Android at runtime. Official GitHub APKs all share
+one fingerprint, so it must not change between updates; a different value means
+the APK was re-signed by someone else.
+
 ## How it works
 
 Every server operation goes through one `MoavController` interface. Today the
@@ -99,7 +114,7 @@ MOAV_TEST_SSH_KEY=~/.ssh/key MOAV_TEST_HOST=your.server MOAV_TEST_USER=root flut
 ```
 lib/
   core/        MoavController interface, SSH transport, CLI parsers, install job
-  features/    One folder per screen group: servers, keys, deploy, users, operate, wipe
+  features/    One folder per screen group: servers, keys, deploy, users, operate, wipe, about
   security/    App lock, onboarding, secure store, key services, redaction, wipe
   theme/       MoaV design tokens and the shared widget set
 test/          Unit and widget tests; test/live/ needs a real server

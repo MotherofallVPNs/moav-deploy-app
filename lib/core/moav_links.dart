@@ -1,4 +1,4 @@
-/// Where the app's outbound links go. One place to change when a URL moves.
+/// Where the in-app links go. One place to change when a URL moves.
 class MoavLinks {
   MoavLinks._();
 
@@ -23,4 +23,9 @@ class MoavLinks {
   static final github = Uri.parse('https://github.com/MotherofallVPNs');
   static final x = Uri.parse('https://x.com/motherofallvpns');
   static final telegram = Uri.parse('https://t.me/motherofallvpns');
+
+  /// This app's source and its releases (APK, AAB and SHA256SUMS).
+  static const repoUrl = 'https://github.com/MotherofallVPNs/moav-deploy-app';
+  static final repo = Uri.parse(repoUrl);
+  static final releases = Uri.parse('$repoUrl/releases');
 }

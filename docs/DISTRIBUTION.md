@@ -62,8 +62,12 @@ first-class, not a fallback.
   key in this README and on moav.sh.
 - Keep the APK signing key separate from the Play upload key so a Play
   account compromise does not affect sideload trust.
-- An in-app About screen showing the version and the APK signature
-  fingerprint would let users compare against the published one.
+- The in-app About screen (menu, issue #25) shows the version and the SHA-256
+  fingerprint of the certificate that signed the installed APK, read from
+  `PackageManager` at runtime through a method channel in `MainActivity.kt`.
+  The release key's fingerprint should be published in the README and the
+  release notes so users have something to compare against; that is a
+  maintainer step once the keystore is final.
 
 ## F-Droid
 
