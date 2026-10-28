@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/moav_controller.dart';
+import '../../core/moav_links.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
+import '../about/about_screen.dart';
 import '../deploy/deploy_screen.dart';
 import '../keys/keyring_screen.dart';
 import '../operate/grafana_screen.dart';
@@ -53,6 +55,13 @@ class ServersHomeScreen extends ConsumerWidget {
                 child: ListTile(
                   leading: Icon(Icons.favorite_outline),
                   title: Text('Support us'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _HomeAction.about,
+                child: ListTile(
+                  leading: Icon(Icons.info_outline),
+                  title: Text('About'),
                 ),
               ),
               _SocialRow(),
@@ -103,22 +112,7 @@ class ServersHomeScreen extends ConsumerWidget {
   }
 }
 
-enum _HomeAction { keys, docs, support, github, x, telegram, wipe }
-
-/// Where the menu links go. One place to change when a URL moves.
-class MoavLinks {
-  MoavLinks._();
-
-  static final docs = Uri.parse('https://moav.sh/docs');
-
-  // TODO: confirm the exact support/donate page with the project owner.
-  static final support = Uri.parse(supportUrl);
-  static const supportUrl = 'https://moav.sh/support';
-
-  static final github = Uri.parse('https://github.com/MotherofallVPNs');
-  static final x = Uri.parse('https://x.com/motherofallvpns');
-  static final telegram = Uri.parse('https://t.me/motherofallvpns');
-}
+enum _HomeAction { keys, docs, support, about, github, x, telegram, wipe }
 
 Future<void> _handleHomeAction(
   BuildContext context,
@@ -135,6 +129,8 @@ Future<void> _handleHomeAction(
       await _open(MoavLinks.docs);
     case _HomeAction.support:
       await _open(MoavLinks.support);
+    case _HomeAction.about:
+      await Navigator.of(context).push(AboutScreen.route());
     case _HomeAction.github:
       await _open(MoavLinks.github);
     case _HomeAction.x:

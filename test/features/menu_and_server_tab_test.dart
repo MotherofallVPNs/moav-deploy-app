@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:moav_deploy/app.dart';
 import 'package:moav_deploy/core/app_error.dart';
+import 'package:moav_deploy/core/app_identity.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
 import 'package:moav_deploy/core/moav_controller_factory.dart';
+import 'package:moav_deploy/core/moav_links.dart';
 import 'package:moav_deploy/core/server_profile.dart';
-import 'package:moav_deploy/features/servers/servers_home_screen.dart';
+import 'package:moav_deploy/features/about/about_screen.dart';
 import 'package:moav_deploy/features/servers/servers_provider.dart';
 
 import '../support/memory_cred_store.dart';
@@ -58,7 +62,7 @@ Widget _app(MemoryCredStore store) => ProviderScope(
     );
 
 void main() {
-  testWidgets('menu: keys, docs, support, one social row, wipe last',
+  testWidgets('menu: keys, docs, support, about, one social row, wipe last',
       (tester) async {
     await tester.pumpWidget(_app(MemoryCredStore()));
     await tester.pumpAndSettle();
@@ -68,6 +72,7 @@ void main() {
     expect(find.text('SSH keys'), findsOneWidget);
     expect(find.text('Documentation'), findsOneWidget);
     expect(find.text('Support us'), findsOneWidget);
+    expect(find.text('About'), findsOneWidget);
     expect(find.byTooltip('GitHub'), findsOneWidget);
     expect(find.byTooltip('X'), findsOneWidget);
     expect(find.byTooltip('Telegram'), findsOneWidget);
@@ -86,6 +91,9 @@ void main() {
     expect(x.dy, tg.dy);
     expect(gh.dx, lessThan(x.dx));
     expect(x.dx, lessThan(tg.dx));
+    final about = tester.getCenter(find.text('About'));
+    expect(tester.getCenter(find.text('Support us')).dy, lessThan(about.dy));
+    expect(about.dy, lessThan(gh.dy));
     final wipe = tester.getCenter(find.text('Emergency wipe'));
     expect(wipe.dy, greaterThan(tg.dy));
     expect(find.byType(PopupMenuDivider), findsOneWidget);
@@ -96,6 +104,37 @@ void main() {
     expect(MoavLinks.github.toString(), 'https://github.com/MotherofallVPNs');
     expect(MoavLinks.x.toString(), 'https://x.com/motherofallvpns');
     expect(MoavLinks.telegram.toString(), 'https://t.me/motherofallvpns');
+  });
+
+  testWidgets('menu: About opens the About screen with the pubspec version',
+      (tester) async {
+    PackageInfo.setMockInitialValues(
+      appName: 'MoaV Deploy',
+      packageName: 'org.motherofallvpns.moavdeploy',
+      version: '0.2.7',
+      buildNumber: '10',
+      buildSignature: '',
+    );
+    // No Android side under test: the channel answers as an absent plugin,
+    // which pumpAndSettle's fake clock would otherwise never see resolve.
+    const channel = MethodChannel(AppSigning.channelName);
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      channel,
+      (_) async => throw MissingPluginException(),
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(_app(MemoryCredStore()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('About'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AboutScreen), findsOneWidget);
+    expect(find.text('Version 0.2.7 (10)'), findsOneWidget);
+    // No signing channel in the test binding: the screen says so, no crash.
+    expect(find.text(AboutScreen.noFingerprint), findsOneWidget);
   });
 
   testWidgets('admin dashboard is reachable from the Server tab',
