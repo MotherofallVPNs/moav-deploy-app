@@ -492,6 +492,32 @@ class MoavMark extends StatelessWidget {
   }
 }
 
+/// The launch lockup: [MoavMark] over the `MoaV Deploy` [MoavWordmark].
+///
+/// The native splash images (Android `splash_logo`, iOS `LaunchImage`) are
+/// rendered from the same geometry by `tool/splash_assets.py`, so the first
+/// Flutter frame lands exactly on the launch screen. Keep the sizes here and
+/// in that script in step.
+class MoavLockup extends StatelessWidget {
+  const MoavLockup({super.key});
+
+  static const double markSize = 120;
+  static const double gap = 24;
+  static const double wordmarkSize = 26;
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        MoavMark(size: markSize),
+        SizedBox(height: gap),
+        MoavWordmark(suffix: 'Deploy', size: wordmarkSize),
+      ],
+    );
+  }
+}
+
 /// Text painted with the accent gradient.
 class GradientText extends StatelessWidget {
   const GradientText(this.text, {super.key, this.style});

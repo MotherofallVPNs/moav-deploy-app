@@ -65,6 +65,20 @@ variables above it talks to the real server, read-only except for one
 throwaway `zzmoavdeploytest*` user created for the bundle shot and revoked
 afterwards.
 
+## Launch screen
+
+The native splash (Android `launch_background` and the Android 12+ system
+splash icon, iOS `LaunchScreen.storyboard`) shows the MoaV lockup on the
+`#0a0a0f` background. The images are rendered from `assets/icon/icon-foreground.png`
+and the bundled Inter fonts by `tool/splash_assets.py`, which mirrors the
+Flutter `MoavLockup` widget so the first frame lands on the splash without a
+shift. After changing the mark, the wordmark or the lockup sizes:
+
+```
+python3 tool/splash_assets.py        # needs Pillow
+flutter test test/launch_screen_test.dart
+```
+
 ## Build artifacts
 
 ### Android

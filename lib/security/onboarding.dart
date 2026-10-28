@@ -56,7 +56,9 @@ class FirstRunGate extends ConsumerWidget {
       AsyncData(value: false) || AsyncError() => OnboardingScreen(
           onContinue: () => ref.read(onboardingProvider.notifier).complete(),
         ),
-      _ => const MoavScaffold(body: SizedBox.shrink()),
+      // While the flag loads, repeat the native launch lockup in the same
+      // place so the first frame does not blank out or shift the mark.
+      _ => const MoavScaffold(body: Center(child: MoavLockup())),
     };
   }
 }
@@ -80,9 +82,7 @@ class OnboardingScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Center(child: MoavMark(size: 120)),
-                  const SizedBox(height: 24),
-                  const Center(child: MoavWordmark(suffix: 'Deploy', size: 26)),
+                  const Center(child: MoavLockup()),
                   const SizedBox(height: 20),
                   Text(
                     'Your servers, in your pocket. Safely.',
