@@ -18,4 +18,30 @@ jobs:
       - run: flutter --version
       - run: flutter pub get
       - run: flutter analyze --fatal-infos
-      - run: flutter test
+      # Live-tagged tests skip themselves here: no MOAV_TEST_* in this job.
+      # The live round is a separate, secrets-gated workflow (live.yml).
+      - run: flutter test --coverage
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: coverage/lcov.info
+          if-no-files-found: error
+
+  # Debug APK smoke build so Gradle or plugin drift shows up on the PR
+  # rather than at release time. Unsigned, nothing is uploaded.
+  apk-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build apk --debug

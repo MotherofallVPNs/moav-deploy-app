@@ -57,10 +57,29 @@ signing are in [docs/BUILDING.md](docs/BUILDING.md); shipping a version is in
 
 1. `flutter pub get`
 2. `flutter analyze --fatal-infos`
-3. `flutter test`
+3. `flutter test --coverage` (the lcov report is attached as an artifact)
+4. `flutter build apk --debug` in a second job, as a Gradle smoke test
 
 Live-tagged tests are skipped automatically because the `MOAV_TEST_*`
-variables are absent in CI.
+variables are absent in that job. `.github/workflows/live.yml` is the
+opt-in live round: nightly and on demand, gated on repository secrets, see
+[docs/LIVE-CI.md](docs/LIVE-CI.md).
+
+## Test helpers
+
+Shared fakes live in `test/support/` and new tests should reach for them
+before writing their own:
+
+- `fake_box.dart`: `FakeBox`, a scripted remote box for `SshMoavController`
+  (exact, command-tail or substring matching), plus `ok()`, `failed()` and
+  `controllerFor()`.
+- `fake_controller.dart`: `StubMoavController` to extend in widget tests
+  (unscripted calls throw), `FakeControllerFactory`, `FakeTunnel` and the
+  `demoProfile` / `demoKeyProfile` constants.
+- `fake_lock.dart`, `fake_decoy_identity.dart`, `memory_cred_store.dart`:
+  the lock, launcher-identity and secure-store fakes.
+- `fixtures.dart`: `fixture()` and `jsonFixture()` for `test/fixtures/`.
+- `live_env.dart`: the `MOAV_TEST_*` parsing every live test shares.
 
 ## Live test policy
 

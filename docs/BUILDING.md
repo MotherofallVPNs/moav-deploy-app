@@ -38,8 +38,9 @@ and is skipped on simulators without enrolled biometrics.
 ## Live integration tests
 
 Tests tagged `live` (`test/live/`) talk to a real MoaV server. They are
-skipped unless the environment variables below are set, and they never run in
-CI:
+skipped unless the environment variables below are set. The regular CI job
+never sets them; the opt-in live round that does is described in
+[LIVE-CI.md](LIVE-CI.md).
 
 ```
 MOAV_TEST_SSH_KEY=~/.ssh/your_key \

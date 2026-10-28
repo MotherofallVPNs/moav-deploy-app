@@ -107,7 +107,8 @@ flutter run -d <device>
 
 Tests tagged `live` under `test/live/` talk to a real MoaV server and are
 skipped unless the `MOAV_TEST_*` variables are set. They are additive only and
-never run in CI.
+run in CI solely through the secrets-gated live workflow described in
+[docs/LIVE-CI.md](docs/LIVE-CI.md).
 
 ```
 MOAV_TEST_SSH_KEY=~/.ssh/key MOAV_TEST_HOST=your.server MOAV_TEST_USER=root flutter test test/live

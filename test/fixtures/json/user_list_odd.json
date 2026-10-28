@@ -1,0 +1,7 @@
+[
+  {"user": "zed", "services": ["sing-box", "telemt", "telemt"], "bundle": true},
+  {"services": ["sing-box"], "bundle": true},
+  {"user": "amy", "services": "sing-box", "bundle": "true"},
+  {"user": ""},
+  "not an object"
+]

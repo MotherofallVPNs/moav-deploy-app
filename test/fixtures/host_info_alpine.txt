@@ -1,0 +1,18 @@
+__LOAD__
+0.08 0.03 0.01 1/120 4567
+__NPROC__
+__CPU1__
+cpu  100 0 50 1000 10 0 5 0 0 0
+__CPU2__
+cpu  110 0 55 1020 10 0 5 0 0 0
+__MEM__
+MemTotal:         999424 kB
+MemAvailable:     512000 kB
+__DISK__
+/dev/root             10190100   3000000   6600000  32% /
+__UPTIME__
+12345.67 24000.00
+__VERSION__
+MoaV v2.2.2 (main)
+__GIT__
+__END__

@@ -1,0 +1,7 @@
+MoaV Doctor
+
+docker - Check Docker and prerequisites
+    ✓ Docker 29.7.2 - running
+
+services - Check running services vs enabled config
+    ○ wireguard - not started yet

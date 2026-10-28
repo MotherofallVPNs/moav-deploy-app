@@ -1,0 +1,111 @@
+name: Live round
+
+# Runs the `live`-tagged suite (test/live/) against the MoaV project's CI
+# test server. Everything that talks to a server is here, nothing in ci.yml
+# does. The job is a no-op until the maintainer stores the MOAV_TEST_*
+# secrets described in docs/LIVE-CI.md; without them it exits green with a
+# log line, so forks and unprivileged runs never fail or dial anything.
+#
+# TODO(maintainer): populate the repository secrets MOAV_TEST_HOST,
+# MOAV_TEST_USER and MOAV_TEST_SSH_KEY (plus MOAV_TEST_PORT and
+# MOAV_TEST_DOMAIN if needed), and set the repository variable
+# MOAV_LIVE_RUNNER to a self-hosted runner label if the box only accepts
+# SSH from a known address. See docs/LIVE-CI.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Which live files to run
+        type: choice
+        default: read-only
+        options:
+          - read-only
+          - users
+          - all
+  schedule:
+    # Nightly at 03:17 UTC; a scheduled run only happens on the default branch.
+    - cron: "17 3 * * *"
+
+# One live round at a time: the suite creates and revokes zzmoavdeploytest*
+# users and must never overlap with itself on the same box.
+concurrency:
+  group: moav-live-round
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  live-round:
+    # A self-hosted runner label from the MOAV_LIVE_RUNNER repository
+    # variable, else GitHub's Ubuntu runners (the box must then allow SSH
+    # from GitHub's address ranges).
+    runs-on: ${{ vars.MOAV_LIVE_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    env:
+      HAS_LIVE_SECRETS: ${{ secrets.MOAV_TEST_HOST != '' && secrets.MOAV_TEST_USER != '' && secrets.MOAV_TEST_SSH_KEY != '' }}
+    steps:
+      - name: Skip live round
+        if: env.HAS_LIVE_SECRETS != 'true'
+        run: |
+          echo "MOAV_TEST_HOST / MOAV_TEST_USER / MOAV_TEST_SSH_KEY secrets not set;"
+          echo "skipping the live round. See docs/LIVE-CI.md to enable it."
+
+      - uses: actions/checkout@v4
+        if: env.HAS_LIVE_SECRETS == 'true'
+
+      - uses: subosito/flutter-action@v2
+        if: env.HAS_LIVE_SECRETS == 'true'
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+        if: env.HAS_LIVE_SECRETS == 'true'
+
+      # The key lives in RUNNER_TEMP for the job only, mode 0600, and is
+      # removed in the always() step below. Accepts the PEM as-is or
+      # base64-encoded (easier to paste into the secrets UI).
+      - name: Write the SSH key
+        if: env.HAS_LIVE_SECRETS == 'true'
+        env:
+          MOAV_TEST_SSH_KEY_SECRET: ${{ secrets.MOAV_TEST_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key_path="$RUNNER_TEMP/moav-live-key"
+          if [[ "$MOAV_TEST_SSH_KEY_SECRET" == -----BEGIN* ]]; then
+            printf '%s\n' "$MOAV_TEST_SSH_KEY_SECRET" > "$key_path"
+          else
+            printf '%s' "$MOAV_TEST_SSH_KEY_SECRET" | base64 -d > "$key_path"
+          fi
+          chmod 600 "$key_path"
+          head -c 10 "$key_path" | grep -q -- '-----BEGIN' || { echo "secret is not a PEM private key"; exit 1; }
+          echo "MOAV_TEST_SSH_KEY=$key_path" >> "$GITHUB_ENV"
+
+      - name: Pick the files to run
+        if: env.HAS_LIVE_SECRETS == 'true'
+        run: |
+          case "${{ github.event.inputs.suite || 'read-only' }}" in
+            read-only) files="test/live/live_operate_test.dart" ;;
+            users)     files="test/live/live_operate_test.dart test/live/live_users_test.dart" ;;
+            all)       files="test/live" ;;
+          esac
+          echo "LIVE_FILES=$files" >> "$GITHUB_ENV"
+          echo "Running: $files"
+
+      # Host, user and port come from secrets so they never appear in logs
+      # or in this repository (CONTRIBUTING.md: no real hostnames anywhere).
+      - name: Run the live suite
+        if: env.HAS_LIVE_SECRETS == 'true'
+        env:
+          MOAV_TEST_HOST: ${{ secrets.MOAV_TEST_HOST }}
+          MOAV_TEST_USER: ${{ secrets.MOAV_TEST_USER }}
+          MOAV_TEST_PORT: ${{ secrets.MOAV_TEST_PORT }}
+          MOAV_TEST_DOMAIN: ${{ secrets.MOAV_TEST_DOMAIN }}
+        run: flutter test --tags live --reporter expanded $LIVE_FILES
+
+      - name: Remove the SSH key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/moav-live-key"
