@@ -107,12 +107,155 @@ platform :android do
   end
 end
 
+# ---------------------------------------------------------------------------
+# iOS / TestFlight
+#
+# Signing approach (no fastlane match yet, see issue #28): the lane authenticates
+# with an App Store Connect API key, then `cert` + `sigh` create (or reuse) an
+# Apple Distribution certificate and an App Store provisioning profile for the
+# bundle id. The certificate lives in a dedicated keychain (moav-deploy-ios)
+# whose password the lane knows, so codesign never blocks on the macOS keychain
+# permission dialog; the login keychain is left alone.
+# The Xcode project stays on automatic signing in git: the lane flips the Runner
+# target to manual signing only for the duration of the archive and restores the
+# pristine project.pbxproj afterwards, so a lane run never leaves a diff behind.
+#
+# Env (defaults match the owner's Mac; override for other machines / CI):
+#   ASC_KEY_ID             App Store Connect API key id
+#   ASC_ISSUER_ID          App Store Connect issuer id
+#   ASC_KEY_PATH           path to the AuthKey_<id>.p8 (never committed)
+#   IOS_KEYCHAIN_PASSWORD  password of the signing keychain; when unset a random
+#                          one is generated once and kept in the login keychain
+# ---------------------------------------------------------------------------
+require "open3"
+require "securerandom"
+
+IOS_DIR = File.join(REPO_ROOT, "ios")
+IOS_PROJECT = File.join(IOS_DIR, "Runner.xcodeproj")
+IOS_WORKSPACE = File.join(IOS_DIR, "Runner.xcworkspace")
+IOS_BUNDLE_ID = "org.motherofallvpns.moavdeploy"
+IOS_TEAM_ID = "2F556JZ8H9"
+IOS_IPA_DIR = File.join(REPO_ROOT, "build/ios/ipa")
+IOS_SIGNING_DIR = File.join(REPO_ROOT, "build/ios/signing")
+IOS_KEYCHAIN_PATH = File.join(Dir.home, "Library/Keychains/moav-deploy-ios.keychain-db")
+IOS_KEYCHAIN_SECRET_SERVICE = "moav-deploy-ios-keychain"
+
+def ios_keychain_password
+  from_env = ENV["IOS_KEYCHAIN_PASSWORD"].to_s
+  return from_env unless from_env.empty?
+  stored, status = Open3.capture2("security", "find-generic-password", "-s", IOS_KEYCHAIN_SECRET_SERVICE, "-w", err: File::NULL)
+  return stored.strip if status.success? && !stored.strip.empty?
+  password = SecureRandom.hex(24)
+  ok = system("security", "add-generic-password", "-s", IOS_KEYCHAIN_SECRET_SERVICE, "-a", "fastlane", "-w", password)
+  UI.user_error!("Could not store the signing keychain password in the login keychain") unless ok
+  UI.message("Generated a password for #{IOS_KEYCHAIN_PATH}; stored in the login keychain as '#{IOS_KEYCHAIN_SECRET_SERVICE}'")
+  password
+end
+
+# Creates (first run) and unlocks the dedicated signing keychain, keeping it in
+# the search list so xcodebuild/codesign can find the distribution identity.
+def ensure_ios_keychain
+  password = ios_keychain_password
+  unless File.exist?(IOS_KEYCHAIN_PATH)
+    create_keychain(path: IOS_KEYCHAIN_PATH, password: password, default_keychain: false,
+                    unlock: true, timeout: 3600, lock_when_sleeps: false, add_to_search_list: true)
+  end
+  unlock_keychain(path: IOS_KEYCHAIN_PATH, password: password, add_to_search_list: true, set_default: false)
+  password
+end
+
+def asc_api_key
+  key_path = ENV["ASC_KEY_PATH"].to_s
+  UI.user_error!("No App Store Connect API key at #{key_path} (set ASC_KEY_PATH)") unless File.file?(key_path)
+  app_store_connect_api_key(
+    key_id: ENV.fetch("ASC_KEY_ID"),
+    issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+    key_filepath: key_path,
+    in_house: false
+  )
+end
+
+def pubspec_version_name
+  pubspec = File.read(File.join(REPO_ROOT, "pubspec.yaml"))
+  match = pubspec.match(/^version:\s*(\S+)\+\d+\s*$/)
+  UI.user_error!("Could not read version from pubspec.yaml") unless match
+  match[1]
+end
+
 platform :ios do
-  # Tracked in https://github.com/MotherofallVPNs/moav-deploy-app/issues/28:
-  # pilot/TestFlight with an App Store Connect API key, DEVELOPMENT_TEAM in the
-  # Xcode project, and an iOS job in release.yml. Blocked on the Apple account.
-  desc "Stub: TestFlight upload is not wired yet (pending Apple account setup, see issue #28)"
+  desc "Build a signed App Store IPA and upload it to TestFlight (internal testers only, no review submission)"
   lane :beta do
-    UI.important("iOS delivery is not configured yet (issue #28). Build and upload via Xcode for now.")
+    api_key = asc_api_key
+    version_name = pubspec_version_name
+    build_number = pubspec_version_code
+    FileUtils.mkdir_p(IOS_SIGNING_DIR)
+    keychain_password = ensure_ios_keychain
+
+    # Distribution certificate (created on first run, reused afterwards) and
+    # App Store provisioning profile for the bundle id, both via the API key.
+    get_certificates(
+      api_key: api_key,
+      development: false,
+      generate_apple_certs: true,
+      keychain_path: IOS_KEYCHAIN_PATH,
+      keychain_password: keychain_password,
+      output_path: IOS_SIGNING_DIR
+    )
+    get_provisioning_profile(
+      api_key: api_key,
+      app_identifier: IOS_BUNDLE_ID,
+      output_path: IOS_SIGNING_DIR
+    )
+    profile_name = lane_context[SharedValues::SIGH_NAME]
+
+    # Flutter side: dependencies + Generated.xcconfig for a release build. Plugins
+    # resolve through Swift Package Manager, so there is no pod install step.
+    Dir.chdir(REPO_ROOT) do
+      sh("flutter pub get")
+      sh("flutter build ios --release --config-only")
+    end
+
+    pbxproj = File.join(IOS_PROJECT, "project.pbxproj")
+    pristine_pbxproj = File.read(pbxproj)
+    begin
+      update_code_signing_settings(
+        path: IOS_PROJECT,
+        targets: ["Runner"],
+        use_automatic_signing: false,
+        team_id: IOS_TEAM_ID,
+        code_sign_identity: "Apple Distribution",
+        sdk: "iphoneos*",
+        profile_name: profile_name,
+        bundle_identifier: IOS_BUNDLE_ID
+      )
+      build_app(
+        workspace: IOS_WORKSPACE,
+        scheme: "Runner",
+        configuration: "Release",
+        clean: true,
+        export_method: "app-store",
+        export_team_id: IOS_TEAM_ID,
+        export_options: {
+          signingStyle: "manual",
+          provisioningProfiles: { IOS_BUNDLE_ID => profile_name }
+        },
+        output_directory: IOS_IPA_DIR,
+        output_name: "moav-deploy-#{version_name}-#{build_number}.ipa",
+        include_bitcode: false,
+        include_symbols: true
+      )
+    ensure
+      File.write(pbxproj, pristine_pbxproj)
+    end
+
+    upload_to_testflight(
+      api_key: api_key,
+      app_identifier: IOS_BUNDLE_ID,
+      ipa: lane_context[SharedValues::IPA_OUTPUT_PATH],
+      skip_waiting_for_build_processing: true,
+      skip_submission: true,
+      distribute_external: false
+    )
+    UI.success("Uploaded #{version_name} (#{build_number}) to TestFlight (internal); processing continues on App Store Connect.")
   end
 end
