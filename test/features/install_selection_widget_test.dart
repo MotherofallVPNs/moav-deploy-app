@@ -41,7 +41,8 @@ Future<_Controller> _pump(WidgetTester tester) async {
   ));
   await tester.pumpAndSettle();
   // Fill the only required field now, before the list scrolls it away.
-  await tester.enterText(find.widgetWithText(TextField, 'Admin dashboard password'), 'secret');
+  await tester.enterText(find.widgetWithText(TextField, 'Admin dashboard password'),
+      'secret-but-long');
   await tester.pumpAndSettle();
   return c;
 }

@@ -468,17 +468,17 @@ void main() {
     final controller = _FakeController(const [
       InstallStatus(
         phase: InstallPhase.running,
-        progress: 0.2,
+        progress: 1 / 3,
         message: 'Preflight',
-        logTail: ['[moav-deploy] step 1/5: Preflight'],
+        logTail: ['[moav-deploy] step 1/3: Preflight'],
       ),
       InstallStatus(
         phase: InstallPhase.succeeded,
         progress: 1,
         message: 'Install finished',
         logTail: [
-          '[moav-deploy] step 1/5: Preflight',
-          '[moav-deploy] step 5/5: Start services',
+          '[moav-deploy] step 1/3: Preflight',
+          '[moav-deploy] step 3/3: Verify',
           '[moav-deploy] exit=0',
         ],
       ),
@@ -500,7 +500,8 @@ void main() {
 
     await tester.enterText(find.widgetWithText(TextField, 'Domain'), 'vpn.example.org');
     await tester.enterText(
-        find.widgetWithText(TextField, 'Admin dashboard password'), 'secret');
+        find.widgetWithText(TextField, 'Admin dashboard password'),
+        'secret-but-long');
     // The service selection sits between the inputs and the button.
     await _scrollTo(tester, find.text('Start install'));
     expect(find.text('Start install'), findsOneWidget);
@@ -511,7 +512,7 @@ void main() {
     expect(controller.installedSpec?.domain, 'vpn.example.org');
     expect(store.installHandles['s1']?['jobId'], '4242');
     expect(find.text('RUNNING'), findsOneWidget);
-    expect(find.text('[moav-deploy] step 1/5: Preflight'), findsOneWidget);
+    expect(find.text('[moav-deploy] step 1/3: Preflight'), findsOneWidget);
 
     // Next poll reports completion and polling stops.
     await tester.pump(const Duration(seconds: 3));

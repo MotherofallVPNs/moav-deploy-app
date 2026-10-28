@@ -41,9 +41,9 @@ const _adminPassword = String.fromEnvironment('MOAV_TEST_ADMIN_PASSWORD');
 const _domain = String.fromEnvironment('MOAV_TEST_DOMAIN');
 const _e2eUser = String.fromEnvironment('MOAV_TEST_E2E_USER');
 
-/// Comma-separated profiles to untick on the Deploy form, e.g.
-/// `proxy,dnstunnel,trusttunnel` for a domainless box (upstream's bootstrap
-/// needs a domain whenever a TLS-cert protocol is enabled).
+/// Comma-separated profiles to untick on the Deploy form (optional; the
+/// installer disables the certificate-dependent protocols itself on a
+/// domainless box, so the default selection works without a domain).
 const _deselect = String.fromEnvironment('MOAV_TEST_E2E_DESELECT');
 const _cleanup = bool.fromEnvironment('MOAV_TEST_E2E_CLEANUP');
 

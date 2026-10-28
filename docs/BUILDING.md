@@ -79,15 +79,16 @@ read-only: it installs MoaV and leaves the user behind unless
 
 ```
 MOAV_TEST_HOST=1.2.3.4 MOAV_TEST_USER=root MOAV_TEST_PASSWORD='...' \
-MOAV_TEST_E2E_DESELECT=proxy,dnstunnel,trusttunnel tool/e2e_live.sh ./e2e-evidence
+tool/e2e_live.sh ./e2e-evidence
 ```
 
-`MOAV_TEST_E2E_DESELECT` unticks profiles on the Deploy form. Upstream's
-`moav bootstrap --yes` refuses a blank domain while any TLS-cert protocol is
-enabled (Trojan, Hysteria2, dnstt, Slipstream, MasterDNS, TrustTunnel), so a
-domainless box needs `proxy`, `dnstunnel` and `trusttunnel` unticked. The
-evidence directory gets every screenshot, `results.json` with a PASS/FAIL per
-step, the server-side `install-deploy.log` and the shared bundle zip.
+Without `MOAV_TEST_DOMAIN` the install is domainless with the default
+service selection; the installer disables the certificate-dependent
+protocols itself (`MOAV_DOMAINLESS=1`). `MOAV_TEST_E2E_DESELECT` optionally
+unticks profiles on the Deploy form (for example `proxy,dnstunnel`) to
+exercise a custom selection. The evidence directory gets every screenshot,
+`results.json` with a PASS/FAIL per step, the server-side
+`install-deploy.log` and the shared bundle zip.
 
 ## Launch screen
 

@@ -80,10 +80,10 @@ Captured verbatim from v2.3.1 into `test/fixtures/json/`.
 | Need | Why | How the app copes |
 |---|---|---|
 | JSON output on `moav user list`, `doctor`, `status` | avoid fragile text parsing; `status` is a box-drawn table with ANSI colour | text parsers, see rows below |
-| Non-interactive `install.sh` | app drives it in the background | every `confirm` reads `/dev/tty` and falls back to its default when that fails (e.g. under `setsid`). Defaults: install packages = yes, update existing checkout = **no** (good: never touches a live box), install global command = yes, swap/net-tuning = yes (skipped if already applied). Domain/email/admin password are `.env` keys, not installer inputs. |
+| Non-interactive `install.sh` | app drives it in the background | since 2.3.0 the app exports `MOAV_NONINTERACTIVE=1` with `MOAV_DOMAIN`/`MOAV_EMAIL` or `MOAV_DOMAINLESS=1`, `MOAV_ADMIN_PASSWORD`, `ENABLE_*` and `MOAV_BOOTSTRAP=1`; every `confirm` takes its default (install packages = yes, update existing checkout = **no**, install global command = yes, start services after bootstrap = yes). Swap/net-tuning are never touched unattended. On a 2.2.x installer the variables are ignored and the job stops at a `.env` without a domain or password. |
 | `install.sh`: "Start Docker now?" defaulted to **no** | on a fresh box where Docker was just installed but not started, a non-interactive run continued without Docker | fixed in 2.3.0 for non-interactive runs (defaults to yes). On a 2.2.x installer the app's install job inherits the old default and does not check Docker separately. |
 | `moav bootstrap --yes` | idempotent re-run; preserves keys/users, regenerates configs | exists in 2.2.x; on 2.2.x it still entered interactive service selection afterwards (fixed in 2.3.0) |
-| Env-driven config (`DOMAIN`, `ACME_EMAIL`, `ADMIN_PASSWORD`) | app fills them before bootstrap | plain `KEY="value"` lines in `/opt/moav/.env` (template `.env.example`). The app only fills empty/placeholder values so an existing box is never reconfigured silently. |
+| Env-driven config (`DOMAIN`, `ACME_EMAIL`, `ADMIN_PASSWORD`) | written to `.env` before bootstrap | `install.sh --non-interactive` writes them itself (`ni_configure_env`): a fresh `.env` from `.env.example`, an existing one only gets empty/placeholder values filled, so a configured box is never reconfigured silently. The app no longer edits `.env` during an install. |
 | Admin dashboard settings | in-app admin panel over an SSH tunnel | `PORT_ADMIN`, `ENABLE_ADMIN_UI` and `ADMIN_PASSWORD` are read from `/opt/moav/.env` (`MoavCli.adminPanel`). The password is held in memory only and answers the panel's HTTP Basic challenge (any username, see upstream `admin/main.py`). |
 | `moav user list --json` | user list | 2.2.x: sectioned text (`=== sing-box Users … ===`, `• name [bundle ready]`, `• name (10.66.66.106)`). Parsed by section; a user is "bundle ready" when listed under `=== User Bundles ===`. |
 | `moav user revoke` exit code | detect failure | `cmd_user revoke` loops `user-revoke.sh "$u" \|\| true`, so the text path exits 0 even for an unknown user. The app re-lists users afterwards to confirm. |
@@ -95,21 +95,23 @@ Captured verbatim from v2.3.1 into `test/fixtures/json/`.
 
 `~/.moav-deploy/deploy.sh` on the server (see `lib/core/install_script.dart`):
 
-1. Preflight: report whether `/opt/moav` exists; it is never removed or updated.
-2. `curl -fsSL https://moav.sh/install.sh | bash` with no TTY (see defaults above).
-3. Ensure `.env` exists; fill only empty/placeholder `DOMAIN`, `ACME_EMAIL`, `ADMIN_PASSWORD`.
-   Then write the services chosen in the app: `DEFAULT_PROFILES` is filled
-   when empty (it is what `moav bootstrap --yes` and a bare `moav start`
-   use without a TTY, see `BOOTSTRAP_ASSUME_YES` in `lib/bootstrap.sh`), and
-   the matching `ENABLE_*=true|false` flags are written only to a `.env`
-   this run created, so an existing box keeps its flags.
-4. `moav bootstrap --yes` **only** if `outputs/bundles` is empty (never bootstrapped).
-5. `moav start` only if step 4 ran; otherwise print `moav status` and leave services alone.
+1. Preflight: report whether `/opt/moav` exists (never removed or updated)
+   and whether `outputs/bundles` is non-empty (already bootstrapped).
+2. `curl -fsSL https://moav.sh/install.sh | bash` with `MOAV_NONINTERACTIVE=1`,
+   `MOAV_DOMAIN` + `MOAV_EMAIL` or `MOAV_DOMAINLESS=1`, `MOAV_ADMIN_PASSWORD`,
+   the `ENABLE_*=true|false` flags for the services chosen in the app (only
+   when no `.env` exists yet, so an existing box keeps its flags) and
+   `MOAV_BOOTSTRAP=1` unless already bootstrapped. The installer creates or
+   fills `.env`, disables certificate-dependent protocols in domainless
+   mode, derives `DEFAULT_PROFILES` (`ni_default_profiles`) and runs
+   `moav bootstrap --yes`, which builds and starts the services.
+3. Verify: print `moav status`. On an already-bootstrapped box nothing was
+   bootstrapped or started.
 
 There is no non-interactive profile argument on `moav bootstrap` or
-`moav start`; `install.sh --non-interactive` derives `DEFAULT_PROFILES` from
-the `ENABLE_*` environment the same way (`ni_default_profiles`). The app's
-profile list and flag table (`lib/core/moav_services.dart`) mirror
+`moav start`; `DEFAULT_PROFILES` derived by `install.sh` is what
+`bootstrap --yes` uses (`BOOTSTRAP_ASSUME_YES` in `lib/bootstrap.sh`). The
+app's profile list and flag table (`lib/core/moav_services.dart`) mirror
 `select_profiles`, `profile_enabled` and `confirm_disabled_profile` in
 upstream `lib/service.sh` (v2.3.1).
 

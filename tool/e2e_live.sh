@@ -11,8 +11,8 @@
 # tool/screenshots.sh and rejected with a clear message).
 # Optional: MOAV_SIM_ID (default: first booted simulator), MOAV_TEST_PORT,
 # MOAV_TEST_DOMAIN (blank = domainless), MOAV_TEST_ADMIN_PASSWORD,
-# MOAV_TEST_E2E_DESELECT (profiles to untick on the Deploy form, e.g.
-# "proxy,dnstunnel,trusttunnel" for a domainless box), MOAV_TEST_E2E_USER,
+# MOAV_TEST_E2E_DESELECT (profiles to untick on the Deploy form, optional:
+# a domainless box works with the defaults), MOAV_TEST_E2E_USER,
 # MOAV_TEST_E2E_CLEANUP=true.
 # The install on a fresh box takes several minutes; the test allows 50.
 set -euo pipefail

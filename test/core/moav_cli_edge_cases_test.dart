@@ -418,7 +418,7 @@ host - Check CPU load
   group('parseInstallStatus', () {
     test('a finished job: the exit marker wins over liveness', () {
       final s = SshMoavController.parseInstallStatus(
-        'ALIVE\n__LOG__\n[moav-deploy] step 2/5: Bootstrap\n'
+        'ALIVE\n__LOG__\n[moav-deploy] step 2/3: Run MoaV installer\n'
         'done\n[moav-deploy] exit=0\n',
       );
       expect(s.phase, InstallPhase.succeeded);
@@ -428,10 +428,10 @@ host - Check CPU load
 
     test('a garbled exit marker on a dead job reads as failed', () {
       final s = SshMoavController.parseInstallStatus(
-        'DEAD\n__LOG__\n[moav-deploy] step 1/5: Preflight\n[moav-deploy] exit=abc\n',
+        'DEAD\n__LOG__\n[moav-deploy] step 1/3: Preflight\n[moav-deploy] exit=abc\n',
       );
       expect(s.phase, InstallPhase.failed);
-      expect(s.progress, 0.2);
+      expect(s.progress, closeTo(1 / 3, 1e-9));
       expect(s.message, contains('without reporting'));
     });
 
