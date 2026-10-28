@@ -7,12 +7,14 @@ import 'ssh_connection.dart';
 /// A bash script plus a mode-0600 `spec.env` are written to `~/.moav-deploy/`.
 /// The script drives upstream `install.sh` through its own non-interactive
 /// contract (`MOAV_NONINTERACTIVE=1`, `MOAV_DOMAIN` + `MOAV_EMAIL` or
-/// `MOAV_DOMAINLESS=1`, `MOAV_ADMIN_PASSWORD`, `ENABLE_*`, `MOAV_BOOTSTRAP=1`)
-/// so the installer creates `.env`, disables certificate-dependent protocols
-/// itself when there is no domain, derives `DEFAULT_PROFILES`, bootstraps and
-/// starts the services. It never modifies an existing `/opt/moav`, only
-/// fills empty `.env` values on an existing box (the installer's own rule),
-/// and asks for a bootstrap only on a never-bootstrapped box.
+/// `MOAV_DOMAINLESS=1`, `MOAV_ADMIN_PASSWORD`, `ENABLE_*`) so the installer
+/// creates `.env`, disables certificate-dependent protocols itself when there
+/// is no domain, and derives `DEFAULT_PROFILES`. Those inputs are confined to
+/// a subshell; `moav bootstrap`/`moav start` then run in a clean environment
+/// so bootstrap reads the services from `.env` instead of the exported
+/// `ENABLE_*`. It never modifies an existing `/opt/moav`, only fills empty
+/// `.env` values on an existing box (the installer's own rule), and bootstraps
+/// only a never-bootstrapped box.
 /// `[moav-deploy] step N/3` and `[moav-deploy] exit=<code>` markers make the
 /// log self-describing. The three steps are documented in docs/ARCHITECTURE.md.
 class InstallScript {
@@ -85,48 +87,58 @@ else
   echo "No MoaV install at $INSTALL_DIR - performing a fresh install."
 fi
 
-step 2 "Run MoaV installer (non-interactive: .env, bootstrap, start)"
+step 2 "Run MoaV installer (non-interactive .env setup)"
 # install.sh's own automation contract: it creates .env (0600) or fills only
 # empty values in an existing one, never updates an existing checkout,
-# disables the certificate-dependent protocols itself when there is no
-# domain, derives DEFAULT_PROFILES from the ENABLE_* flags and, with
-# MOAV_BOOTSTRAP=1, runs 'moav bootstrap --yes' (builds and starts services).
-export MOAV_NONINTERACTIVE=1 MOAV_BRANCH="${MOAV_BRANCH:-main}" MOAV_INSTALL_DIR="$INSTALL_DIR"
-export MOAV_ADMIN_PASSWORD="$MD_ADMIN_PASSWORD"
-unset MD_ADMIN_PASSWORD
-if [ -n "$MD_DOMAIN" ]; then
-  export MOAV_DOMAIN="$MD_DOMAIN" MOAV_EMAIL="$MD_EMAIL"
-  echo "Domain: $MD_DOMAIN (Let's Encrypt email set)"
-else
-  export MOAV_DOMAINLESS=1
-  echo "No domain: domainless mode (the installer disables certificate-dependent protocols itself)"
-fi
-# The selected services only shape a .env this run creates; an existing .env
-# keeps its ENABLE_* flags (change them later from the Services tab).
-if [ ! -f "$INSTALL_DIR/.env" ]; then
-  for kv in $MD_ENABLE; do
-    case "$kv" in ENABLE_*=true|ENABLE_*=false) export "$kv" ;; esac
-  done
-  [ -n "$MD_ENABLE" ] && echo "ENABLE_* flags passed from the selected services"
-else
-  echo "Existing .env: ENABLE_* flags kept as configured"
-fi
-if [ "$BOOTSTRAP" = 1 ]; then
-  export MOAV_BOOTSTRAP=1
-  echo "MOAV_BOOTSTRAP=1: the installer will run 'moav bootstrap --yes' and start the services"
-fi
-if command -v curl >/dev/null 2>&1; then
-  curl -fsSL https://moav.sh/install.sh | bash
-else
-  wget -qO- https://moav.sh/install.sh | bash
-fi
+# disables the certificate-dependent protocols itself when there is no domain,
+# and derives DEFAULT_PROFILES from the ENABLE_* flags. The MOAV_*/ENABLE_*
+# inputs live only inside this subshell: exported in the parent they would
+# leak into 'moav bootstrap', which reads ENABLE_* from the environment ahead
+# of .env and would re-enable the cert protocols domainless mode just disabled.
+# Bootstrap and start run in step 3 with a clean environment reading only .env.
+(
+  export MOAV_NONINTERACTIVE=1 MOAV_BRANCH="${MOAV_BRANCH:-main}" MOAV_INSTALL_DIR="$INSTALL_DIR"
+  export MOAV_ADMIN_PASSWORD="$MD_ADMIN_PASSWORD"
+  if [ -n "$MD_DOMAIN" ]; then
+    export MOAV_DOMAIN="$MD_DOMAIN" MOAV_EMAIL="$MD_EMAIL"
+    echo "Domain: $MD_DOMAIN (Let's Encrypt email set)"
+  else
+    export MOAV_DOMAINLESS=1
+    echo "No domain: domainless mode (the installer disables certificate-dependent protocols itself)"
+  fi
+  # The selected services only shape a .env this run creates; an existing .env
+  # keeps its ENABLE_* flags (change them later from the Services tab).
+  if [ ! -f "$INSTALL_DIR/.env" ]; then
+    for kv in $MD_ENABLE; do
+      case "$kv" in ENABLE_*=true|ENABLE_*=false) export "$kv" ;; esac
+    done
+    [ -n "$MD_ENABLE" ] && echo "ENABLE_* flags passed from the selected services"
+  else
+    echo "Existing .env: ENABLE_* flags kept as configured"
+  fi
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL https://moav.sh/install.sh | bash
+  else
+    wget -qO- https://moav.sh/install.sh | bash
+  fi
+)
 rc=$?
+unset MD_ADMIN_PASSWORD
 if [ $rc -ne 0 ]; then echo "Installer failed (exit $rc)"; finish $rc; fi
 
-step 3 "Verify"
+step 3 "Bootstrap and start"
 cd "$INSTALL_DIR" || finish 1
 if [ "$BOOTSTRAP" = 1 ]; then
-  echo "Bootstrapped and started by the installer. Current status:"
+  # Clean environment: no ENABLE_*/MOAV_* exports, so bootstrap reads .env only
+  # (install.sh already set DOMAIN, services and the domainless disables there).
+  echo "Bootstrapping (keys, certs, first user) and starting services..."
+  moav_cmd bootstrap --yes < /dev/null
+  rc=$?
+  if [ $rc -ne 0 ]; then echo "Bootstrap failed (exit $rc)"; finish $rc; fi
+  moav_cmd start < /dev/null
+  rc=$?
+  if [ $rc -ne 0 ]; then echo "Start failed (exit $rc)"; finish $rc; fi
+  echo "Bootstrapped and started. Current status:"
 else
   echo "Services left untouched (existing install). Current status:"
 fi

@@ -74,7 +74,9 @@ void main() {
       expect(script, contains('export MOAV_ADMIN_PASSWORD="\$MD_ADMIN_PASSWORD"'));
       expect(script, contains('export MOAV_DOMAIN="\$MD_DOMAIN" MOAV_EMAIL="\$MD_EMAIL"'));
       expect(script, contains('export MOAV_DOMAINLESS=1'));
-      expect(script, contains('export MOAV_BOOTSTRAP=1'));
+      // Bootstrap runs in step 3, not via MOAV_BOOTSTRAP, so the exported
+      // ENABLE_* cannot leak into it and re-enable cert protocols.
+      expect(script, isNot(contains('MOAV_BOOTSTRAP')));
       expect(script, contains('https://moav.sh/install.sh | bash'));
     });
 
@@ -102,13 +104,15 @@ void main() {
       expect(script, contains('Existing .env: ENABLE_* flags kept as configured'));
     });
 
-    test('bootstrap and start are left to the installer, only on a fresh box', () {
+    test('bootstrap and start run in a clean env, only on a fresh box', () {
       expect(script, contains('BOOTSTRAP=1'));
       expect(script, contains('outputs/bundles'));
       expect(script, contains('Already bootstrapped - bootstrap and start will be skipped'));
-      expect(script, contains('if [ "\$BOOTSTRAP" = 1 ]; then\n  export MOAV_BOOTSTRAP=1'));
-      expect(script, isNot(contains('moav_cmd bootstrap')));
-      expect(script, isNot(contains('moav_cmd start')));
+      // Guarded by BOOTSTRAP and run as explicit commands (no MOAV_BOOTSTRAP),
+      // after the install subshell closes so no ENABLE_*/MOAV_* exports remain.
+      expect(script, contains('if [ "\$BOOTSTRAP" = 1 ]; then'));
+      expect(script, contains('moav_cmd bootstrap --yes'));
+      expect(script, contains('moav_cmd start'));
       expect(script, contains('moav_cmd status < /dev/null'));
     });
 
