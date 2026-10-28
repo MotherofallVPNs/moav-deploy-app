@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:dartssh2/dartssh2.dart';
 
@@ -62,6 +61,10 @@ class SshMoavController implements MoavController {
   final FileWriter? _fileWriter;
 
   SSHClient? _client;
+
+  /// The handshake in progress, shared by every caller that arrives while
+  /// it runs, so concurrent first fetches never open parallel sessions.
+  Future<SSHClient>? _connecting;
 
   /// Opens an SSH session and runs `echo __ok__; moav --version` to report
   /// reachability, whether auth works, and the installed MoaV version.
@@ -318,56 +321,45 @@ class SshMoavController implements MoavController {
     }
   }
 
-  /// Lists `/opt/moav/outputs/bundles/<user>` over SFTP and reads every
-  /// text config (images, HTML guide and zips are skipped).
+  /// One shell round trip that prints every text config in
+  /// `/opt/moav/outputs/bundles/<user>` base64-framed (see
+  /// [MoavCli.bundleDump]). Images, the HTML guide and zips are skipped
+  /// server-side, as are files over [maxBundleFileBytes].
+  ///
+  /// The previous SFTP walk cost four serial round trips per file (open,
+  /// stat, read, close) on top of the directory listing, which on a mobile
+  /// link made a 20-file bundle take tens of seconds.
   @override
   Future<Bundle> getBundle(String user) async {
     _validateName(user);
-    final client = await _connected();
-    final dir = '${MoavCli.bundlesDir}/$user';
-    final sftp = await client.sftp().timeout(connectTimeout);
-    try {
-      final List<SftpName> names;
-      try {
-        names = await sftp.listdir(dir).timeout(connectTimeout);
-      } on SftpStatusError {
-        throw StateError(
-          "No bundle found for '$user'. Add the user again or run "
-          "'moav regenerate-users' on the server.",
-        );
-      }
-      final entries = <BundleEntry>[];
-      for (final n in names) {
-        if (n.filename == '.' || n.filename == '..') continue;
-        if (n.attr.isDirectory) continue;
-        if (MoavCli.classifyBundleFile(n.filename) == null) continue;
-        if ((n.attr.size ?? 0) > maxBundleFileBytes) continue;
-        final f = await sftp.open('$dir/${n.filename}');
-        try {
-          final bytes = await f.readBytes().timeout(connectTimeout);
-          final entry = MoavCli.bundleEntry(
-            n.filename,
-            utf8.decode(bytes, allowMalformed: true),
-          );
-          if (entry != null) entries.add(entry);
-        } finally {
-          await f.close();
-        }
-      }
-      entries.sort(MoavCli.compareEntries);
-      return Bundle(
-        user: user,
-        entries: entries,
-        fetchedAt: DateTime.now(),
-        path: dir,
+    final out = await _run(MoavCli.bundleDump(user),
+        allowFailure: true, timeout: bundleTimeout);
+    final files = MoavCli.parseBundleDump(out.stdout);
+    if (files == null) {
+      throw StateError(
+        "No bundle found for '$user'. Add the user again or run "
+        "'moav regenerate-users' on the server.",
       );
-    } finally {
-      await sftp.close();
     }
+    final entries = <BundleEntry>[];
+    for (final f in files) {
+      final entry = MoavCli.bundleEntry(f.name, f.content);
+      if (entry != null) entries.add(entry);
+    }
+    entries.sort(MoavCli.compareEntries);
+    return Bundle(
+      user: user,
+      entries: entries,
+      fetchedAt: DateTime.now(),
+      path: '${MoavCli.bundlesDir}/$user',
+    );
   }
 
   /// Bundle files larger than this are configs we never render (safety cap).
-  static const maxBundleFileBytes = 256 * 1024;
+  static const maxBundleFileBytes = MoavCli.maxBundleFileBytes;
+
+  /// A bundle is a few dozen small files; base64 on the box is instant.
+  static const bundleTimeout = Duration(seconds: 60);
 
   // TODO(#8): no `--json` for these; only the exit code signals failure.
   /// `moav start|stop|restart [service]` or `moav regenerate-users`.
@@ -640,14 +632,27 @@ class SshMoavController implements MoavController {
     return t.length > 300 ? '…${t.substring(t.length - 300)}' : t;
   }
 
-  /// Closes the cached SSH client, if any.
-  void dispose() => _dropClient();
+  /// Closes the cached SSH client, if any, and refuses to reopen one.
+  void dispose() {
+    _disposed = true;
+    _dropClient();
+  }
 
   // ---------------------------------------------------------------------------
 
-  Future<SSHClient> _connected() async {
+  Future<SSHClient> _connected() {
     final existing = _client;
-    if (existing != null && !existing.isClosed) return existing;
+    if (existing != null && !existing.isClosed) return Future.value(existing);
+    final pending = _connecting;
+    if (pending != null) return pending;
+    final f = _open();
+    _connecting = f;
+    return f.whenComplete(() {
+      if (identical(_connecting, f)) _connecting = null;
+    });
+  }
+
+  Future<SSHClient> _open() async {
     final secret = await _secretResolver(profile);
     if (secret == null || secret.isEmpty) {
       throw StateError('No stored credential for ${profile.label}');
@@ -662,12 +667,19 @@ class SshMoavController implements MoavController {
         password: usePassword ? secret : null,
         timeout: connectTimeout,
       );
+      // dispose() may have run meanwhile; never keep a session nobody owns.
+      if (_disposed) {
+        client.close();
+        throw StateError('Controller for ${profile.label} was disposed');
+      }
       _client = client;
       return client;
     } on Object catch (e) {
       throw AppError.from(e, host: profile.host, port: profile.port);
     }
   }
+
+  bool _disposed = false;
 
   void _dropClient() {
     final c = _client;

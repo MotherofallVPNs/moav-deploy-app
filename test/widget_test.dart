@@ -635,7 +635,13 @@ void main() {
     await tester.tap(find.text('alice'));
     await tester.pumpAndSettle();
     expect(find.text('BUNDLE READY'), findsOneWidget);
-    expect(find.text('SING-BOX'), findsOneWidget);
+    // Protocols, not stores: alice is in sing-box, so with the upstream
+    // defaults she gets its five protocols plus the three shared tunnels.
+    expect(find.text('8 protocols enabled · 1 store'), findsOneWidget);
+    expect(find.text('VLESS REALITY'), findsOneWidget);
+    expect(find.text('HYSTERIA2'), findsOneWidget);
+    expect(find.text('DNSTT'), findsOneWidget);
+    expect(find.text('SING-BOX'), findsNothing);
     expect(find.text('Copy subscription'), findsOneWidget);
     expect(find.text('Download connection bundle'), findsOneWidget);
     expect(find.text('Run connection test'), findsNothing);

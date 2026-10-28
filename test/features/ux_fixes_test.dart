@@ -399,10 +399,12 @@ void main() {
       await tester.pumpWidget(_app(store, controller));
       await tester.pumpAndSettle();
 
-      // Reachable from the server card menu on the home screen.
+      // No longer in the server card menu (user management lives in the
+      // Users tab); it is launched from the server hub and the Server tab.
       await tester.tap(find.byTooltip('Show menu'));
       await tester.pumpAndSettle();
-      expect(find.text('Admin dashboard'), findsOneWidget);
+      expect(find.text('Admin dashboard'), findsNothing);
+      expect(find.text('Users'), findsOneWidget);
       await tester.tapAt(const Offset(5, 5));
       await tester.pumpAndSettle();
 

@@ -66,9 +66,8 @@ class SshConnection {
       final session = await client.execute(command).timeout(timeout);
       final stdout = StringBuffer();
       final stderr = StringBuffer();
-      const decoder = Utf8Decoder(allowMalformed: true);
       Future<void> drain(Stream<List<int>> s, StringBuffer into) =>
-          s.transform(decoder).forEach((chunk) {
+          decodeUtf8(s).forEach((chunk) {
             into.write(chunk);
             onOutput(chunk);
           });
@@ -91,6 +90,15 @@ class SshConnection {
     }
     return out;
   }
+
+  /// Decodes a byte stream as UTF-8, chunk by chunk, tolerating malformed
+  /// sequences (CLI output can split a multi-byte character across chunks).
+  ///
+  /// dartssh2 hands out `Stream<Uint8List>`; calling `.transform(decoder)`
+  /// on such a stream fails at runtime because the transformer is typed on
+  /// `List<int>`, so the decoder is bound to the stream instead.
+  static Stream<String> decodeUtf8(Stream<List<int>> bytes) =>
+      const Utf8Decoder(allowMalformed: true).bind(bytes);
 
   /// Writes [content] to [path] on the server through stdin (so the payload
   /// never appears in `ps` or shell history) with mode 0600 and parent dirs

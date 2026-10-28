@@ -7,6 +7,7 @@ import '../../theme/moav_theme.dart';
 import '../../widgets/cached_view.dart';
 import '../../widgets/error_view.dart';
 import '../../widgets/log_view.dart';
+import '../admin/admin_panel_screen.dart';
 import 'operate_provider.dart';
 import 'operate_screen.dart';
 
@@ -54,6 +55,8 @@ class ServerInfoView extends ConsumerWidget {
             ],
             const SectionHeader('Host'),
             _HostGrid(host: s.host),
+            const SectionHeader('Web panel'),
+            _AdminDashboardRow(profile: profile),
             if (s.version.components.isNotEmpty) ...[
               const SectionHeader('Components'),
               MoavCard(
@@ -97,6 +100,42 @@ class ServerInfoView extends ConsumerWidget {
       ),
     );
     if (ok == true) await notifier.start();
+  }
+}
+
+/// Opens the MoaV admin dashboard in-app, over the SSH session.
+class _AdminDashboardRow extends StatelessWidget {
+  const _AdminDashboardRow({required this.profile});
+
+  final ServerProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return MoavCard(
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+      onTap: () => Navigator.of(context).push(AdminPanelScreen.route(profile)),
+      child: Row(
+        children: [
+          const IconBadge(Icons.admin_panel_settings_outlined),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Admin dashboard', style: theme.textTheme.titleMedium),
+                const SizedBox(height: 2),
+                Text(
+                  'The MoaV web panel, through this SSH connection',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right, color: MoavColors.textMuted),
+        ],
+      ),
+    );
   }
 }
 

@@ -151,7 +151,8 @@ class _UserTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final subtitle = user.bundleReady
-        ? 'Bundle ready · ${user.protocols.length} protocol stores'
+        ? 'Bundle ready · ${user.protocols.length} '
+            '${user.protocols.length == 1 ? 'store' : 'stores'}'
         : user.protocols.isEmpty
             ? 'No bundle'
             : 'No bundle · ${user.protocols.join(', ')}';

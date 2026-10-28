@@ -7,6 +7,8 @@
 /// from here, so the app never invents a flag the CLI does not know.
 library;
 
+import 'moav_controller.dart';
+
 /// One Compose profile as offered by `moav start <profile>`.
 class MoavProfile {
   const MoavProfile({
@@ -175,6 +177,19 @@ class MoavProfiles {
   }
 }
 
+/// One client protocol, the flag that enables it and the user store it
+/// needs; see [MoavServices.userProtocolFlags].
+class UserProtocol {
+  const UserProtocol(this.id, this.flag, {this.store});
+
+  /// Bundle protocol id as used by [BundleEntry.titles], e.g. `hysteria2`.
+  final String id;
+  final String flag;
+
+  /// `moav user list` service that must list the user; `null` when shared.
+  final String? store;
+}
+
 /// How a `moav status` service row maps to `.env` flags.
 class ServiceToggle {
   const ServiceToggle({required this.onFlags, this.offFlags = const []});
@@ -240,10 +255,53 @@ class MoavServices {
 
   static ServiceToggle? toggleFor(String service) => toggles[service];
 
+  /// Client protocols a user can be handed, each with the `.env` flag that
+  /// turns it on and the user store (`moav user list` service) it needs.
+  /// A `null` store is a shared tunnel every bundle gets (dnstt, Slipstream,
+  /// MasterDNS, GooseRelay). Mirrors upstream `scripts/generate-user.sh`.
+  static const userProtocolFlags = <UserProtocol>[
+    UserProtocol('reality', 'ENABLE_REALITY', store: 'sing-box'),
+    UserProtocol('trojan', 'ENABLE_TROJAN', store: 'sing-box'),
+    UserProtocol('anytls', 'ENABLE_ANYTLS', store: 'sing-box'),
+    UserProtocol('hysteria2', 'ENABLE_HYSTERIA2', store: 'sing-box'),
+    UserProtocol('shadowsocks', 'ENABLE_SS', store: 'sing-box'),
+    UserProtocol('snell', 'ENABLE_SNELL', store: 'sing-box'),
+    UserProtocol('cdn', 'ENABLE_CDN', store: 'sing-box'),
+    UserProtocol('xhttp', 'ENABLE_XHTTP', store: 'xray'),
+    UserProtocol('xdns', 'ENABLE_XDNS', store: 'xray'),
+    UserProtocol('wireguard', 'ENABLE_WIREGUARD', store: 'wireguard'),
+    UserProtocol('wireguard-wstunnel', 'ENABLE_WIREGUARD', store: 'wireguard'),
+    UserProtocol('amneziawg', 'ENABLE_AMNEZIAWG', store: 'amneziawg'),
+    UserProtocol('trusttunnel', 'ENABLE_TRUSTTUNNEL', store: 'trusttunnel'),
+    UserProtocol('telegram', 'ENABLE_TELEMT', store: 'telegram'),
+    UserProtocol('dnstt', 'ENABLE_DNSTT'),
+    UserProtocol('slipstream', 'ENABLE_SLIPSTREAM'),
+    UserProtocol('masterdns', 'ENABLE_MASTERDNS'),
+    UserProtocol('gooserelay', 'ENABLE_GOOSERELAY'),
+  ];
+
+  /// The protocols a user actually gets on a server: every entry of
+  /// [userProtocolFlags] whose flag is on in [flags] and whose store (if
+  /// any) lists the user in [stores]. With [flags] unknown (still loading,
+  /// or a box without `.env`) the upstream defaults decide, so the answer
+  /// is the server's protocol set rather than the six store names.
+  static List<String> userProtocols(
+    Iterable<String> stores, {
+    ServiceFlags? flags,
+  }) {
+    final mine = stores.toSet();
+    return [
+      for (final p in userProtocolFlags)
+        if ((p.store == null || mine.contains(p.store)) &&
+            (flags?.isOn(p.flag) ?? flagDefault(p.flag)))
+          p.id,
+    ];
+  }
+
   /// Upstream's default when a flag is absent or empty in `.env`
   /// (`get_env_val KEY .env <default>`): opt-in flags are off, the rest on.
   static bool flagDefault(String key) => switch (key) {
-        'ENABLE_ANYTLS' || 'ENABLE_GOOSERELAY' => false,
+        'ENABLE_ANYTLS' || 'ENABLE_GOOSERELAY' || 'ENABLE_CDN' => false,
         _ => true,
       };
 

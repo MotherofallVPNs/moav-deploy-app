@@ -26,6 +26,14 @@ class UserActionResult {
   bool get alreadyExists => error == 'already exists';
 }
 
+/// One file of a user's bundle directory as printed by [MoavCli.bundleDump].
+class BundleFile {
+  const BundleFile({required this.name, required this.content});
+
+  final String name;
+  final String content;
+}
+
 /// The exact `moav` CLI invocations the SSH controller runs, plus the parsers
 /// that turn their output into models.
 ///
@@ -636,6 +644,61 @@ echo "__END__"
   // Bundles
   // ---------------------------------------------------------------------------
 
+  /// Bundle files larger than this are configs the app never renders.
+  static const maxBundleFileBytes = 256 * 1024;
+
+  /// Prints a user's bundle directory in one go: for every regular file
+  /// that is not an image, the HTML guide or a zip, and is at most
+  /// [maxBundleFileBytes], a `__FILE__ <name>` line followed by the content
+  /// as a single base64 line. `__NOBUNDLE__` when the directory is missing.
+  /// POSIX `base64` with `tr` (no GNU `-w0`) so an Alpine box works too.
+  static String bundleDump(String user) {
+    if (!MoavUser.validName.hasMatch(user)) {
+      throw ArgumentError.value(user, 'user', 'not a valid user name');
+    }
+    final dir = SshConnection.shellQuote('$bundlesDir/$user');
+    return '''
+cd $dir 2>/dev/null || { echo "__NOBUNDLE__"; exit 0; }
+for f in *; do
+  [ -f "\$f" ] || continue
+  case "\$f" in *.png|*.PNG|*.html|*.HTML|*.zip|*.ZIP) continue;; esac
+  s=\$(wc -c < "\$f") || continue
+  [ "\$s" -gt $maxBundleFileBytes ] && continue
+  printf '__FILE__ %s\\n' "\$f"
+  base64 < "\$f" | tr -d '\\n'; echo
+done
+echo "__END__"
+''';
+  }
+
+  /// Parses [bundleDump] output. `null` when the bundle directory does not
+  /// exist; otherwise the files in the order the shell listed them. A
+  /// truncated dump (no `__END__`) keeps the files that arrived whole.
+  static List<BundleFile>? parseBundleDump(String raw) {
+    final lines = raw.split('\n');
+    if (lines.any((l) => l.trim() == '__NOBUNDLE__')) return null;
+    final files = <BundleFile>[];
+    for (var i = 0; i + 1 < lines.length; i++) {
+      final line = lines[i];
+      if (!line.startsWith('__FILE__ ')) continue;
+      final name = line.substring('__FILE__ '.length).trim();
+      final payload = lines[i + 1].trim();
+      if (name.isEmpty || payload == '__END__') continue;
+      i++;
+      final List<int> bytes;
+      try {
+        bytes = base64.decode(payload);
+      } on FormatException {
+        continue;
+      }
+      files.add(BundleFile(
+        name: name,
+        content: utf8.decode(bytes, allowMalformed: true),
+      ));
+    }
+    return files;
+  }
+
   /// Maps a bundle file to its protocol and whether its content is a QR
   /// payload. Returns `null` for files the app does not surface (images,
   /// HTML guide, zips).
@@ -647,6 +710,9 @@ echo "__END__"
     if (f == 'reality.txt') return (protocol: 'reality', qr: true);
     if (f == 'trojan.txt') return (protocol: 'trojan', qr: true);
     if (f == 'hysteria2.txt') return (protocol: 'hysteria2', qr: true);
+    if (f == 'anytls.txt') return (protocol: 'anytls', qr: true);
+    if (f == 'cdn-vless.txt') return (protocol: 'cdn', qr: true);
+    if (f == 'snell.txt') return (protocol: 'snell', qr: false);
     if (f == 'shadowsocks.txt') return (protocol: 'shadowsocks', qr: true);
     if (f == 'xhttp-vless.txt') return (protocol: 'xhttp', qr: true);
     if (f == 'telegram-proxy-link.txt') return (protocol: 'telegram', qr: true);
@@ -687,6 +753,8 @@ echo "__END__"
     'hysteria2',
     'trojan',
     'shadowsocks',
+    'anytls',
+    'cdn',
     'xhttp',
     'wireguard',
     'amneziawg',

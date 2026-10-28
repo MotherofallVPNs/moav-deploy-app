@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/moav_controller.dart';
+import '../../core/moav_services.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
+import '../operate/operate_provider.dart';
 import 'user_bundle_screen.dart';
 import 'users_provider.dart';
 
@@ -35,6 +37,10 @@ class UserDetailScreen extends ConsumerWidget {
             .firstOrNull ??
         user;
     final bundle = ref.watch(bundleProvider(key));
+    // Which protocols the server hands this user: its `.env` flags crossed
+    // with the stores that list the user, not the six store names.
+    final flags = ref.watch(serviceFlagsProvider(profile.id)).data;
+    final protocols = MoavServices.userProtocols(current.protocols, flags: flags);
     return MoavScaffold(
       appBar: MoavAppBar(
         title: Text(user.name, style: moavMono(size: 17, weight: FontWeight.w600)),
@@ -45,6 +51,7 @@ class UserDetailScreen extends ConsumerWidget {
             onPressed: () {
               ref.invalidate(bundleProvider(key));
               ref.read(usersProvider(profile.id).notifier).refresh();
+              ref.read(serviceFlagsProvider(profile.id).notifier).refresh();
             },
           ),
         ],
@@ -52,7 +59,7 @@ class UserDetailScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
-          _HeaderCard(user: current),
+          _HeaderCard(user: current, protocols: protocols),
           const SectionHeader('Subscription'),
           _SubscriptionCard(
             user: current,
@@ -90,9 +97,12 @@ class UserDetailScreen extends ConsumerWidget {
 }
 
 class _HeaderCard extends StatelessWidget {
-  const _HeaderCard({required this.user});
+  const _HeaderCard({required this.user, required this.protocols});
 
   final MoavUser user;
+
+  /// Enabled protocols for this user (see [MoavServices.userProtocols]).
+  final List<String> protocols;
 
   @override
   Widget build(BuildContext context) {
@@ -113,9 +123,11 @@ class _HeaderCard extends StatelessWidget {
                     Text(user.name, style: moavMono(size: 16, weight: FontWeight.w600)),
                     const SizedBox(height: 2),
                     Text(
-                      user.protocols.isEmpty
-                          ? 'No protocol stores list this user'
-                          : '${user.protocols.length} protocol '
+                      protocols.isEmpty
+                          ? 'No protocols enabled for this user'
+                          : '${protocols.length} protocol'
+                              '${protocols.length == 1 ? '' : 's'} enabled · '
+                              '${user.protocols.length} '
                               '${user.protocols.length == 1 ? 'store' : 'stores'}',
                       style: theme.textTheme.bodySmall,
                     ),
@@ -128,14 +140,18 @@ class _HeaderCard extends StatelessWidget {
               ),
             ],
           ),
-          if (user.protocols.isNotEmpty) ...[
+          if (protocols.isNotEmpty) ...[
             const SizedBox(height: 14),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final p in user.protocols)
-                  StatusPill(p, tone: StatusTone.accent, dot: false),
+                for (final p in protocols)
+                  StatusPill(
+                    BundleEntry.titles[p] ?? p,
+                    tone: StatusTone.accent,
+                    dot: false,
+                  ),
               ],
             ),
           ],

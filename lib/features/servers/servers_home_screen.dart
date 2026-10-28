@@ -7,7 +7,6 @@ import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
-import '../admin/admin_panel_screen.dart';
 import '../deploy/deploy_screen.dart';
 import '../keys/keyring_screen.dart';
 import '../operate/grafana_screen.dart';
@@ -43,33 +42,20 @@ class ServersHomeScreen extends ConsumerWidget {
                 ),
               ),
               PopupMenuItem(
-                value: _HomeAction.website,
+                value: _HomeAction.docs,
                 child: ListTile(
-                  leading: Icon(Icons.language),
-                  title: Text('Website & docs'),
+                  leading: Icon(Icons.menu_book_outlined),
+                  title: Text('Documentation'),
                 ),
               ),
               PopupMenuItem(
-                value: _HomeAction.github,
+                value: _HomeAction.support,
                 child: ListTile(
-                  leading: Icon(Icons.code),
-                  title: Text('GitHub'),
+                  leading: Icon(Icons.favorite_outline),
+                  title: Text('Support us'),
                 ),
               ),
-              PopupMenuItem(
-                value: _HomeAction.x,
-                child: ListTile(
-                  leading: Icon(Icons.alternate_email),
-                  title: Text('X'),
-                ),
-              ),
-              PopupMenuItem(
-                value: _HomeAction.telegram,
-                child: ListTile(
-                  leading: Icon(Icons.send_outlined),
-                  title: Text('Telegram'),
-                ),
-              ),
+              _SocialRow(),
               PopupMenuDivider(),
               PopupMenuItem(
                 value: _HomeAction.wipe,
@@ -117,7 +103,22 @@ class ServersHomeScreen extends ConsumerWidget {
   }
 }
 
-enum _HomeAction { keys, website, github, x, telegram, wipe }
+enum _HomeAction { keys, docs, support, github, x, telegram, wipe }
+
+/// Where the menu links go. One place to change when a URL moves.
+class MoavLinks {
+  MoavLinks._();
+
+  static final docs = Uri.parse('https://moav.sh/docs');
+
+  // TODO: confirm the exact support/donate page with the project owner.
+  static final support = Uri.parse(supportUrl);
+  static const supportUrl = 'https://moav.sh/support';
+
+  static final github = Uri.parse('https://github.com/MotherofallVPNs');
+  static final x = Uri.parse('https://x.com/motherofallvpns');
+  static final telegram = Uri.parse('https://t.me/motherofallvpns');
+}
 
 Future<void> _handleHomeAction(
   BuildContext context,
@@ -128,38 +129,66 @@ Future<void> _handleHomeAction(
   switch (action) {
     case _HomeAction.keys:
       await Navigator.of(context).push(KeyringScreen.route());
-      return;
     case _HomeAction.wipe:
       await showWipeDialog(context, ref, serverCount: serverCount);
-      return;
-    case _HomeAction.website:
-      await launchUrl(
-        Uri.parse('https://moav.sh/docs'),
-        mode: LaunchMode.externalApplication,
-      );
-      return;
+    case _HomeAction.docs:
+      await _open(MoavLinks.docs);
+    case _HomeAction.support:
+      await _open(MoavLinks.support);
     case _HomeAction.github:
-      await launchUrl(
-        Uri.parse('https://github.com/MotherofallVPNs'),
-        mode: LaunchMode.externalApplication,
-      );
-      return;
+      await _open(MoavLinks.github);
     case _HomeAction.x:
-      await launchUrl(
-        Uri.parse('https://x.com/motherofallvpns'),
-        mode: LaunchMode.externalApplication,
-      );
-      return;
+      await _open(MoavLinks.x);
     case _HomeAction.telegram:
-      await launchUrl(
-        Uri.parse('https://t.me/motherofallvpns'),
-        mode: LaunchMode.externalApplication,
-      );
-      return;
+      await _open(MoavLinks.telegram);
   }
 }
 
-enum _TileAction { test, edit, users, grafana, admin, deploy, remove }
+Future<void> _open(Uri url) =>
+    launchUrl(url, mode: LaunchMode.externalApplication);
+
+/// One menu row with the project's GitHub, X and Telegram as icon buttons.
+/// Tapping one closes the menu with that action, like a normal item.
+class _SocialRow extends PopupMenuEntry<_HomeAction> {
+  const _SocialRow();
+
+  @override
+  double get height => kMinInteractiveDimension;
+
+  @override
+  bool represents(_HomeAction? value) =>
+      value == _HomeAction.github ||
+      value == _HomeAction.x ||
+      value == _HomeAction.telegram;
+
+  @override
+  State<_SocialRow> createState() => _SocialRowState();
+}
+
+class _SocialRowState extends State<_SocialRow> {
+  @override
+  Widget build(BuildContext context) {
+    Widget button(IconData icon, String label, _HomeAction action) =>
+        IconButton(
+          icon: Icon(icon),
+          tooltip: label,
+          onPressed: () => Navigator.pop(context, action),
+        );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          button(Icons.code, 'GitHub', _HomeAction.github),
+          button(Icons.alternate_email, 'X', _HomeAction.x),
+          button(Icons.send_outlined, 'Telegram', _HomeAction.telegram),
+        ],
+      ),
+    );
+  }
+}
+
+enum _TileAction { test, edit, users, grafana, deploy, remove }
 
 class _ServerTile extends ConsumerWidget {
   const _ServerTile({required this.profile});
@@ -208,9 +237,6 @@ class _ServerTile extends ConsumerWidget {
               _TileAction.users => Navigator.of(
                 context,
               ).push(UsersScreen.route(profile)),
-              _TileAction.admin => Navigator.of(
-                context,
-              ).push(AdminPanelScreen.route(profile)),
               _TileAction.grafana => Navigator.of(
                 context,
               ).push(GrafanaScreen.route(profile)),
@@ -246,13 +272,6 @@ class _ServerTile extends ConsumerWidget {
                 child: ListTile(
                   leading: Icon(Icons.dashboard_outlined),
                   title: Text('Grafana'),
-                ),
-              ),
-              PopupMenuItem(
-                value: _TileAction.admin,
-                child: ListTile(
-                  leading: Icon(Icons.admin_panel_settings_outlined),
-                  title: Text('Admin dashboard'),
                 ),
               ),
               PopupMenuItem(

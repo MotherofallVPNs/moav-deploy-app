@@ -75,6 +75,12 @@ final appLockProvider =
 /// Prompts once on launch and again whenever the app returns to the
 /// foreground. The emergency wipe is reachable **without** unlocking: under
 /// duress, destroying the keys must be faster than proving who you are.
+///
+/// Privacy: the moment the app stops being the foreground focus
+/// ([AppLifecycleState.inactive], which precedes the OS task-switcher
+/// snapshot), the content is replaced by the branded [PrivacyShield]; it
+/// comes back only once the app is active again **and** unlocked. The
+/// child stays in the tree (offstage) so navigation state survives.
 class AppLockGate extends ConsumerStatefulWidget {
   const AppLockGate({super.key, required this.child});
 
@@ -86,6 +92,9 @@ class AppLockGate extends ConsumerStatefulWidget {
 
 class _AppLockGateState extends ConsumerState<AppLockGate>
     with WidgetsBindingObserver {
+  /// True while the app is not the active foreground app.
+  bool _obscured = false;
+
   @override
   void initState() {
     super.initState();
@@ -103,19 +112,67 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      ref.read(appLockProvider.notifier).lock();
-    } else if (state == AppLifecycleState.resumed &&
-        ref.read(appLockProvider) == LockState.locked) {
-      ref.read(appLockProvider.notifier).unlock();
+    switch (state) {
+      case AppLifecycleState.resumed:
+        setState(() => _obscured = false);
+        if (ref.read(appLockProvider) == LockState.locked) {
+          ref.read(appLockProvider.notifier).unlock();
+        }
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+        setState(() => _obscured = true);
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        setState(() => _obscured = true);
+        ref.read(appLockProvider.notifier).lock();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final lock = ref.watch(appLockProvider);
-    if (lock == LockState.unlocked) return widget.child;
+    final unlocked = lock == LockState.unlocked;
+    final covered = _obscured || !unlocked;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Offstage: not painted, not hit-testable, not read by screen readers,
+        // yet the navigator stack underneath survives the lock.
+        Visibility(
+          visible: !covered,
+          maintainState: true,
+          child: widget.child,
+        ),
+        if (covered)
+          PrivacyShield(
+            lock: unlocked ? null : lock,
+            onUnlock: () => ref.read(appLockProvider.notifier).unlock(),
+            onWipe: () => showWipeDialog(context, ref),
+          ),
+      ],
+    );
+  }
+}
+
+/// Opaque branded cover for the whole window. With [lock] `null` it is the
+/// plain splash shown while the app is inactive; otherwise it is the lock
+/// screen for that state, with the unlock button and the emergency wipe.
+class PrivacyShield extends StatelessWidget {
+  const PrivacyShield({
+    super.key,
+    this.lock,
+    required this.onUnlock,
+    required this.onWipe,
+  });
+
+  final LockState? lock;
+  final VoidCallback onUnlock;
+  final VoidCallback onWipe;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final lock = this.lock;
     return MoavScaffold(
       body: Center(
         child: Padding(
@@ -126,27 +183,30 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
               const MoavMark(size: 120),
               const SizedBox(height: 24),
               const MoavWordmark(suffix: 'Deploy', size: 26),
-              const SizedBox(height: 8),
-              Text(
-                lock == LockState.failed ? 'Unlock failed' : 'Locked',
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 28),
-              if (lock == LockState.unlocking)
-                const CircularProgressIndicator()
-              else ...[
-                GradientButton(
-                  onPressed: () => ref.read(appLockProvider.notifier).unlock(),
-                  icon: Icons.fingerprint,
-                  label: 'Unlock',
+              if (lock != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  lock == LockState.failed ? 'Unlock failed' : 'Locked',
+                  style: theme.textTheme.bodyMedium,
                 ),
-                const SizedBox(height: 40),
-                TextButton.icon(
-                  style: TextButton.styleFrom(foregroundColor: MoavColors.fail),
-                  onPressed: () => showWipeDialog(context, ref),
-                  icon: const Icon(Icons.delete_forever_outlined),
-                  label: const Text('Emergency wipe'),
-                ),
+                const SizedBox(height: 28),
+                if (lock == LockState.unlocking)
+                  const CircularProgressIndicator()
+                else ...[
+                  GradientButton(
+                    onPressed: onUnlock,
+                    icon: Icons.fingerprint,
+                    label: 'Unlock',
+                  ),
+                  const SizedBox(height: 40),
+                  TextButton.icon(
+                    style:
+                        TextButton.styleFrom(foregroundColor: MoavColors.fail),
+                    onPressed: onWipe,
+                    icon: const Icon(Icons.delete_forever_outlined),
+                    label: const Text('Emergency wipe'),
+                  ),
+                ],
               ],
             ],
           ),
