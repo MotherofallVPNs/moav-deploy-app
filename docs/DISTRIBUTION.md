@@ -12,7 +12,7 @@ first-class, not a fallback.
 | Google Play | Android users with store access | `.aab` | Closed testing track, uploaded by CI on each release; promoted to open testing and production by hand |
 | GitHub Releases | Censored regions, de-Googled phones | signed `.apk` and `.aab` | Attached by CI on each release |
 | Apple App Store | iOS users with store access | `.ipa` via App Store Connect | Not yet published |
-| TestFlight (public link) | iOS beta, and regions where a listing may be pulled | same build | Not yet set up |
+| TestFlight | iOS beta, and regions where a listing may be pulled | same build | Internal testers get every release automatically via CI; public link not yet opened |
 | APK mirror via moav.sh or Telegram | Users who cannot reach GitHub | same `.apk` plus SHA-256 | Coordinated with the MoaV team |
 | F-Droid | Privacy-focused Android users | Reproducible build from source | Not started; needs no proprietary dependencies |
 
@@ -46,9 +46,12 @@ first-class, not a fallback.
 
 - Use a public TestFlight link for the beta so at-risk users do not have to
   hand over an email address.
-- Builds expire after 90 days, so uploads should be automated once the Apple
-  account and App Store Connect API key exist. The `ios beta` Fastlane lane
-  is a stub until then.
+- Builds expire after 90 days, so uploads are automated: every published
+  GitHub Release runs the `ios beta` Fastlane lane on a macOS runner and
+  uploads the build to TestFlight internal testers. Signing comes from
+  fastlane match; see [RELEASING.md](RELEASING.md#ios).
+- Adding an external group or opening the public link is a manual step in
+  App Store Connect and triggers Apple's TestFlight review.
 
 ## Direct APK and sideload
 

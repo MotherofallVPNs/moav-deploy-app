@@ -1,8 +1,8 @@
 # Releasing
 
 How a version goes from `main` to users: GitHub Release assets (APK + AAB),
-the Google Play closed testing track, then open testing, then production. iOS delivery is not
-automated yet (see the end of this page).
+the Google Play closed testing track, then open testing, then production, and
+on iOS a TestFlight internal build (see [iOS](#ios) at the end of this page).
 
 ## Single source of truth for release notes
 
@@ -51,7 +51,10 @@ the release flow. Push it deliberately with `fastlane android sync_listing`.
      and attaches them to the Release;
    - appends the `## Store release notes` block to the Release body;
    - uploads the AAB to the Play **closed testing** track with the changelog and listing
-     (needs `PLAY_SERVICE_ACCOUNT_JSON`; skipped with a log line otherwise).
+     (needs `PLAY_SERVICE_ACCOUNT_JSON`; skipped with a log line otherwise);
+   - in a separate macOS job, builds the signed iOS IPA and uploads it to
+     TestFlight **internal** testers (needs the `ASC_*` and `MATCH_*` secrets;
+     skipped with a log line otherwise, without starting a macOS runner).
 6. **Test the closed testing build** from the Play listing or the testers
    link in the Play Console.
 7. **Promote to production** when ready. Either click Promote in the Play
@@ -64,8 +67,8 @@ the release flow. Push it deliberately with `fastlane android sync_listing`.
 
    CI never promotes. Production rollout stays a human decision.
 
-Manual runs of the workflow (`workflow_dispatch`) build and upload artifacts
-only; they never touch Play or the Release body.
+Manual runs of the workflow (`workflow_dispatch`) build and upload Android
+artifacts only; they never touch Play, TestFlight or the Release body.
 
 ## Required secrets
 
@@ -73,6 +76,10 @@ only; they never touch Play or the Release body.
 |---|---|
 | `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | Signing the AAB and APK; see [BUILDING.md](BUILDING.md) for how the keystore is made |
 | `PLAY_SERVICE_ACCOUNT_JSON` | Uploading to Google Play |
+| `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8_BASE64` | App Store Connect API key (id, issuer, base64 of the `.p8`) for signing lookups and the TestFlight upload |
+| `ASC_TEAM_ID` | Apple team id; optional, the Fastfile falls back to the project's |
+| `MATCH_PASSWORD` | Passphrase of the encrypted signing repo (fastlane match) |
+| `MATCH_DEPLOY_KEY` | Private half of the read-only deploy key that lets CI clone the signing repo over SSH |
 
 ### Creating `PLAY_SERVICE_ACCOUNT_JSON`
 
@@ -125,10 +132,81 @@ Lanes (`android/fastlane/Fastfile`):
 | `android promote_to_open` | Promote the current closed testing release to open testing | Humans only |
 | `android promote_production` | Promote the current open testing release to production | Humans only |
 | `android sync_listing` | Push title and descriptions for all locales from `fastlane/metadata` | Humans only |
-| `ios beta` | Stub. Prints a notice; nothing is uploaded | Nobody yet |
+| `ios sync_signing` | Install the distribution certificate and App Store profile from the match repo into the signing keychain; no build | Humans, when setting up a Mac |
+| `ios beta` | Build the signed App Store IPA and upload it to TestFlight internal testers | CI on release publish; humans for an off-cycle build |
 
 ## iOS
 
-The iOS lane is a stub until the Apple developer account and App Store
-Connect API key are set up. Until then, build with `flutter build ipa` and
-upload through Xcode or Transporter (see [DISTRIBUTION.md](DISTRIBUTION.md)).
+Every published GitHub Release also ships an iOS build to TestFlight
+**internal** testers (no external group, no App Store review submission).
+Promotion to an external TestFlight group or to the App Store stays a human
+step in App Store Connect.
+
+### Signing: fastlane match
+
+Signing material is managed by [fastlane match](https://docs.fastlane.tools/actions/match/)
+and lives encrypted in the private repo `MotherofallVPNs/moav-deploy-match`
+(branch `main`):
+
+- `certs/distribution/` holds the one Apple Distribution certificate and its
+  private key;
+- `profiles/appstore/` holds the App Store provisioning profile for
+  `org.motherofallvpns.moavdeploy`.
+
+Nothing in that repo is readable without `MATCH_PASSWORD` (kept in the owner's
+secrets store and as a GitHub Actions secret). CI reads the repo over SSH with
+a **read-only deploy key**: its public half is registered on the match repo as
+a deploy key, its private half is the `MATCH_DEPLOY_KEY` secret. The macOS job
+writes that key to `$RUNNER_TEMP`, verifies read access with `git ls-remote`
+before anything else, and deletes it at the end of the job. In CI, match runs
+`readonly`, so it never creates certificates or profiles; locally it runs
+read-write, reusing the stored certificate and regenerating the profile only
+if it is missing or invalid.
+
+If the org setting **Deploy keys** is off (GitHub returns "Deploy keys are
+disabled for this repository"), an org owner turns it on under
+**Organization settings, Member privileges, Deploy keys**, then registers the
+public key:
+
+```
+gh repo deploy-key add moav-deploy-match_deploy_ed25519.pub \
+  --repo MotherofallVPNs/moav-deploy-match --title "moav-deploy-app GitHub Actions (read-only)"
+```
+
+Never set `--allow-write`; CI only needs to clone.
+
+### Build number
+
+`pubspec.yaml` `+N` is the floor for the iOS build number. Before building, the
+lane asks TestFlight for the latest build of the same version; if that is
+`>= N` (a re-run, or a release cut without a bump) it uses latest + 1 so the
+upload never collides. Android keeps using `N` unchanged. Bumping `N` in the
+release PR, as the flow above requires, keeps both platforms on the same
+number.
+
+### Running the iOS lane locally
+
+Needs Xcode, Flutter, the App Store Connect API key `.p8` and the match
+passphrase. Your own SSH key must have access to the match repo.
+
+```
+export ASC_KEY_ID=<key id> ASC_ISSUER_ID=<issuer id> ASC_KEY_PATH=/path/to/AuthKey_<id>.p8
+export MATCH_PASSWORD=<match passphrase>
+cd android
+bundle exec fastlane ios sync_signing   # certificate + profile into the signing keychain
+bundle exec fastlane ios beta           # same as CI: build, sign, upload to TestFlight
+```
+
+The lane keeps the signing identity in a dedicated keychain
+(`~/Library/Keychains/moav-deploy-ios.keychain-db`) and leaves the Xcode
+project on automatic signing; it flips the Runner target to manual signing
+only for the duration of the archive and restores `project.pbxproj` after.
+
+### Rotating or recreating signing material
+
+Run `bundle exec fastlane match nuke appstore` only if the certificate must be
+revoked (it invalidates every build signed with it). To rotate the deploy key,
+generate a new ed25519 key, register the public half on the match repo, update
+`MATCH_DEPLOY_KEY`, then delete the old deploy key. To rotate the match
+passphrase, run `bundle exec fastlane match change_password` and update
+`MATCH_PASSWORD`.

@@ -162,3 +162,108 @@ jobs:
       - name: Remove Play service-account key
         if: always()
         run: rm -f "$RUNNER_TEMP/play-service-account.json"
+
+  # iOS delivery: a separate macOS job so an Apple-side failure never blocks
+  # the Android artifacts above. Only on a published release and only when the
+  # App Store Connect + match secrets exist. The presence check runs on a cheap
+  # Linux runner so forks and secret-less runs never spin up a macOS runner.
+  ios-preflight:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    outputs:
+      has_secrets: ${{ steps.check.outputs.has_secrets }}
+    steps:
+      - id: check
+        env:
+          HAS_IOS_SECRETS: ${{ secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' && secrets.ASC_KEY_P8_BASE64 != '' && secrets.MATCH_PASSWORD != '' && secrets.MATCH_DEPLOY_KEY != '' }}
+        run: |
+          echo "has_secrets=$HAS_IOS_SECRETS" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_IOS_SECRETS" != "true" ]; then
+            echo "iOS secrets (ASC_* / MATCH_*) not set; skipping the TestFlight upload."
+          fi
+
+  ios:
+    needs: ios-preflight
+    if: needs.ios-preflight.outputs.has_secrets == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+
+      - run: flutter --version
+      - run: flutter pub get
+
+      # The .p8 and the match deploy key only ever exist under $RUNNER_TEMP
+      # with mode 0600; the cleanup step below removes them even on failure.
+      # github.com host keys come from the API over HTTPS, not ssh-keyscan.
+      - name: Write App Store Connect key and match deploy key
+        env:
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          MATCH_DEPLOY_KEY: ${{ secrets.MATCH_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$ASC_KEY_P8_BASE64" | base64 -d > "$RUNNER_TEMP/AuthKey.p8"
+          grep -q 'BEGIN PRIVATE KEY' "$RUNNER_TEMP/AuthKey.p8"
+          printf '%s\n' "$MATCH_DEPLOY_KEY" > "$RUNNER_TEMP/match_deploy_key"
+          grep -q 'BEGIN OPENSSH PRIVATE KEY' "$RUNNER_TEMP/match_deploy_key"
+          mkdir -p ~/.ssh
+          curl -fsSL https://api.github.com/meta | jq -r '.ssh_keys[] | "github.com \(.)"' >> ~/.ssh/known_hosts
+          keychain_password="$(openssl rand -hex 24)"
+          echo "::add-mask::$keychain_password"
+          {
+            echo "ASC_KEY_PATH=$RUNNER_TEMP/AuthKey.p8"
+            echo "MATCH_GIT_PRIVATE_KEY=$RUNNER_TEMP/match_deploy_key"
+            echo "IOS_KEYCHAIN_PASSWORD=$keychain_password"
+          } >> "$GITHUB_ENV"
+
+      # Fail early with a pointed message if the deploy key is not registered
+      # on the match repo, instead of a generic clone error deep inside match.
+      - name: Check read access to the match repo
+        run: |
+          set -euo pipefail
+          if ! GIT_SSH_COMMAND="ssh -i $MATCH_GIT_PRIVATE_KEY -o IdentitiesOnly=yes" \
+              git ls-remote --exit-code git@github.com:MotherofallVPNs/moav-deploy-match.git HEAD >/dev/null; then
+            echo "::error::Cannot read MotherofallVPNs/moav-deploy-match with MATCH_DEPLOY_KEY. Add its public key as a read-only deploy key on that repo (see docs/RELEASING.md)."
+            exit 1
+          fi
+
+      - name: Build and upload to TestFlight (internal)
+        working-directory: android
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_TEAM_ID: ${{ secrets.ASC_TEAM_ID }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          FASTLANE_SKIP_UPDATE_CHECK: "1"
+          FASTLANE_HIDE_CHANGELOG: "1"
+          LC_ALL: en_US.UTF-8
+          LANG: en_US.UTF-8
+        run: bundle exec fastlane ios beta
+
+      - name: Upload IPA as workflow artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: moav-deploy-ios-${{ github.ref_name }}
+          path: build/ios/ipa/*.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove signing material
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/match_deploy_key"
+          security delete-keychain "$HOME/Library/Keychains/moav-deploy-ios.keychain-db" 2>/dev/null || true

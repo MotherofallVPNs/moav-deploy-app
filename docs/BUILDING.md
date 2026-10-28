@@ -117,6 +117,8 @@ flutter build ipa --release --export-method ad-hoc      # registered devices
 Signing uses Xcode automatic signing. Set `DEVELOPMENT_TEAM` once in Xcode
 (Runner target, Signing & Capabilities). No capabilities beyond the defaults
 are required. `NSFaceIDUsageDescription` is already in `Info.plist`.
+Store builds are signed with the shared distribution certificate from
+fastlane match instead; see the iOS section of [RELEASING.md](RELEASING.md#ios).
 
 ## Versioning
 
