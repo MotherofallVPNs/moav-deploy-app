@@ -1,3 +1,4 @@
-What is new in 0.2.9
-- Bundle QR codes now render crisp and scannable, including large subscription configs.
-- On iOS, reopening the app shows the splash cover instead of the last screen before unlock.
+What is new in 0.2.10
+- Share a whole user bundle as a single .zip from the config detail screen.
+- The main menu now shows the real GitHub, X and Telegram logos.
+- Tidied the menu: the admin dashboard now lives on the Server tab.
