@@ -1,5 +1,3 @@
-What is new in 0.2.8
-- New Donate section: support Conduit, Snowflake and MahsaNet from the app.
-- Disguise mode: make the app look like a plain Notes app, hidden behind a secret unlock.
-- New About screen with version info and a way to verify your download.
-- Polished branded splash screen.
+What is new in 0.2.9
+- Bundle QR codes now render crisp and scannable, including large subscription configs.
+- On iOS, reopening the app shows the splash cover instead of the last screen before unlock.
