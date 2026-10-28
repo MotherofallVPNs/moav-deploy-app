@@ -3,4 +3,8 @@
     <!-- MoaV background token (MoavColors.bg). The app is dark-only, so the
          window must start dark too or every cold start flashes white. -->
     <color name="launch_background">#0a0a0f</color>
+    <!-- Disguise mode: paper window behind the Notes decoy (NotesColors.paper)
+         and the solid background layer of the Notes adaptive icon. -->
+    <color name="decoy_background">#fffdf7</color>
+    <color name="ic_notes_background">#f5b82e</color>
 </resources>

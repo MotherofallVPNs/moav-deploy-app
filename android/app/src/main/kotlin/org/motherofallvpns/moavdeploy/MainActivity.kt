@@ -8,9 +8,11 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.security.MessageDigest
 
-class MainActivity : FlutterFragmentActivity() {
+// open: DecoyActivity (disguise mode) is this activity under another theme.
+open class MainActivity : FlutterFragmentActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        DecoyChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SIGNING_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {

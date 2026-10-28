@@ -24,7 +24,7 @@ class _GatedLock extends AppLockService {
   Future<bool> canLock() async => true;
 
   @override
-  Future<bool> authenticate() {
+  Future<bool> authenticate({bool disguised = false}) {
     final c = Completer<bool>();
     gates.add(c);
     return c.future;

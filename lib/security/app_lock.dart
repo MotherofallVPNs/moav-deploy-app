@@ -6,6 +6,7 @@ import 'package:local_auth_darwin/local_auth_darwin.dart';
 
 import '../features/wipe/wipe_dialog.dart';
 import '../theme/moav_theme.dart';
+import 'decoy/decoy_provider.dart';
 
 /// Wraps [LocalAuthentication] so it can be swapped in tests.
 class AppLockService {
@@ -25,18 +26,22 @@ class AppLockService {
 
   /// Prompts the user. Returns true on success or when no lock is available
   /// (so the app is never bricked on devices without a passcode).
-  Future<bool> authenticate() async {
+  ///
+  /// With [disguised] the prompt reads as the Notes app's own lock, so the
+  /// system sheet names no MoaV while the decoy is on.
+  Future<bool> authenticate({bool disguised = false}) async {
     if (!await canLock()) return true;
+    final name = disguised ? 'Notes' : 'MoaV Deploy';
     try {
       return await _auth.authenticate(
-        localizedReason: 'Unlock MoaV Deploy',
-        authMessages: const [
+        localizedReason: 'Unlock $name',
+        authMessages: [
           AndroidAuthMessages(
-            signInTitle: 'MoaV Deploy',
+            signInTitle: name,
             signInHint: 'Unlock with your fingerprint, face or screen lock',
             cancelButton: 'Not now',
           ),
-          IOSAuthMessages(
+          const IOSAuthMessages(
             cancelButton: 'Not now',
             localizedFallbackTitle: 'Use passcode',
           ),
@@ -60,7 +65,10 @@ class AppLockNotifier extends Notifier<LockState> {
   Future<void> unlock() async {
     if (state == LockState.unlocking) return;
     state = LockState.unlocking;
-    final ok = await ref.read(appLockServiceProvider).authenticate();
+    final disguised = ref.read(decoyProvider).enabled;
+    final ok = await ref
+        .read(appLockServiceProvider)
+        .authenticate(disguised: disguised);
     state = ok ? LockState.unlocked : LockState.failed;
   }
 

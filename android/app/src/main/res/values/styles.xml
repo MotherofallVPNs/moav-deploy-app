@@ -18,4 +18,12 @@
     <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">@color/launch_background</item>
     </style>
+    <!-- Disguise mode (DecoyActivity): a plain paper window, no MoaV
+         artwork, before and behind the Notes decoy. -->
+    <style name="DecoyLaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@color/decoy_background</item>
+    </style>
+    <style name="DecoyNormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@color/decoy_background</item>
+    </style>
 </resources>
