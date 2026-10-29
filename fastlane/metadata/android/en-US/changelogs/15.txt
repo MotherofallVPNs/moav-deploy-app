@@ -1,0 +1,5 @@
+What is new in 0.2.12
+- Tap a server to auto-check it and jump straight to install when MoaV is not set up yet.
+- Simpler install form (domain + admin password, with generate), plus an Advanced section.
+- Clearer, more realistic install progress, and a Go to the server button when it finishes.
+- About screen now shows the MoaV philosophy.

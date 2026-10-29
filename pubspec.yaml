@@ -1,7 +1,7 @@
 name: moav_deploy
 description: Deploy, manage, and monitor MoaV servers from your phone.
 publish_to: "none"
-version: 0.2.11+14
+version: 0.2.12+15
 
 environment:
   sdk: ^3.8.0
