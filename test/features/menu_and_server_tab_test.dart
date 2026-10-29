@@ -112,6 +112,8 @@ void main() {
     expect(find.byType(AboutScreen), findsOneWidget);
     expect(find.text('Version 0.2.7 (10)'), findsOneWidget);
     // No signing channel in the test binding: the screen says so, no crash.
+    await tester.scrollUntilVisible(find.text(AboutScreen.noFingerprint), 200,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text(AboutScreen.noFingerprint), findsOneWidget);
   });
 

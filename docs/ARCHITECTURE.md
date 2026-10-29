@@ -69,9 +69,12 @@ The concrete models live in `lib/core/moav_controller.dart`.
   stdin so secrets never appear in `ps`), launches it with `setsid nohup`,
   stores the PID as a job handle in the secure store, and polls
   `installStatus` by tailing `~/.moav-deploy/deploy.log` on reconnect. The
-  log carries `[moav-deploy] step N/3` and `[moav-deploy] exit=<code>`
+  log carries `[moav-deploy] step N/4` and `[moav-deploy] exit=<code>`
   markers so status is derivable from the log alone. The phone can suspend
-  the app; the server keeps working; the app reattaches.
+  the app; the server keeps working; the app reattaches. The four steps
+  (preflight, installer, bootstrap, start) have very different typical
+  durations, so `InstallProgress` gives each a share of the bar and eases
+  through it with the time spent in the step; 100% is the `exit=0` marker.
 - **Install is idempotent and never destructive.** On a box that already has
   `/opt/moav` the installer keeps the checkout untouched (a non-interactive
   run never updates it), fills only empty or placeholder `.env` values, and
@@ -88,7 +91,7 @@ The concrete models live in `lib/core/moav_controller.dart`.
   `.env` (mode 0600), disables the certificate-dependent protocols itself in
   domainless mode, and derives `DEFAULT_PROFILES` with the repo's own
   `derive_enabled_profiles`. `moav bootstrap --yes` + `moav start` then run in
-  a clean environment (step 3), so bootstrap reads the services from `.env`
+  a clean environment (steps 3 and 4), so bootstrap reads the services from `.env`
   instead of the exported `ENABLE_*` (which would otherwise re-enable the
   cert protocols domainless mode just disabled). The app writes nothing into
   `.env` itself. `deploy.sh` runs under `umask 022` (the launcher keeps its own

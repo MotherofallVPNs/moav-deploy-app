@@ -123,26 +123,20 @@ void main() {
           'authMethod': saved.authMethod.name,
         });
 
-        // Open the server hub; the connection row pings the box.
+        // Open the server hub: it pings the box and, with no MoaV on it,
+        // opens the install view by itself (the hub stays underneath).
         await tester.tap(find.text(_label));
         await _settleBounded(tester);
-        await _wait(tester, find.text('Users'));
-        await tester.tap(find.text('Check connection'));
-        await _wait(tester, find.textContaining('Connected.'),
+        await _wait(tester, find.text('Admin dashboard password'),
             timeout: const Duration(minutes: 2));
-        await _shot(binding, tester, '01c-server-hub-connected');
         results['connectionRow'] = find
-            .textContaining('Connected.')
+            .textContaining('Connected.', skipOffstage: false)
             .evaluate()
             .map((e) => (e.widget as Text).data)
             .firstOrNull;
-        // The hub list is lazy; the Deploy tile sits below the fold.
-        await _scrollTo(tester, find.text('Deploy'));
+        await _shot(binding, tester, '01c-install-auto-opened');
 
         // 2. Headless install, domainless unless MOAV_TEST_DOMAIN is set.
-        await tester.tap(find.text('Deploy'));
-        await _settleBounded(tester);
-        await _wait(tester, find.text('Admin dashboard password'));
         if (_domain.isNotEmpty) {
           await tester.enterText(
               find.widgetWithText(TextField, 'Domain'), _domain);
@@ -158,6 +152,11 @@ void main() {
             .map((p) => p.trim())
             .where((p) => p.isNotEmpty)
             .toList();
+        if (deselect.isNotEmpty) {
+          // The service list sits behind the Advanced toggle.
+          await tester.tap(find.byKey(const ValueKey('advanced-toggle')));
+          await _settleBounded(tester);
+        }
         for (final p in deselect) {
           final box = find.byKey(ValueKey('profile-$p'));
           await _scrollTo(tester, box);
@@ -217,8 +216,17 @@ void main() {
         );
         expect(status?.phase, InstallPhase.succeeded,
             reason: 'install did not succeed: ${status?.message}');
-        await tester.pageBack();
+        // Back to the hub, which re-checked the box once the install ended.
+        await tester.tap(find.text('Go to the server'));
         await _settleBounded(tester);
+        await _wait(tester, find.textContaining('is installed.'),
+            timeout: const Duration(minutes: 2));
+        results['connectionRowAfterInstall'] = find
+            .textContaining('Connected.')
+            .evaluate()
+            .map((e) => (e.widget as Text).data)
+            .firstOrNull;
+        await _shot(binding, tester, '02e-hub-after-install');
 
         // 3. Services table and doctor health.
         await tester.tap(find.text('Services'));

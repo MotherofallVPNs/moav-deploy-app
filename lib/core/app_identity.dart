@@ -10,11 +10,16 @@ class AppIdentity {
     required this.version,
     required this.buildNumber,
     required this.signingFingerprints,
+    this.packageName = '',
   });
 
   final String appName;
   final String version;
   final String buildNumber;
+
+  /// Bundle identifier (iOS) or application id (Android), from the package
+  /// metadata; empty when unknown.
+  final String packageName;
 
   /// SHA-256 of each signing certificate as `AA:BB:...`. Empty when the
   /// platform does not expose it (iOS, tests) or the lookup failed.
@@ -68,5 +73,6 @@ final appIdentityProvider = FutureProvider<AppIdentity>((ref) async {
     version: info.version,
     buildNumber: info.buildNumber,
     signingFingerprints: fingerprints,
+    packageName: info.packageName,
   );
 });
