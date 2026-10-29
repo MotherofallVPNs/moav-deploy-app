@@ -10,7 +10,7 @@
 
 [![Website](https://img.shields.io/badge/website-moav.sh-06b6d4.svg)](https://moav.sh) [![Docs](https://img.shields.io/badge/docs-moav.sh%2Fdocs-2563eb.svg)](https://moav.sh/docs/) [![MoaV](https://img.shields.io/badge/server-MoaV-8b5cf6.svg?logo=github&logoColor=white)](https://github.com/MotherofallVPNs/MoaV) [![moav-client](https://img.shields.io/badge/client-moav--client-7c3aed.svg?logo=github&logoColor=white)](https://github.com/MotherofallVPNs/moav-client) [![Telegram](https://img.shields.io/badge/Telegram-motherofallvpns-2CA5E0.svg?logo=telegram)](https://t.me/motherofallvpns) [![X](https://img.shields.io/badge/X-@motherofallvpns-000000.svg?logo=x)](https://x.com/motherofallvpns)
 
-<a href="https://play.google.com/store/apps/details?id=org.motherofallvpns.moavdeploy"><img src="https://img.shields.io/badge/Google_Play-open_testing-34A853.svg?style=for-the-badge&logo=googleplay&logoColor=white" alt="Get it on Google Play" height="36"></a>&nbsp;&nbsp;<img src="https://img.shields.io/badge/App_Store-coming_soon-6b7280.svg?style=for-the-badge&logo=apple&logoColor=white" alt="App Store: coming soon" height="36">
+<a href="https://play.google.com/store/apps/details?id=org.motherofallvpns.moavdeploy"><img src="https://img.shields.io/badge/Google_Play-open_testing-34A853.svg?style=for-the-badge&logo=googleplay&logoColor=white" alt="Get it on Google Play" height="36"></a>&nbsp;&nbsp;<a href="https://testflight.apple.com/join/7S972Bwk"><img src="https://img.shields.io/badge/iOS-TestFlight_beta-0D96F6.svg?style=for-the-badge&logo=apple&logoColor=white" alt="Join the iOS TestFlight beta" height="36"></a>
 
 Built and maintained by the **[MoaV](https://github.com/MotherofallVPNs)** community.
 
@@ -63,7 +63,7 @@ the bundles this app produces.
 |---|---|
 | [Google Play](https://play.google.com/store/apps/details?id=org.motherofallvpns.moavdeploy) | Open testing |
 | [GitHub Releases](https://github.com/MotherofallVPNs/moav-deploy-app/releases) | Signed APK and AAB attached to every release |
-| App Store | Not yet published |
+| [iOS TestFlight](https://testflight.apple.com/join/7S972Bwk) | Public beta (open link) |
 
 You need your own server with SSH access. MoaV itself is free and open source;
 see the [MoaV docs](https://moav.sh/docs/) for server requirements.
