@@ -8,17 +8,25 @@ import '../../theme/moav_theme.dart';
 import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
 import '../../widgets/log_view.dart';
+import '../server/server_screen.dart';
 import 'deploy_provider.dart';
+import 'install_inputs.dart';
 
 /// Deploy MoaV on a server: collects installer inputs, launches the detached
 /// install, and streams the server-side log with live status.
 class DeployScreen extends ConsumerWidget {
-  const DeployScreen({super.key, required this.profile});
+  const DeployScreen({super.key, required this.profile, this.fromServer = false});
 
   final ServerProfile profile;
 
-  static Route<void> route(ServerProfile profile) =>
-      MaterialPageRoute(builder: (_) => DeployScreen(profile: profile));
+  /// True when the server hub is the route below, so "Go to the server"
+  /// returns to it instead of opening a second one.
+  final bool fromServer;
+
+  static Route<void> route(ServerProfile profile, {bool fromServer = false}) =>
+      MaterialPageRoute(
+        builder: (_) => DeployScreen(profile: profile, fromServer: fromServer),
+      );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -39,8 +47,21 @@ class DeployScreen extends ConsumerWidget {
       ),
       body: state.handle == null
           ? _InstallForm(state: state, onStart: notifier.start)
-          : _JobView(state: state, onReset: notifier.reset),
+          : _JobView(
+              state: state,
+              onReset: notifier.reset,
+              onGoToServer: () => _goToServer(context),
+            ),
     );
+  }
+
+  void _goToServer(BuildContext context) {
+    final nav = Navigator.of(context);
+    if (fromServer) {
+      nav.pop();
+    } else {
+      nav.pushReplacement(ServerScreen.route(profile));
+    }
   }
 }
 
@@ -62,6 +83,12 @@ class _InstallFormState extends State<_InstallForm> {
 
   /// Profiles to build and start; starts as upstream's own default set.
   final _profiles = <String>{...MoavProfiles.defaults};
+
+  bool _advanced = false;
+  bool _showPassword = false;
+
+  /// False once the user typed an email; until then it follows the domain.
+  bool _emailFollowsDomain = true;
 
   @override
   void dispose() {
@@ -85,10 +112,25 @@ class _InstallFormState extends State<_InstallForm> {
     return null;
   }
 
+  bool get _defaultProfiles =>
+      _profiles.length == MoavProfiles.defaults.length &&
+      _profiles.containsAll(MoavProfiles.defaults);
+
+  void _onDomainChanged(String value) {
+    if (_emailFollowsDomain) _email.text = InstallInputs.defaultEmail(value);
+    setState(() {});
+  }
+
+  void _generatePassword() {
+    _password.text = InstallInputs.generatePassword();
+    setState(() => _showPassword = true);
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.state;
     final theme = Theme.of(context);
+    final domainless = _domain.text.trim().isEmpty;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
       children: [
@@ -103,13 +145,12 @@ class _InstallFormState extends State<_InstallForm> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Idempotent install', style: theme.textTheme.titleMedium),
+                    Text('Set up MoaV', style: theme.textTheme.titleMedium),
                     const SizedBox(height: 4),
                     Text(
                       'Runs the MoaV installer on the server in the background. '
-                      'Safe to re-run: an existing install is kept, users and '
-                      'keys are never touched, and settings below only fill '
-                      'values that are not configured yet.',
+                      'Safe to re-run: an existing install is kept and users '
+                      'and keys are never touched.',
                       style: theme.textTheme.bodySmall,
                     ),
                   ],
@@ -118,89 +159,120 @@ class _InstallFormState extends State<_InstallForm> {
             ],
           ),
         ),
-        const SectionHeader('Installer inputs'),
+        const SectionHeader('Setup'),
         TextField(
           controller: _domain,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: 'Domain',
-            hintText: 'vpn.example.org (blank = keep existing / domainless)',
+            hintText: 'vpn.example.org',
+            helperText: domainless
+                ? 'Optional. Blank installs by IP only (domainless mode).'
+                : 'Certificates from Let\'s Encrypt for this domain.',
+            helperMaxLines: 2,
           ),
           style: moavMono(size: 14),
           keyboardType: TextInputType.url,
           autocorrect: false,
-          onChanged: (_) => setState(() {}),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _email,
-          decoration: const InputDecoration(
-            labelText: "Let's Encrypt email",
-            hintText: 'needed when a domain is set',
-          ),
-          style: moavMono(size: 14),
-          keyboardType: TextInputType.emailAddress,
-          autocorrect: false,
-          onChanged: (_) => setState(() {}),
+          onChanged: _onDomainChanged,
         ),
         const SizedBox(height: 12),
         TextField(
           controller: _password,
           decoration: InputDecoration(
             labelText: 'Admin dashboard password',
+            helperText: 'At least 12 characters. Needed to open the admin panel.',
+            helperMaxLines: 2,
             errorText: _passwordError,
+            suffixIcon: IconButton(
+              tooltip: _showPassword ? 'Hide password' : 'Show password',
+              icon: Icon(
+                _showPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                size: 20,
+              ),
+              onPressed: () => setState(() => _showPassword = !_showPassword),
+            ),
           ),
-          obscureText: true,
+          style: _showPassword ? moavMono(size: 14) : null,
+          obscureText: !_showPassword,
           autocorrect: false,
           enableSuggestions: false,
           onChanged: (_) => setState(() {}),
         ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _branch,
-          decoration: const InputDecoration(
-            labelText: 'MoaV branch (optional)',
-            hintText: 'main',
-          ),
-          style: moavMono(size: 14),
-          autocorrect: false,
-          onChanged: (_) => setState(() {}),
-        ),
-        SectionHeader(
-          'Services',
-          trailing: TextButton(
-            onPressed: _profiles.length == MoavProfiles.defaults.length &&
-                    _profiles.containsAll(MoavProfiles.defaults)
-                ? null
-                : () => setState(() => _profiles
-                  ..clear()
-                  ..addAll(MoavProfiles.defaults)),
-            child: const Text('Reset to default'),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: _generatePassword,
+            icon: const Icon(Icons.casino_outlined, size: 16),
+            label: const Text('Generate random'),
           ),
         ),
-        Text(
-          'Passed to the MoaV installer as ENABLE_* flags for a .env this '
-          'install creates; without a domain the installer turns off the '
-          'certificate-dependent ones itself. Change them later from the '
-          'Services tab.',
-          style: theme.textTheme.bodySmall,
+        const SizedBox(height: 4),
+        _AdvancedToggle(
+          value: _advanced,
+          onChanged: (v) => setState(() => _advanced = v),
         ),
-        const SizedBox(height: 10),
-        ServiceSelection(
-          selected: _profiles,
-          onChanged: (name, on) => setState(() {
-            if (on) {
-              _profiles.add(name);
-            } else {
-              _profiles.remove(name);
-            }
-          }),
-        ),
-        if (_profiles.isEmpty) ...[
-          const SizedBox(height: 8),
+        if (_advanced) ...[
+          const SizedBox(height: 12),
+          TextField(
+            controller: _email,
+            decoration: const InputDecoration(
+              labelText: "Let's Encrypt email",
+              helperText: 'Certificate notices. Defaults to info@ your domain.',
+              helperMaxLines: 2,
+            ),
+            style: moavMono(size: 14),
+            keyboardType: TextInputType.emailAddress,
+            autocorrect: false,
+            onChanged: (_) => setState(() => _emailFollowsDomain = false),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _branch,
+            decoration: const InputDecoration(
+              labelText: 'MoaV branch',
+              hintText: 'main',
+              helperText: 'Git branch of MoaV to install. Leave on main.',
+            ),
+            style: moavMono(size: 14),
+            autocorrect: false,
+            onChanged: (_) => setState(() {}),
+          ),
+          SectionHeader(
+            'Services',
+            trailing: TextButton(
+              onPressed: _defaultProfiles
+                  ? null
+                  : () => setState(() => _profiles
+                    ..clear()
+                    ..addAll(MoavProfiles.defaults)),
+              child: const Text('Reset to default'),
+            ),
+          ),
           Text(
-            'Select at least one service.',
-            style: theme.textTheme.bodySmall?.copyWith(color: MoavColors.fail),
+            'Passed to the MoaV installer as ENABLE_* flags for a .env this '
+            'install creates; without a domain the installer turns off the '
+            'certificate-dependent ones itself. Change them later from the '
+            'Services tab.',
+            style: theme.textTheme.bodySmall,
           ),
+          const SizedBox(height: 10),
+          ServiceSelection(
+            selected: _profiles,
+            onChanged: (name, on) => setState(() {
+              if (on) {
+                _profiles.add(name);
+              } else {
+                _profiles.remove(name);
+              }
+            }),
+          ),
+          if (_profiles.isEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Select at least one service.',
+              style: theme.textTheme.bodySmall?.copyWith(color: MoavColors.fail),
+            ),
+          ],
         ],
         if (s.error != null) ...[
           const SizedBox(height: 16),
@@ -222,16 +294,59 @@ class _InstallFormState extends State<_InstallForm> {
 
   void _start() {
     final branch = _branch.text.trim();
+    final domain = _domain.text.trim();
+    final email = _email.text.trim();
     widget.onStart(
       InstallSpec(
-        domain: _domain.text.trim(),
-        email: _email.text.trim(),
+        domain: domain,
+        email: email.isEmpty ? InstallInputs.defaultEmail(domain) : email,
         adminPassword: _password.text,
         extraEnv: branch.isEmpty ? const {} : {'MOAV_BRANCH': branch},
         // Catalog order, so DEFAULT_PROFILES reads like upstream writes it.
         profiles: [
           for (final p in MoavProfiles.all)
             if (_profiles.contains(p.name)) p.name,
+        ],
+      ),
+    );
+  }
+}
+
+/// "Advanced" row with a switch: email, branch and the service list live
+/// behind it so the default install is two fields and one tap.
+class _AdvancedToggle extends StatelessWidget {
+  const _AdvancedToggle({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return MoavCard(
+      padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+      onTap: () => onChanged(!value),
+      child: Row(
+        children: [
+          const Icon(Icons.tune, size: 18, color: MoavColors.textSecondary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Advanced', style: theme.textTheme.titleSmall),
+                Text(
+                  'Email, MoaV branch and service selection',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            key: const ValueKey('advanced-toggle'),
+            value: value,
+            onChanged: onChanged,
+          ),
         ],
       ),
     );
@@ -289,10 +404,28 @@ class ServiceSelection extends StatelessWidget {
 }
 
 class _JobView extends StatelessWidget {
-  const _JobView({required this.state, required this.onReset});
+  const _JobView({
+    required this.state,
+    required this.onReset,
+    required this.onGoToServer,
+  });
 
   final DeployState state;
   final Future<void> Function() onReset;
+  final VoidCallback onGoToServer;
+
+  /// What each step is doing, for the line under the step title.
+  static String? hintFor(InstallStatus? status) {
+    if (status == null || status.phase != InstallPhase.running) return null;
+    return switch (status.step) {
+      1 => 'Checking the server and any existing install.',
+      2 => 'Installing packages and Docker, cloning MoaV and writing .env.',
+      3 => 'Building the Docker images, then keys, certificates and the first '
+          'user. This is the longest step, usually several minutes.',
+      4 => 'Starting the services.',
+      _ => null,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -302,7 +435,12 @@ class _JobView extends StatelessWidget {
     final lines = status?.logTail ?? const <String>[];
     final progress = phase == InstallPhase.succeeded
         ? 1.0
-        : (s.isRunning ? status?.progress : (status?.progress ?? 0));
+        : (s.isRunning ? s.progress : (s.progress ?? 0));
+    final title = status == null
+        ? 'Starting the install job…'
+        : status.message ?? (phase == InstallPhase.pending ? 'Starting…' : '');
+    final hint = hintFor(status);
+    final theme = Theme.of(context);
 
     return Column(
       children: [
@@ -320,10 +458,10 @@ class _JobView extends StatelessWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        status?.message ?? 'Waiting for the server…',
+                        title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        style: theme.textTheme.bodyMedium?.copyWith(
                               color: MoavColors.text,
                             ),
                       ),
@@ -335,6 +473,28 @@ class _JobView extends StatelessWidget {
                       ),
                   ],
                 ),
+                if (hint != null) ...[
+                  const SizedBox(height: 6),
+                  Text(hint, style: theme.textTheme.bodySmall),
+                ],
+                if (s.waitingForServer) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(strokeWidth: 1.5),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Waiting for the server…',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: MoavColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 12),
                 _GradientProgress(value: progress),
                 if (s.error != null) ...[
@@ -358,7 +518,28 @@ class _JobView extends StatelessWidget {
             ),
           ),
         ),
-        if ((status?.isTerminal ?? false) || phase == InstallPhase.unknown)
+        if (phase == InstallPhase.succeeded)
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Column(
+                children: [
+                  GradientButton(
+                    onPressed: onGoToServer,
+                    expand: true,
+                    icon: Icons.dns_outlined,
+                    label: 'Go to the server',
+                  ),
+                  TextButton(
+                    onPressed: onReset,
+                    child: const Text('Start another install'),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else if (phase == InstallPhase.failed || phase == InstallPhase.unknown)
           SafeArea(
             top: false,
             child: Padding(

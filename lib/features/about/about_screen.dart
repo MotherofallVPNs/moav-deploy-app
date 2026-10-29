@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,9 +9,11 @@ import '../../core/moav_links.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/moav_app_bar.dart';
 
-/// Version, signing fingerprint and how to verify a sideloaded APK, so a
-/// user who did not install from a store can tell an official build from a
-/// re-signed copy. Reached from the home menu (issue #25).
+/// What MoaV is for, the version, and how to tell an official build from a
+/// re-signed copy: on Android the APK signing fingerprint plus the
+/// SHA256SUMS check for sideloads (issue #25); on iOS, where the store
+/// signs every build, the bundle identifier instead. Reached from the home
+/// menu.
 class AboutScreen extends ConsumerWidget {
   const AboutScreen({super.key});
 
@@ -18,28 +21,57 @@ class AboutScreen extends ConsumerWidget {
       MaterialPageRoute(builder: (_) => const AboutScreen());
 
   static const appName = 'MoaV Deploy';
+  static const tagline = 'Mother of all VPNs';
 
   /// Shown instead of a fingerprint where the platform has no signing API
-  /// the app can read (iOS, desktop, tests).
+  /// the app can read (desktop, tests). iOS hides the card instead.
   static const noFingerprint = 'Not available on this platform';
+
+  /// Grounded in moav.sh: internet access is a human right, and MoaV runs
+  /// many circumvention protocols at once so a block on one is not a block
+  /// on all.
+  static const philosophy =
+      'Free and open access to the internet is a basic human right. MoaV '
+      '(Mother of all VPNs) is open-source, public-interest infrastructure '
+      'built for censorship and shutdown environments. It runs many '
+      'circumvention protocols at once, so when one route is blocked another '
+      'keeps people online. MoaV Deploy puts that infrastructure in your '
+      'hands: run and manage your own node from your phone.';
+
+  /// The bundle identifier the project ships under; a different one means
+  /// a rebuilt app, not the official one.
+  static const iosBundleId = 'org.motherofallvpns.moavdeploy';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final identity = ref.watch(appIdentityProvider);
     final value = identity.value;
+    // iOS has no readable signing certificate and no sideloaded APK: the
+    // App Store and TestFlight sign and verify every build.
+    final ios = defaultTargetPlatform == TargetPlatform.iOS;
     return MoavScaffold(
       appBar: MoavAppBar(title: const Text('About')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
           _Header(identity: identity),
-          const SectionHeader('Signing certificate'),
-          _FingerprintCard(
-            fingerprint: value?.signingFingerprint,
-            loading: identity.isLoading,
-          ),
-          const SectionHeader('Verify your download'),
-          const _VerifyCard(),
+          const SectionHeader('Why MoaV'),
+          const _PhilosophyCard(),
+          if (ios) ...[
+            const SectionHeader('App integrity'),
+            _IntegrityCard(
+              bundleId: value?.packageName,
+              loading: identity.isLoading,
+            ),
+          ] else ...[
+            const SectionHeader('Signing certificate'),
+            _FingerprintCard(
+              fingerprint: value?.signingFingerprint,
+              loading: identity.isLoading,
+            ),
+            const SectionHeader('Verify your download'),
+            const _VerifyCard(),
+          ],
           const SectionHeader('Links'),
           _LinkTile(
             icon: Icons.code,
@@ -97,6 +129,16 @@ class _Header extends StatelessWidget {
           const MoavWordmark(suffix: 'Deploy', size: 22),
           const SizedBox(height: 6),
           Text(
+            AboutScreen.tagline,
+            key: const ValueKey('about-tagline'),
+            textAlign: TextAlign.center,
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: MoavColors.text),
+          ),
+          const SizedBox(height: 6),
+          Text(
             label,
             key: const ValueKey('about-version'),
             style: moavMono(size: 13, color: MoavColors.cyan),
@@ -110,6 +152,73 @@ class _Header extends StatelessWidget {
                 .bodyMedium
                 ?.copyWith(color: MoavColors.textSecondary),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhilosophyCard extends StatelessWidget {
+  const _PhilosophyCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return MoavCard(
+      accent: true,
+      child: Text(
+        AboutScreen.philosophy,
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium
+            ?.copyWith(color: MoavColors.text, height: 1.45),
+      ),
+    );
+  }
+}
+
+/// iOS stand-in for the fingerprint: the bundle identifier of the running
+/// build, which an App Store or TestFlight install guarantees was signed
+/// for the project's account. Releases and SHA256SUMS are linked below.
+class _IntegrityCard extends StatelessWidget {
+  const _IntegrityCard({required this.bundleId, required this.loading});
+
+  final String? bundleId;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final body = Theme.of(context)
+        .textTheme
+        .bodyMedium
+        ?.copyWith(color: MoavColors.textSecondary, height: 1.4);
+    final id = bundleId;
+    final official = id == AboutScreen.iosBundleId;
+    return MoavCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'On iOS every build is signed and checked by Apple before it '
+            'installs through the App Store or TestFlight, so there is no '
+            'certificate fingerprint to compare. The bundle identifier of '
+            'this build is shown below; the official app ships as '
+            '${AboutScreen.iosBundleId}.',
+            style: body,
+          ),
+          const SizedBox(height: 12),
+          CodeBlock(
+            loading ? 'Reading bundle identifier…' : (id ?? 'Unknown'),
+            size: 13,
+            selectable: !loading && id != null,
+          ),
+          if (id != null && !loading) ...[
+            const SizedBox(height: 10),
+            StatusPill(
+              official ? 'Official bundle identifier' : 'Not the official identifier',
+              tone: official ? StatusTone.pass : StatusTone.warn,
+              icon: official ? Icons.verified_outlined : Icons.warning_amber_outlined,
+            ),
+          ],
         ],
       ),
     );

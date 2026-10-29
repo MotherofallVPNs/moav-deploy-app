@@ -44,6 +44,9 @@ Future<_Controller> _pump(WidgetTester tester) async {
   await tester.enterText(find.widgetWithText(TextField, 'Admin dashboard password'),
       'secret-but-long');
   await tester.pumpAndSettle();
+  // The service list sits behind the Advanced toggle.
+  await tester.tap(find.byKey(const ValueKey('advanced-toggle')));
+  await tester.pumpAndSettle();
   return c;
 }
 

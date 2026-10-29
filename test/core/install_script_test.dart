@@ -124,14 +124,25 @@ void main() {
       expect(umask, lessThan(installer));
     });
 
-    test('three self-describing steps and an exit marker', () {
-      expect(InstallScript.totalSteps, 3);
+    test('four self-describing steps and an exit marker', () {
+      expect(InstallScript.totalSteps, 4);
       for (var i = 1; i <= InstallScript.totalSteps; i++) {
         expect(script, contains('step $i "'));
       }
       expect(script, contains('[moav-deploy] step \$1/${InstallScript.totalSteps}:'));
       expect(script, contains(InstallScript.exitMarker));
       expect(script, isNot(contains('rm -rf')));
+    });
+
+    test('bootstrap and start are separate steps, start after bootstrap', () {
+      final bootstrap = script.indexOf('step 3 "Bootstrap');
+      final start = script.indexOf('step 4 "Start services"');
+      final bootstrapCmd = script.indexOf('moav_cmd bootstrap --yes');
+      final startCmd = script.indexOf('moav_cmd start');
+      expect(bootstrap, greaterThan(0));
+      expect(bootstrapCmd, greaterThan(bootstrap));
+      expect(start, greaterThan(bootstrapCmd));
+      expect(startCmd, greaterThan(start));
     });
   });
 }

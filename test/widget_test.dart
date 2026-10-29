@@ -979,7 +979,7 @@ void main() {
     expect(find.byIcon(Icons.cloud_off), findsOneWidget);
   });
 
-  testWidgets('server hub: Check connection shows the cause inline',
+  testWidgets('server hub: the check runs on open and shows the cause inline',
       (tester) async {
     final store = MemoryCredStore()..profiles = [demoProfile];
     final controller = _FakeController(const [])
@@ -997,10 +997,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
-
-    expect(find.text('Not checked yet'), findsOneWidget);
-    await tester.tap(find.text('Check connection'));
-    await tester.pumpAndSettle();
+    expect(find.text('Not checked yet'), findsNothing);
     expect(find.text('Authentication failed.'), findsOneWidget);
     expect(find.textContaining('rejected the key or password'), findsOneWidget);
     expect(find.byIcon(Icons.key_off), findsOneWidget);

@@ -311,6 +311,8 @@ class InstallStatus {
     this.logTail = const [],
     this.progress,
     this.message,
+    this.step,
+    this.totalSteps,
   });
 
   final InstallPhase phase;
@@ -318,10 +320,15 @@ class InstallStatus {
   /// Most recent log lines, oldest first.
   final List<String> logTail;
 
-  /// 0.0–1.0 when derivable from the log, else `null`.
+  /// 0.0–1.0 when derivable from the log, else `null`. Coarse: the latest
+  /// step over the step count. `InstallProgress` refines it over time.
   final double? progress;
 
   final String? message;
+
+  /// Latest `[moav-deploy] step N/M` marker seen, when any.
+  final int? step;
+  final int? totalSteps;
 
   bool get isTerminal =>
       phase == InstallPhase.succeeded || phase == InstallPhase.failed;

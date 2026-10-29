@@ -150,7 +150,7 @@ class SshMoavController implements MoavController {
   /// `kill -0 <pid>; tail -n 400 ~/.moav-deploy/deploy.log`.
   ///
   /// Phase is derived from the terminal `[moav-deploy] exit=` marker first,
-  /// then process liveness; progress from the latest `step N/5` marker.
+  /// then process liveness; progress from the latest `step N/M` marker.
   @override
   Future<InstallStatus> installStatus(InstallHandle handle) async {
     final client = await _connected();
@@ -183,19 +183,25 @@ class SshMoavController implements MoavController {
 
     int? exitCode;
     int step = 0;
+    // The marker's own denominator wins, so a job written by another app
+    // version (3 or 4 steps) still reports a sane fraction.
+    int total = totalSteps;
     String? stepTitle;
     for (final l in lines) {
       if (l.startsWith(InstallScript.exitMarker)) {
         exitCode = int.tryParse(l.substring(InstallScript.exitMarker.length).trim());
       } else if (l.startsWith(InstallScript.stepMarker)) {
-        final m = RegExp(r'step (\d+)/\d+: (.*)').firstMatch(l);
+        final m = RegExp(r'step (\d+)/(\d+): (.*)').firstMatch(l);
         if (m != null) {
           step = int.parse(m.group(1)!);
-          stepTitle = m.group(2);
+          total = int.parse(m.group(2)!);
+          stepTitle = m.group(3);
         }
       }
     }
-    final progress = step == 0 ? null : step / totalSteps;
+    final progress = step == 0 ? null : step / total;
+    final seen = step == 0 ? null : step;
+    final seenTotal = step == 0 ? null : total;
 
     if (exitCode != null) {
       return InstallStatus(
@@ -205,6 +211,8 @@ class SshMoavController implements MoavController {
         message: exitCode == 0
             ? 'Install finished'
             : 'Install failed (exit $exitCode)',
+        step: seen,
+        totalSteps: seenTotal,
       );
     }
     if (alive) {
@@ -213,6 +221,8 @@ class SshMoavController implements MoavController {
         logTail: lines,
         progress: progress,
         message: stepTitle,
+        step: seen,
+        totalSteps: seenTotal,
       );
     }
     if (lines.isEmpty) {
@@ -226,6 +236,8 @@ class SshMoavController implements MoavController {
       logTail: lines,
       progress: progress,
       message: 'Install process ended without reporting a result',
+      step: seen,
+      totalSteps: seenTotal,
     );
   }
 

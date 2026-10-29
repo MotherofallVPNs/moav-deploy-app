@@ -15,8 +15,8 @@ import 'ssh_connection.dart';
 /// `ENABLE_*`. It never modifies an existing `/opt/moav`, only fills empty
 /// `.env` values on an existing box (the installer's own rule), and bootstraps
 /// only a never-bootstrapped box.
-/// `[moav-deploy] step N/3` and `[moav-deploy] exit=<code>` markers make the
-/// log self-describing. The three steps are documented in docs/ARCHITECTURE.md.
+/// `[moav-deploy] step N/4` and `[moav-deploy] exit=<code>` markers make the
+/// log self-describing. The four steps are documented in docs/ARCHITECTURE.md.
 class InstallScript {
   InstallScript._();
 
@@ -25,7 +25,7 @@ class InstallScript {
   static const specPath = '$dir/spec.env';
   static const logPath = '$dir/deploy.log';
 
-  static const totalSteps = 3;
+  static const totalSteps = 4;
   static const stepMarker = '[moav-deploy] step ';
   static const exitMarker = '[moav-deploy] exit=';
 
@@ -69,7 +69,7 @@ if [ -f "$SPEC" ]; then . "$SPEC"; fi
 MD_DOMAIN="${MD_DOMAIN:-}"; MD_EMAIL="${MD_EMAIL:-}"; MD_ADMIN_PASSWORD="${MD_ADMIN_PASSWORD:-}"
 MD_ENABLE="${MD_ENABLE:-}"
 
-step()   { echo; echo "[moav-deploy] step $1/3: $2"; }
+step()   { echo; echo "[moav-deploy] step $1/4: $2"; }
 finish() { rm -f "$SPEC"; echo; echo "[moav-deploy] exit=$1"; exit "$1"; }
 moav_cmd() { if [ -x "$INSTALL_DIR/moav.sh" ]; then "$INSTALL_DIR/moav.sh" "$@"; else moav "$@"; fi; }
 
@@ -126,15 +126,16 @@ rc=$?
 unset MD_ADMIN_PASSWORD
 if [ $rc -ne 0 ]; then echo "Installer failed (exit $rc)"; finish $rc; fi
 
-step 3 "Bootstrap and start"
+step 3 "Bootstrap MoaV"
 cd "$INSTALL_DIR" || finish 1
 if [ "$BOOTSTRAP" = 1 ]; then
   # Clean environment: no ENABLE_*/MOAV_* exports, so bootstrap reads .env only
   # (install.sh already set DOMAIN, services and the domainless disables there).
-  echo "Bootstrapping (keys, certs, first user) and starting services..."
+  echo "Bootstrapping (keys, certs, first user); the image build is the long part..."
   moav_cmd bootstrap --yes < /dev/null
   rc=$?
   if [ $rc -ne 0 ]; then echo "Bootstrap failed (exit $rc)"; finish $rc; fi
+  step 4 "Start services"
   moav_cmd start < /dev/null
   rc=$?
   if [ $rc -ne 0 ]; then echo "Start failed (exit $rc)"; finish $rc; fi

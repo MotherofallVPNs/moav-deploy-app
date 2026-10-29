@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/moav_controller.dart';
 import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/moav_app_bar.dart';
@@ -10,10 +9,14 @@ import '../deploy/deploy_screen.dart';
 import '../donate/donate_screen.dart';
 import '../operate/grafana_screen.dart';
 import '../operate/operate_screen.dart';
-import '../servers/servers_provider.dart';
 import '../users/users_screen.dart';
+import 'server_connection.dart';
 
 /// Hub for one server: everything the app can do with it.
+///
+/// Opening it runs the connection check. A reachable server without MoaV
+/// goes straight to the install view (once per visit); an installed one
+/// stays here.
 class ServerScreen extends StatelessWidget {
   const ServerScreen({super.key, required this.profile});
 
@@ -137,7 +140,8 @@ class ServerScreen extends StatelessWidget {
             icon: Icons.rocket_launch_outlined,
             title: 'Deploy',
             subtitle: 'Install or re-run MoaV setup (idempotent)',
-            onTap: () => Navigator.of(context).push(DeployScreen.route(profile)),
+            onTap: () => Navigator.of(context)
+                .push(DeployScreen.route(profile, fromServer: true)),
           ),
         ],
       ),
@@ -188,8 +192,10 @@ class _HubTile extends StatelessWidget {
   }
 }
 
-/// "Check connection" with the result shown inline: a green pill when the
-/// server answers, a quiet notice stating the cause when it does not.
+/// The connection check, run on open and on "Check connection", with the
+/// result inline: a green line when the server answers, a quiet notice
+/// stating the cause when it does not. A server without MoaV opens the
+/// install view by itself the first time the check says so.
 class _ConnectionRow extends ConsumerStatefulWidget {
   const _ConnectionRow({required this.profile});
 
@@ -200,29 +206,29 @@ class _ConnectionRow extends ConsumerStatefulWidget {
 }
 
 class _ConnectionRowState extends ConsumerState<_ConnectionRow> {
-  bool _checking = false;
-  ConnectionCheck? _result;
+  bool _autoOpened = false;
 
-  Future<void> _check() async {
-    setState(() {
-      _checking = true;
-      _result = null;
-    });
-    final check = await ref
-        .read(moavControllerProvider(widget.profile.id))
-        .ping();
-    if (!mounted) return;
-    setState(() {
-      _checking = false;
-      _result = check;
-    });
-  }
+  void _check() =>
+      ref.invalidate(serverConnectionProvider(widget.profile.id));
+
+  void _openInstall() => Navigator.of(context)
+      .push(DeployScreen.route(widget.profile, fromServer: true));
 
   @override
   Widget build(BuildContext context) {
-    final r = _result;
+    final provider = serverConnectionProvider(widget.profile.id);
+    ref.listen(provider, (_, next) {
+      final r = next.value;
+      if (_autoOpened || next.isLoading || r == null) return;
+      if (r.reachable && r.moavInstalled == false) {
+        _autoOpened = true;
+        _openInstall();
+      }
+    });
+    final check = ref.watch(provider);
+    final r = check.value;
     final Widget status;
-    if (_checking) {
+    if (check.isLoading) {
       status = Row(
         children: [
           const SizedBox(
@@ -234,6 +240,8 @@ class _ConnectionRowState extends ConsumerState<_ConnectionRow> {
           Text('Connecting…', style: Theme.of(context).textTheme.bodySmall),
         ],
       );
+    } else if (check.hasError) {
+      status = ConnectionNotice(error: check.error!);
     } else if (r == null) {
       status = Text(
         'Not checked yet',
@@ -262,18 +270,37 @@ class _ConnectionRowState extends ConsumerState<_ConnectionRow> {
         ],
       );
     }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final notInstalled = r != null &&
+        !check.isLoading &&
+        r.reachable &&
+        r.moavInstalled == false;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: Padding(padding: const EdgeInsets.only(top: 8), child: status),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Padding(padding: const EdgeInsets.only(top: 8), child: status),
+            ),
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: check.isLoading ? null : _check,
+              icon: const Icon(Icons.network_check, size: 16),
+              label: const Text('Check connection'),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        TextButton.icon(
-          onPressed: _checking ? null : _check,
-          icon: const Icon(Icons.network_check, size: 16),
-          label: const Text('Check connection'),
-        ),
+        if (notInstalled)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: GradientButton(
+              onPressed: _openInstall,
+              expand: true,
+              icon: Icons.rocket_launch_outlined,
+              label: 'Install MoaV',
+            ),
+          ),
       ],
     );
   }

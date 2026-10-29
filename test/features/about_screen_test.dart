@@ -42,6 +42,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Deploy'), findsOneWidget);
+    expect(find.text('Mother of all VPNs'), findsOneWidget);
     expect(find.text('Version 0.2.7 (10)'), findsOneWidget);
     // Fingerprint is shown as four lines of eight bytes.
     expect(find.text('0F:1E:2D:3C:4B:5A:69:78\n'
@@ -103,6 +104,77 @@ void main() {
     expect(find.byType(LicensePage), findsOneWidget);
     expect(find.text('MoaV Deploy'), findsWidgets);
     expect(find.text('0.2.7 (10)'), findsOneWidget);
+  });
+
+  testWidgets('leads with the MoaV philosophy, grounded in moav.sh', (tester) async {
+    await tester.pumpWidget(_screen(_identity));
+    await tester.pumpAndSettle();
+
+    expect(find.text('WHY MOAV'), findsOneWidget);
+    expect(find.text(AboutScreen.philosophy), findsOneWidget);
+    expect(AboutScreen.philosophy, contains('basic human right'));
+    expect(AboutScreen.philosophy, contains('Mother of all VPNs'));
+    expect(AboutScreen.philosophy, contains('many circumvention protocols at once'));
+    expect(AboutScreen.philosophy, isNot(contains('\u2014')));
+    // Order: header, philosophy, then the signing section.
+    final why = tester.getCenter(find.text('WHY MOAV'));
+    expect(tester.getCenter(find.text('Mother of all VPNs')).dy, lessThan(why.dy));
+    expect(why.dy, lessThan(tester.getCenter(find.text('SIGNING CERTIFICATE')).dy));
+  });
+
+  group('on iOS', () {
+    final ios = TargetPlatformVariant.only(TargetPlatform.iOS);
+
+    const iosIdentity = AppIdentity(
+      appName: 'MoaV Deploy',
+      version: '0.2.7',
+      buildNumber: '10',
+      signingFingerprints: [],
+      packageName: 'org.motherofallvpns.moavdeploy',
+    );
+
+    testWidgets('hides the APK fingerprint and checksum cards', (tester) async {
+      await tester.pumpWidget(_screen(iosIdentity));
+      await tester.pumpAndSettle();
+
+      expect(find.text(AboutScreen.noFingerprint), findsNothing);
+      expect(find.text('SIGNING CERTIFICATE'), findsNothing);
+      expect(find.text('VERIFY YOUR DOWNLOAD'), findsNothing);
+      expect(find.textContaining('sha256sum'), findsNothing);
+      expect(find.text('Copy fingerprint'), findsNothing);
+      // The rest of the page is unchanged.
+      expect(find.text('Mother of all VPNs'), findsOneWidget);
+      expect(find.text(AboutScreen.philosophy), findsOneWidget);
+      expect(find.text('Version 0.2.7 (10)'), findsOneWidget);
+      expect(find.text('Source code'), findsOneWidget);
+      expect(find.text('Releases'), findsOneWidget);
+    }, variant: ios);
+
+    testWidgets('shows the bundle identifier as the integrity signal',
+        (tester) async {
+      await tester.pumpWidget(_screen(iosIdentity));
+      await tester.pumpAndSettle();
+
+      expect(find.text('APP INTEGRITY'), findsOneWidget);
+      expect(find.text('org.motherofallvpns.moavdeploy'), findsOneWidget);
+      expect(find.text('OFFICIAL BUNDLE IDENTIFIER'), findsOneWidget);
+      expect(find.textContaining('App Store or TestFlight'), findsOneWidget);
+    }, variant: ios);
+
+    testWidgets('a rebuilt app with another identifier is called out',
+        (tester) async {
+      await tester.pumpWidget(_screen(const AppIdentity(
+        appName: 'MoaV Deploy',
+        version: '0.2.7',
+        buildNumber: '10',
+        signingFingerprints: [],
+        packageName: 'com.example.fork',
+      )));
+      await tester.pumpAndSettle();
+      expect(find.text('com.example.fork'), findsOneWidget);
+      expect(find.text('NOT THE OFFICIAL IDENTIFIER'), findsOneWidget);
+      expect(find.text('OFFICIAL BUNDLE IDENTIFIER'), findsNothing);
+    }, variant: ios);
   });
 
   testWidgets('without a signing API the card says so and hides Copy',
