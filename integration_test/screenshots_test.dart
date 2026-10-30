@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:moav_deploy/app.dart';
 import 'package:moav_deploy/core/app_error.dart';
+import 'package:moav_deploy/core/dns_check.dart';
 import 'package:moav_deploy/core/donate.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
 import 'package:moav_deploy/core/moav_controller_factory.dart';
@@ -456,6 +457,22 @@ class _FakeController implements MoavController {
           Metric(name: 'Outbound', value: '3.8 MB', unit: '/s'),
           Metric(name: 'Disk free', value: '41.2 GB'),
         ],
+      ));
+
+  @override
+  Future<String?> publicIp() => _lag('203.0.113.9');
+
+  @override
+  Future<DnsCheckReport> checkDns({
+    required String domain,
+    required String serverIp,
+  }) =>
+      _lag(DnsCheck.parse(
+        'TOOL dig\nA $domain $serverIp\nA dns.$domain $serverIp\n'
+        'NS t.$domain dns.$domain.\nNS s.$domain dns.$domain.\n'
+        'NS m.$domain dns.$domain.\nNS x.$domain \n',
+        domain: domain,
+        serverIp: serverIp,
       ));
 
   @override
