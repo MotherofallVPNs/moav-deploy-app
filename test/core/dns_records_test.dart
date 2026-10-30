@@ -218,6 +218,17 @@ void main() {
       expect(r.unavailable, isFalse);
     });
 
+    test('a single miss reads as singular', () {
+      const out = 'TOOL dig\nA vpn.example.org 198.51.100.1,\n'
+          'A dns.vpn.example.org 203.0.113.9,\n'
+          'NS t.vpn.example.org dns.vpn.example.org.,\n'
+          'NS s.vpn.example.org dns.vpn.example.org.,\n'
+          'NS m.vpn.example.org dns.vpn.example.org.,\n'
+          'NS x.vpn.example.org dns.vpn.example.org.,\n';
+      final r = DnsCheck.parse(out, domain: _domain, serverIp: _ip);
+      expect(r.summary, startsWith('1 of 6 records needs attention.'));
+    });
+
     test('ignores stray lines such as login banners', () {
       const out = 'Welcome to Ubuntu\nTOOL dig\nA vpn.example.org 203.0.113.9,\n'
           'garbage line here\n';

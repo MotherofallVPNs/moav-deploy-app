@@ -67,7 +67,8 @@ class DnsCheckReport {
       return 'Required records are in place; $warned optional record '
           '${warned == 1 ? 'is' : 'are'} not set up.';
     }
-    return '$failed of ${checks.length} records need attention. '
+    return '$failed of ${checks.length} records '
+        '${failed == 1 ? 'needs' : 'need'} attention. '
         'New records can take a few minutes to propagate.';
   }
 }
