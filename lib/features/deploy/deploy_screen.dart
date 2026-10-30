@@ -10,6 +10,7 @@ import '../../widgets/error_view.dart';
 import '../../widgets/log_view.dart';
 import '../server/server_screen.dart';
 import 'deploy_provider.dart';
+import 'dns_info_sheet.dart';
 import 'install_inputs.dart';
 
 /// Deploy MoaV on a server: collects installer inputs, launches the detached
@@ -46,7 +47,7 @@ class DeployScreen extends ConsumerWidget {
         ],
       ),
       body: state.handle == null
-          ? _InstallForm(state: state, onStart: notifier.start)
+          ? _InstallForm(profile: profile, state: state, onStart: notifier.start)
           : _JobView(
               state: state,
               onReset: notifier.reset,
@@ -66,8 +67,13 @@ class DeployScreen extends ConsumerWidget {
 }
 
 class _InstallForm extends StatefulWidget {
-  const _InstallForm({required this.state, required this.onStart});
+  const _InstallForm({
+    required this.profile,
+    required this.state,
+    required this.onStart,
+  });
 
+  final ServerProfile profile;
   final DeployState state;
   final Future<void> Function(InstallSpec) onStart;
 
@@ -126,6 +132,14 @@ class _InstallFormState extends State<_InstallForm> {
     setState(() => _showPassword = true);
   }
 
+  /// The DNS popup: records to create, dns-records.txt, live check. Never
+  /// gates [_start]; the button is disabled for a domainless install.
+  void _showDnsInfo() => showDnsInfoSheet(
+        context,
+        profile: widget.profile,
+        domain: _domain.text,
+      );
+
   @override
   Widget build(BuildContext context) {
     final s = widget.state;
@@ -167,8 +181,15 @@ class _InstallFormState extends State<_InstallForm> {
             hintText: 'vpn.example.org',
             helperText: domainless
                 ? 'Optional. Blank installs by IP only (domainless mode).'
-                : 'Certificates from Let\'s Encrypt for this domain.',
+                : 'Certificates from Let\'s Encrypt for this domain. Tap the '
+                    'info button for the DNS records to create first.',
             helperMaxLines: 2,
+            suffixIcon: IconButton(
+              key: const ValueKey('dns-info'),
+              tooltip: 'DNS records for this domain',
+              icon: const Icon(Icons.info_outline, size: 20),
+              onPressed: domainless ? null : _showDnsInfo,
+            ),
           ),
           style: moavMono(size: 14),
           keyboardType: TextInputType.url,

@@ -43,6 +43,8 @@ abstract class MoavController {
   Future<ServerTunnel> openTunnel(int remotePort); // ssh -L for server-local web UIs
   Future<GrafanaAccess> grafanaAccess();           // PORT_GRAFANA + ADMIN_PASSWORD from .env (memory only)
   Future<ChartsSnapshot> metricSeries();           // Prometheus range queries for the native charts
+  Future<String?> publicIp();                      // server's public IPv4 for the DNS records
+  Future<DnsCheckReport> checkDns({required String domain, required String serverIp}); // dig/host/nslookup on the box, guidance only
 }
 ```
 
