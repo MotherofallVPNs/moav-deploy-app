@@ -1,0 +1,1 @@
+Domain installs now include a DNS helper. Tap the info icon next to the Domain field to see the exact DNS records to create, download a ready-to-import dns-records.txt, and verify your DNS resolves before you install.
