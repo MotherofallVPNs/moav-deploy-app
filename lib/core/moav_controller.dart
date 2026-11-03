@@ -8,6 +8,7 @@ library;
 import 'dart:typed_data';
 
 import 'app_error.dart';
+import 'dns_check.dart';
 import 'donate.dart';
 import 'moav_services.dart';
 
@@ -15,6 +16,17 @@ import 'moav_services.dart';
 abstract class MoavController {
   /// Is the server reachable, and is `moav` installed on it?
   Future<ConnectionCheck> ping();
+
+  /// The server's public IPv4 as the internet sees it (what the DNS records
+  /// for a domain install must point at), or `null` when it cannot be told.
+  Future<String?> publicIp();
+
+  /// Looks up the records a domain install needs (see `DnsRecords`) from
+  /// the server and reports each one. Guidance only: never gates [install].
+  Future<DnsCheckReport> checkDns({
+    required String domain,
+    required String serverIp,
+  });
 
   /// Kick off a MoaV install **detached** on the server and return a handle
   /// that can be polled with [installStatus], even after the app was

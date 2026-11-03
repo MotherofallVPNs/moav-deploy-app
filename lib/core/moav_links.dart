@@ -4,6 +4,9 @@ class MoavLinks {
 
   static final docs = Uri.parse('https://moav.sh/docs');
 
+  /// Which records a domain install needs and how to verify them.
+  static final docsDns = Uri.parse('https://moav.sh/docs/DNS/');
+
   /// Money donations (the "Support us" popup). Dart spelling of the
   /// SUPPORT_GITHUB_SPONSORS_URL / SUPPORT_BUYMEACOFFEE_URL constants.
   static const supportGithubSponsorsUrl =

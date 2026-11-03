@@ -5,6 +5,8 @@ import 'package:dartssh2/dartssh2.dart';
 
 import '../security/app_log.dart';
 import 'app_error.dart';
+import 'dns_check.dart';
+import 'dns_records.dart';
 import 'donate.dart';
 import 'donate_cli.dart';
 import 'install_script.dart';
@@ -116,6 +118,31 @@ class SshMoavController implements MoavController {
       moavInstalled: true,
       moavVersion: m?.group(1),
     );
+  }
+
+  /// Runs [DnsCheck.publicIpCommand] and takes the first public IPv4 it
+  /// prints; a profile whose host is already a literal IP answers that when
+  /// the box cannot say (no outbound HTTP, every interface private).
+  @override
+  Future<String?> publicIp() async {
+    final out = await _run(DnsCheck.publicIpCommand,
+        allowFailure: true, timeout: publicIpTimeout);
+    return PublicIp.firstPublicV4(out.stdout) ??
+        (PublicIp.isLiteralV4(profile.host) ? profile.host : null);
+  }
+
+  static const publicIpTimeout = Duration(seconds: 20);
+
+  /// Runs [DnsCheck.command] (dig, else getent/host/nslookup, like upstream
+  /// `moav doctor dns`) and parses its `A`/`NS` lines.
+  @override
+  Future<DnsCheckReport> checkDns({
+    required String domain,
+    required String serverIp,
+  }) async {
+    final out = await _run(DnsCheck.command(domain),
+        allowFailure: true, timeout: DnsCheck.timeout);
+    return DnsCheck.parse(out.stdout, domain: domain, serverIp: serverIp);
   }
 
   /// Uploads [InstallScript] and its spec file to `~/.moav-deploy/`, then
