@@ -14,6 +14,7 @@ import '../../theme/moav_theme.dart';
 import '../../widgets/error_view.dart';
 import '../../widgets/moav_app_bar.dart';
 import '../activity/activity_provider.dart';
+import '../demo/demo_widgets.dart';
 import '../servers/servers_provider.dart';
 
 /// Posts the credentials to Grafana over the tunnel; see [GrafanaLogin.signIn].
@@ -73,6 +74,11 @@ class _GrafanaScreenState extends ConsumerState<GrafanaScreen> {
   }
 
   Future<void> _open() async {
+    // The demo has nothing behind it: no tunnel, no activity entry.
+    if (widget.profile.isDemo) {
+      if (mounted) setState(() => _opening = false);
+      return;
+    }
     final previous = _tunnel;
     _tunnel = null;
     _opening = true;
@@ -309,6 +315,7 @@ class _GrafanaScreenState extends ConsumerState<GrafanaScreen> {
         ),
       );
     }
+    if (widget.profile.isDemo) return const DemoUnavailable(what: 'Grafana');
     final error = _error;
     if (error != null) {
       return ErrorView(error: error, onRetry: _open);

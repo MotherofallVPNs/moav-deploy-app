@@ -5,7 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
+import '../demo/demo_session.dart';
+import '../demo/demo_widgets.dart';
 import '../keys/keyring_provider.dart';
+import '../server/server_screen.dart';
 import 'add_server_form.dart';
 import 'servers_provider.dart';
 
@@ -25,9 +28,13 @@ class AddServerScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
         children: [
+          const SizedBox(height: 4),
+          DemoHint(
+            onTry: form.submitting ? () {} : () => _tryDemo(context, ref),
+          ),
           const SectionHeader(
             'Connection',
-            padding: EdgeInsets.only(top: 4, bottom: 10),
+            padding: EdgeInsets.only(top: 20, bottom: 10),
           ),
           TextField(
             decoration: const InputDecoration(
@@ -127,6 +134,14 @@ class AddServerScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// The demo replaces this screen: its hub opens the emulated install
+  /// flow by itself, exactly like a real server without MoaV would.
+  Future<void> _tryDemo(BuildContext context, WidgetRef ref) async {
+    final profile = await prepareDemo(ref);
+    if (!context.mounted) return;
+    await Navigator.of(context).pushReplacement(ServerScreen.route(profile));
   }
 
   Future<void> _submit(BuildContext context, WidgetRef ref) async {

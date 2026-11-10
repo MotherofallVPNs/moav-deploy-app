@@ -5,6 +5,8 @@ import '../../core/server_profile.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
+import '../demo/demo_session.dart';
+import '../demo/demo_widgets.dart';
 import '../deploy/deploy_screen.dart';
 import '../donate/donate_screen.dart';
 import '../operate/grafana_screen.dart';
@@ -32,7 +34,7 @@ class ServerScreen extends StatelessWidget {
       SshAuthMethod.importedKey => 'imported key',
       SshAuthMethod.password => 'password',
     };
-    return MoavScaffold(
+    final scaffold = MoavScaffold(
       appBar: MoavAppBar(title: Text(profile.label)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
@@ -61,7 +63,9 @@ class ServerScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'port ${profile.port} · ssh',
+                            profile.isDemo
+                                ? 'emulated · no ssh, no network'
+                                : 'port ${profile.port} · ssh',
                             style: moavMono(
                               size: 12,
                               weight: FontWeight.w400,
@@ -71,13 +75,16 @@ class ServerScreen extends StatelessWidget {
                         ],
                       ),
                     ),
-                    StatusPill(
-                      auth,
-                      tone: profile.authMethod == SshAuthMethod.password
-                          ? StatusTone.warn
-                          : StatusTone.accent,
-                      dot: false,
-                    ),
+                    if (profile.isDemo)
+                      const DemoPill()
+                    else
+                      StatusPill(
+                        auth,
+                        tone: profile.authMethod == SshAuthMethod.password
+                            ? StatusTone.warn
+                            : StatusTone.accent,
+                        dot: false,
+                      ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -146,6 +153,8 @@ class ServerScreen extends StatelessWidget {
         ],
       ),
     );
+    // Leaving the demo hub resets the demo (see DemoExitReset).
+    return profile.isDemo ? DemoExitReset(child: scaffold) : scaffold;
   }
 }
 

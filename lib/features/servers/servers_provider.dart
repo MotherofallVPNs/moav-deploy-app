@@ -31,6 +31,15 @@ final moavControllerProvider = Provider.family<MoavController, String>((
   return ref.read(moavControllerFactoryProvider).forServer(profile);
 });
 
+/// Whether [serverId] is the built-in demo server (nothing is persisted for
+/// it beyond the profile entry itself).
+bool isDemoServer(Ref ref, String serverId) =>
+    ref
+        .read(serversProvider)
+        .value
+        ?.any((p) => p.id == serverId && p.isDemo) ??
+    false;
+
 /// Label of a saved server for activity entries; the id when unknown.
 String serverLabelOf(Ref ref, String serverId) =>
     ref
@@ -56,6 +65,18 @@ class ServersNotifier extends AsyncNotifier<List<ServerProfile>> {
     final next = [...current, profile];
     await _store.saveProfiles(next);
     state = AsyncData(next);
+  }
+
+  /// Adds the built-in demo server to the list, without any secret. A no-op
+  /// when it is already there. Returns the saved profile.
+  Future<ServerProfile> addDemo() async {
+    final current = state.value ?? const <ServerProfile>[];
+    final existing = current.where((p) => p.isDemo).firstOrNull;
+    if (existing != null) return existing;
+    final next = [...current, ServerProfile.demo];
+    await _store.saveProfiles(next);
+    state = AsyncData(next);
+    return ServerProfile.demo;
   }
 
   Future<void> remove(String id) async {

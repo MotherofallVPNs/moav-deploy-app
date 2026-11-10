@@ -357,7 +357,9 @@ class UpdateNotifier extends Notifier<UpdateState> {
   @override
   UpdateState build() {
     ref.onDispose(() {
-      _stopPolling();
+      // Timers only: state must not be read or set inside a dispose callback.
+      _timer?.cancel();
+      _timer = null;
       // Other providers must not change inside a dispose callback.
       final op = _op;
       _op = null;

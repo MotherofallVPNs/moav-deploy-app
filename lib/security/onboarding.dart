@@ -41,6 +41,49 @@ class OnboardingNotifier extends AsyncNotifier<bool> {
 final onboardingProvider =
     AsyncNotifierProvider<OnboardingNotifier, bool>(OnboardingNotifier.new);
 
+/// Remembers "Don't show this again" of the welcome dialog shown on the
+/// first launch (see `WelcomeGate`). Same store as [OnboardingStore], so a
+/// wipe brings the welcome back with everything else.
+class WelcomeStore {
+  WelcomeStore([FlutterSecureStorage? storage])
+      : _storage = storage ?? const FlutterSecureStorage();
+
+  final FlutterSecureStorage _storage;
+
+  static const _key = 'moav.welcome_dismissed.v1';
+
+  /// Unreadable storage counts as dismissed: a welcome that cannot remember
+  /// being closed must not greet the user on every launch.
+  Future<bool> isDismissed() async {
+    try {
+      return await _storage.read(key: _key) == 'true';
+    } on Object catch (_) {
+      return true;
+    }
+  }
+
+  Future<void> markDismissed() => _storage.write(key: _key, value: 'true');
+}
+
+final welcomeStoreProvider = Provider<WelcomeStore>((_) => WelcomeStore());
+
+/// `true` once the welcome dialog must not be shown again.
+class WelcomeNotifier extends AsyncNotifier<bool> {
+  @override
+  Future<bool> build() => ref.read(welcomeStoreProvider).isDismissed();
+
+  /// Persists the choice; with [forever] false the dialog may come back on
+  /// the next launch, but not again in this session (the gate tracks that).
+  Future<void> dismiss({required bool forever}) async {
+    if (!forever) return;
+    await ref.read(welcomeStoreProvider).markDismissed();
+    state = const AsyncData(true);
+  }
+}
+
+final welcomeProvider =
+    AsyncNotifierProvider<WelcomeNotifier, bool>(WelcomeNotifier.new);
+
 /// Shows [OnboardingScreen] once, before the lock gate ever prompts. After
 /// the flag is set the child (normally [AppLockGate]) is built directly.
 class FirstRunGate extends ConsumerWidget {

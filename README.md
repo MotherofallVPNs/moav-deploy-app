@@ -56,6 +56,11 @@ the bundles this app produces.
   and icon on Android, icon on iOS) with a working notes screen in front; a
   secret gesture plus a per-device passcode reveals the real app behind its
   usual lock. See [docs/DISGUISE.md](docs/DISGUISE.md).
+- **Demo server.** "Try a demo server" on the Add Server screen (or the
+  empty servers list) walks the whole app on an emulated box: the pre-filled
+  install, users and QR bundles, service stop/start, health, analytics and
+  the self-update. No SSH, no network, documentation values only, and it
+  resets to its baseline every time you enter or leave it.
 
 ## Get the app
 

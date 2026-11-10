@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'features/servers/servers_home_screen.dart';
+import 'features/welcome/welcome_dialog.dart';
 import 'security/app_lock.dart';
 import 'security/decoy/decoy_gate.dart';
 import 'security/decoy/decoy_provider.dart';
@@ -27,8 +28,12 @@ class MoavDeployApp extends ConsumerWidget {
       darkTheme: theme,
       themeMode: ThemeMode.dark,
       debugShowCheckedModeBanner: false,
+      // The welcome dialog sits inside the lock gate: it is shown once the
+      // app is unlocked, never over the lock screen or the first-run page.
       home: lockEnabled
-          ? const FirstRunGate(child: AppLockGate(child: home))
+          ? const FirstRunGate(
+              child: AppLockGate(child: WelcomeGate(child: home)),
+            )
           : home,
     );
     return DecoyGate(child: app);

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/demo_moav_controller.dart';
 import '../../core/moav_controller.dart';
 import '../../core/moav_services.dart';
 import '../../core/server_profile.dart';
@@ -96,6 +97,20 @@ class _InstallFormState extends State<_InstallForm> {
   /// False once the user typed an email; until then it follows the domain.
   bool _emailFollowsDomain = true;
 
+  bool get _demo => widget.profile.isDemo;
+
+  @override
+  void initState() {
+    super.initState();
+    // The demo form comes filled in: one tap starts the emulated install.
+    if (_demo) {
+      _domain.text = DemoMoavController.installDomain;
+      _email.text = InstallInputs.defaultEmail(_domain.text);
+      _password.text = DemoMoavController.installPassword;
+      _showPassword = true;
+    }
+  }
+
   @override
   void dispose() {
     _domain.dispose();
@@ -153,18 +168,28 @@ class _InstallFormState extends State<_InstallForm> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const IconBadge(Icons.rocket_launch_outlined, gradient: true),
+              IconBadge(
+                _demo ? Icons.science_outlined : Icons.rocket_launch_outlined,
+                gradient: true,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Set up MoaV', style: theme.textTheme.titleMedium),
+                    Text(
+                      _demo ? 'Set up the demo server' : 'Set up MoaV',
+                      style: theme.textTheme.titleMedium,
+                    ),
                     const SizedBox(height: 4),
                     Text(
-                      'Runs the MoaV installer on the server in the background. '
-                      'Safe to re-run: an existing install is kept and users '
-                      'and keys are never touched.',
+                      _demo
+                          ? 'An emulated install: nothing is dialled, every '
+                              'log line is pretend, and it finishes in about '
+                              'twenty seconds. The form is filled in for you.'
+                          : 'Runs the MoaV installer on the server in the background. '
+                              'Safe to re-run: an existing install is kept and users '
+                              'and keys are never touched.',
                       style: theme.textTheme.bodySmall,
                     ),
                   ],
@@ -228,11 +253,12 @@ class _InstallFormState extends State<_InstallForm> {
           ),
         ),
         const SizedBox(height: 4),
-        _AdvancedToggle(
-          value: _advanced,
-          onChanged: (v) => setState(() => _advanced = v),
-        ),
-        if (_advanced) ...[
+        if (!_demo)
+          _AdvancedToggle(
+            value: _advanced,
+            onChanged: (v) => setState(() => _advanced = v),
+          ),
+        if (_advanced && !_demo) ...[
           const SizedBox(height: 12),
           TextField(
             controller: _email,

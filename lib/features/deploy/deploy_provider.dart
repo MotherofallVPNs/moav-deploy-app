@@ -103,7 +103,11 @@ class DeployNotifier extends Notifier<DeployState> {
   @override
   DeployState build() {
     ref.onDispose(() {
-      _stopPolling();
+      // Timers only: state must not be read or set inside a dispose callback.
+      _timer?.cancel();
+      _timer = null;
+      _ticker?.cancel();
+      _ticker = null;
       // Other providers must not change inside a dispose callback.
       final op = _op;
       _op = null;
@@ -131,7 +135,12 @@ class DeployNotifier extends Notifier<DeployState> {
     _op = null;
   }
 
+  /// The demo keeps no job handle in the secure store: every entry starts
+  /// from the pristine form, so nothing is written or restored for it.
+  bool get _demo => isDemoServer(ref, serverId);
+
   Future<void> _restore() async {
+    if (_demo) return;
     final json = await ref.read(secureCredStoreProvider).readInstallHandle(serverId);
     if (json == null) return;
     if (!ref.mounted) return;
@@ -154,9 +163,11 @@ class DeployNotifier extends Notifier<DeployState> {
     final op = _beginOp();
     try {
       final handle = await _controller.install(spec);
-      await ref
-          .read(secureCredStoreProvider)
-          .writeInstallHandle(serverId, handle.toJson());
+      if (!_demo) {
+        await ref
+            .read(secureCredStoreProvider)
+            .writeInstallHandle(serverId, handle.toJson());
+      }
       if (!ref.mounted) return;
       state = state.copyWith(handle: handle, starting: false);
       await refresh();
@@ -206,7 +217,9 @@ class DeployNotifier extends Notifier<DeployState> {
     _op?.detach();
     _op = null;
     _forgetTiming();
-    await ref.read(secureCredStoreProvider).deleteInstallHandle(serverId);
+    if (!_demo) {
+      await ref.read(secureCredStoreProvider).deleteInstallHandle(serverId);
+    }
     if (!ref.mounted) return;
     state = const DeployState();
   }
@@ -231,6 +244,8 @@ class DeployNotifier extends Notifier<DeployState> {
 
   double? _estimate(InstallStatus status) {
     if (status.phase == InstallPhase.succeeded) return 1.0;
+    // The demo job reports exact progress on its own compressed timeline.
+    if (status.progressIsExact) return status.progress;
     final step = status.step;
     final total = status.totalSteps;
     if (step == null || total == null) return status.progress;

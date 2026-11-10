@@ -2,6 +2,7 @@
 class MoavLinks {
   MoavLinks._();
 
+  static final website = Uri.parse('https://moav.sh');
   static final docs = Uri.parse('https://moav.sh/docs');
 
   /// Which records a domain install needs and how to verify them.

@@ -10,6 +10,8 @@ import '../../widgets/brand_icon.dart';
 import '../../widgets/moav_app_bar.dart';
 import '../../widgets/error_view.dart';
 import '../about/about_screen.dart';
+import '../demo/demo_session.dart';
+import '../demo/demo_widgets.dart';
 import '../deploy/deploy_screen.dart';
 import '../disguise/disguise_screen.dart';
 import '../keys/keyring_screen.dart';
@@ -92,12 +94,18 @@ class ServersHomeScreen extends ConsumerWidget {
         error: (e, _) =>
             ErrorView(error: e, onRetry: () => ref.invalidate(serversProvider)),
         data: (list) => list.isEmpty
-            ? const EmptyState(
+            ? EmptyState(
                 icon: Icons.dns_outlined,
                 title: 'No servers yet',
                 body:
                     'Add a server to install and manage MoaV on it. '
                     'Credentials stay on this device.',
+                action: OutlinedButton.icon(
+                  key: const ValueKey('try-demo-empty'),
+                  onPressed: () => _openDemo(context, ref),
+                  icon: const Icon(Icons.science_outlined, size: 18),
+                  label: const Text(tryDemoLabel),
+                ),
               )
             : ListView.separated(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
@@ -165,6 +173,14 @@ Future<void> _handleHomeAction(
 Future<void> _open(Uri url) =>
     launchUrl(url, mode: LaunchMode.externalApplication);
 
+/// Enters the demo from the empty state or its card: saves the entry if
+/// needed, resets its state and opens the hub (which runs the install flow).
+Future<void> _openDemo(BuildContext context, WidgetRef ref) async {
+  final profile = await prepareDemo(ref);
+  if (!context.mounted) return;
+  await Navigator.of(context).push(ServerScreen.route(profile));
+}
+
 /// One menu row with the project's GitHub, X and Telegram brand marks.
 /// Tapping one closes the menu with that action, like a normal item.
 class _SocialRow extends PopupMenuEntry<_HomeAction> {
@@ -220,12 +236,15 @@ class _ServerTile extends ConsumerWidget {
       SshAuthMethod.importedKey => ('key', StatusTone.accent),
       SshAuthMethod.password => ('password', StatusTone.warn),
     };
+    final demo = profile.isDemo;
     return MoavCard(
       padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
-      onTap: () => Navigator.of(context).push(ServerScreen.route(profile)),
+      onTap: () => demo
+          ? _openDemo(context, ref)
+          : Navigator.of(context).push(ServerScreen.route(profile)),
       child: Row(
         children: [
-          const IconBadge(Icons.dns_outlined),
+          IconBadge(demo ? Icons.science_outlined : Icons.dns_outlined),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -237,7 +256,9 @@ class _ServerTile extends ConsumerWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '${profile.username}@${profile.host}:${profile.port}',
+                  demo
+                      ? 'emulated · no SSH, no network'
+                      : '${profile.username}@${profile.host}:${profile.port}',
                   style: moavMono(size: 12, color: MoavColors.textSecondary),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -245,7 +266,7 @@ class _ServerTile extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 8),
-          StatusPill(auth, tone: tone, dot: false),
+          if (demo) const DemoPill() else StatusPill(auth, tone: tone, dot: false),
           PopupMenuButton<_TileAction>(
             onSelected: (a) => switch (a) {
               _TileAction.test => _testConnection(context, ref),
@@ -263,43 +284,48 @@ class _ServerTile extends ConsumerWidget {
               ).push(DeployScreen.route(profile)),
               _TileAction.remove => _confirmRemove(context, ref),
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(
-                value: _TileAction.edit,
-                child: ListTile(
-                  leading: Icon(Icons.edit_outlined),
-                  title: Text('Edit server'),
+            // The demo is entered from its card only: every screen inside
+            // is reached from the hub, after the emulated install.
+            itemBuilder: (_) => [
+              if (!demo)
+                const PopupMenuItem(
+                  value: _TileAction.edit,
+                  child: ListTile(
+                    leading: Icon(Icons.edit_outlined),
+                    title: Text('Edit server'),
+                  ),
                 ),
-              ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: _TileAction.test,
                 child: ListTile(
                   leading: Icon(Icons.network_check),
                   title: Text('Test connection'),
                 ),
               ),
-              PopupMenuItem(
-                value: _TileAction.users,
-                child: ListTile(
-                  leading: Icon(Icons.people_outline),
-                  title: Text('Users'),
+              if (!demo) ...const [
+                PopupMenuItem(
+                  value: _TileAction.users,
+                  child: ListTile(
+                    leading: Icon(Icons.people_outline),
+                    title: Text('Users'),
+                  ),
                 ),
-              ),
-              PopupMenuItem(
-                value: _TileAction.grafana,
-                child: ListTile(
-                  leading: Icon(Icons.dashboard_outlined),
-                  title: Text('Grafana'),
+                PopupMenuItem(
+                  value: _TileAction.grafana,
+                  child: ListTile(
+                    leading: Icon(Icons.dashboard_outlined),
+                    title: Text('Grafana'),
+                  ),
                 ),
-              ),
-              PopupMenuItem(
-                value: _TileAction.deploy,
-                child: ListTile(
-                  leading: Icon(Icons.rocket_launch_outlined),
-                  title: Text('Deploy MoaV'),
+                PopupMenuItem(
+                  value: _TileAction.deploy,
+                  child: ListTile(
+                    leading: Icon(Icons.rocket_launch_outlined),
+                    title: Text('Deploy MoaV'),
+                  ),
                 ),
-              ),
-              PopupMenuItem(
+              ],
+              const PopupMenuItem(
                 value: _TileAction.remove,
                 child: ListTile(
                   leading: Icon(Icons.delete_outline),
@@ -344,8 +370,11 @@ class _ServerTile extends ConsumerWidget {
       builder: (ctx) => AlertDialog(
         title: const Text('Remove server?'),
         content: Text(
-          'This deletes the saved credential for ${profile.label} from this '
-          'device. The server itself is not touched.',
+          profile.isDemo
+              ? 'This removes the demo server from the list. You can add it '
+                  'back any time from the Add server screen.'
+              : 'This deletes the saved credential for ${profile.label} from this '
+                  'device. The server itself is not touched.',
         ),
         actions: [
           TextButton(
