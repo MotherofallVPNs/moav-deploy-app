@@ -50,12 +50,18 @@ class SupportSheet extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             GradientButton(
-              icon: Icons.volunteer_activism_outlined,
-              label: 'GitHub Sponsors',
+              icon: Icons.favorite_outline,
+              label: 'Donate (Apple Pay / Google Pay)',
               expand: true,
-              onPressed: () => onOpen(MoavLinks.supportGithubSponsors),
+              onPressed: () => onOpen(MoavLinks.supportDonate),
             ),
             const SizedBox(height: 10),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.volunteer_activism_outlined, size: 18),
+              label: const Text('GitHub Sponsors'),
+              onPressed: () => onOpen(MoavLinks.supportGithubSponsors),
+            ),
+            const SizedBox(height: 6),
             OutlinedButton.icon(
               icon: const Icon(Icons.coffee_outlined, size: 18),
               label: const Text('Buy Me a Coffee'),

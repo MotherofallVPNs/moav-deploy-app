@@ -15,9 +15,13 @@ class MoavLinks {
 
   static const supportBuymeacoffeeUrl = 'https://buymeacoffee.com/pangana';
 
+  /// One-time donation via Stripe Checkout (Apple Pay / Google Pay, cards).
+  static const supportDonateUrl = 'https://buy.stripe.com/6oU9AT96x8t21xX3Wc5c400';
+
   /// Every other way to help: translations, servers, code, spreading the word.
   static const supportMoreUrl = 'https://moav.sh/docs/support/';
 
+  static final supportDonate = Uri.parse(supportDonateUrl);
   static final supportGithubSponsors = Uri.parse(supportGithubSponsorsUrl);
   static final supportBuymeacoffee = Uri.parse(supportBuymeacoffeeUrl);
   static final supportMore = Uri.parse(supportMoreUrl);
