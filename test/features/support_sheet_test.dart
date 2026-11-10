@@ -31,6 +31,7 @@ void main() {
 
     expect(find.byType(SupportSheet), findsOneWidget);
     expect(find.text('Support MoaV'), findsOneWidget);
+    expect(find.text('Donate (Apple Pay / Google Pay)'), findsOneWidget);
     expect(find.text('GitHub Sponsors'), findsOneWidget);
     expect(find.text('Buy Me a Coffee'), findsOneWidget);
     expect(find.text('More ways to support'), findsOneWidget);
@@ -42,17 +43,20 @@ void main() {
       theme: moavDarkTheme(),
       home: Scaffold(body: SupportSheet(onOpen: (u) async => opened.add(u))),
     ));
+    await tester.tap(find.text('Donate (Apple Pay / Google Pay)'));
     await tester.tap(find.text('GitHub Sponsors'));
     await tester.tap(find.text('Buy Me a Coffee'));
     await tester.tap(find.text('More ways to support'));
     await tester.pump();
 
     expect(opened, [
+      MoavLinks.supportDonate,
       MoavLinks.supportGithubSponsors,
       MoavLinks.supportBuymeacoffee,
       MoavLinks.supportMore,
     ]);
     // Handles confirmed by the owner in #53.
+    expect(MoavLinks.supportDonateUrl, 'https://buy.stripe.com/6oU9AT96x8t21xX3Wc5c400');
     expect(MoavLinks.supportGithubSponsorsUrl, 'https://github.com/sponsors/shayanb');
     expect(MoavLinks.supportBuymeacoffeeUrl, 'https://buymeacoffee.com/pangana');
     expect(MoavLinks.supportMoreUrl, 'https://moav.sh/docs/support/');
