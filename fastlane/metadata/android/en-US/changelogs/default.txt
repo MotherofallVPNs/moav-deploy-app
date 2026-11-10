@@ -1,1 +1,1 @@
-Domain installs now include a DNS helper. Tap the info icon next to the Domain field to see the exact DNS records to create, download a ready-to-import dns-records.txt, and verify your DNS resolves before you install.
+New: try a built-in demo server to explore the whole app end to end, no VPS needed. New: one-time donations in Support (Apple Pay, Google Pay, cards). Plus a first-launch welcome and an onboarding hint for new users.
