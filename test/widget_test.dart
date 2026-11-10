@@ -350,6 +350,7 @@ void main() {
         find.widgetWithText(TextField, 'Host'), 'vpn.example.org');
     await tester.tap(find.text('Password'));
     await tester.pumpAndSettle();
+    await _scrollTo(tester, find.widgetWithText(TextField, 'Password'));
     await tester.enterText(
         find.widgetWithText(TextField, 'Password'), 'hunter2');
     await tester.pumpAndSettle();
@@ -907,11 +908,13 @@ void main() {
     expect(find.text('Password'), findsOneWidget);
     expect(find.byIcon(Icons.check_circle), findsOneWidget);
     expect(find.byIcon(Icons.radio_button_unchecked), findsNWidgets(3));
+    await _scrollTo(tester, find.text('Device key'));
     expect(find.text('Device key'), findsOneWidget);
     expect(find.text('Phone key'), findsOneWidget);
     expect(find.textContaining('AAAANEW'), findsOneWidget);
 
     // Host plus the preselected key is enough to save.
+    await _scrollTo(tester, find.widgetWithText(TextField, 'Host'), delta: -120);
     await tester.enterText(
         find.widgetWithText(TextField, 'Host'), ' ssh://root@Example.Org:22/ ');
     await tester.pumpAndSettle();
@@ -932,6 +935,7 @@ void main() {
     await tester.tap(find.text('Add server'));
     await tester.pumpAndSettle();
 
+    await _scrollTo(tester, find.text('No reusable keys yet.'));
     expect(find.text('No reusable keys yet.'), findsOneWidget);
     await _scrollTo(tester, find.text('Generate a key instead'));
     await tester.tap(find.text('Generate a key instead'));

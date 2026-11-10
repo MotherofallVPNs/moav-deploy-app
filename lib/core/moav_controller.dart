@@ -325,6 +325,7 @@ class InstallStatus {
     this.message,
     this.step,
     this.totalSteps,
+    this.progressIsExact = false,
   });
 
   final InstallPhase phase;
@@ -341,6 +342,10 @@ class InstallStatus {
   /// Latest `[moav-deploy] step N/M` marker seen, when any.
   final int? step;
   final int? totalSteps;
+
+  /// [progress] is authoritative and the UI should show it as is instead of
+  /// re-estimating from [step] and elapsed time. Only the demo sets it.
+  final bool progressIsExact;
 
   bool get isTerminal =>
       phase == InstallPhase.succeeded || phase == InstallPhase.failed;

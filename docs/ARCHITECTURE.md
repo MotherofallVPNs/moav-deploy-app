@@ -11,12 +11,27 @@ UI (Flutter widgets)
   -> Riverpod providers / controllers (app state)
     -> MoavController  (abstract interface)  <- the seam
         |-- SshMoavController   (today: drives the `moav` CLI over SSH)
+        |-- DemoMoavController  (the built-in demo: everything emulated in memory)
         '-- ApiMoavController   (planned: MoaV control API over HTTPS)
 ```
 
-Only `SshMoavController` and the parsing behind it exist today. Because the
-seam is the interface, the API transport is additive: implement it, flip the
-factory, delete nothing in the UI. The throwaway surface is one class.
+`SshMoavController` and the parsing behind it are the real transport. Because
+the seam is the interface, the API transport is additive: implement it, flip
+the factory, delete nothing in the UI. The throwaway surface is one class.
+
+`DemoMoavController` is the proof of that seam: the "Try a demo server"
+entry on the Add Server screen and the servers empty state saves a profile
+with `isDemo` set, the factory hands it the demo controller, and every
+screen from the install flow to analytics runs unchanged against emulated
+data (documentation values only: `demo.example.org`, `203.0.113.10`,
+synthetic keys). The demo never resolves a secret, opens SSH or touches the
+network; the Grafana and admin pages show a demo note instead of a tunnel.
+Its mutable state (users, service states, the install result) lives in the
+controller instance only; entering or leaving the demo hub rebuilds it
+(`lib/features/demo/demo_session.dart`), so the demo always restarts from
+the pristine baseline. The emulated install reports exact progress on a
+compressed timeline (`InstallStatus.progressIsExact`), which the deploy
+screen honours instead of re-estimating from elapsed time.
 
 ## The controller interface
 

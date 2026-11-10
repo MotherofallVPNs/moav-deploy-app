@@ -22,6 +22,7 @@ class ServerProfile {
     required this.port,
     required this.username,
     required this.authMethod,
+    this.isDemo = false,
   });
 
   final String id;
@@ -30,6 +31,26 @@ class ServerProfile {
   final int port;
   final String username;
   final SshAuthMethod authMethod;
+
+  /// The built-in demo server: every operation is emulated in memory by
+  /// `DemoMoavController`. No SSH, no secret, no network.
+  final bool isDemo;
+
+  /// Id of the one demo profile; `ServerProfile.demo` is the only profile
+  /// that carries it.
+  static const demoId = 'demo';
+
+  /// The demo server as saved in the profile list. Documentation values
+  /// only (RFC 2606 domain, TEST-NET-3 address), never dialled.
+  static const demo = ServerProfile(
+    id: demoId,
+    label: 'Demo server',
+    host: 'demo.example.org',
+    port: 22,
+    username: 'moav',
+    authMethod: SshAuthMethod.importedKey,
+    isDemo: true,
+  );
 
   ServerProfile copyWith({
     String? label,
@@ -45,6 +66,7 @@ class ServerProfile {
         port: port ?? this.port,
         username: username ?? this.username,
         authMethod: authMethod ?? this.authMethod,
+        isDemo: isDemo,
       );
 
   Map<String, Object?> toJson() => {
@@ -54,6 +76,7 @@ class ServerProfile {
         'port': port,
         'username': username,
         'authMethod': authMethod.name,
+        if (isDemo) 'isDemo': true,
       };
 
   factory ServerProfile.fromJson(Map<String, Object?> json) => ServerProfile(
@@ -63,8 +86,10 @@ class ServerProfile {
         port: json['port'] as int,
         username: json['username'] as String,
         authMethod: SshAuthMethod.values.byName(json['authMethod'] as String),
+        isDemo: json['isDemo'] == true,
       );
 
   @override
-  String toString() => 'ServerProfile($username@$host:$port, $authMethod)';
+  String toString() =>
+      'ServerProfile($username@$host:$port, $authMethod${isDemo ? ', demo' : ''})';
 }
