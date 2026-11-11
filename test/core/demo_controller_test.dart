@@ -10,11 +10,43 @@ import 'package:moav_deploy/core/ssh_moav_controller.dart';
 import 'package:moav_deploy/features/operate/chart_panels.dart';
 
 /// The demo server: every operation emulated in memory, deterministic, and
-/// never touching SSH, the secure store or the network.
+/// never touching SSH or the network. The one thing it remembers through a
+/// [DemoInstallStore] is that its install finished.
 
 class _Clock {
   var now = DateTime(2026, 11, 10, 9);
   void advance(Duration d) => now = now.add(d);
+}
+
+class _MemoryInstallStore implements DemoInstallStore {
+  _MemoryInstallStore([this.installed = false]);
+  bool installed;
+  var reads = 0;
+  @override
+  Future<bool> isInstalled() async {
+    reads++;
+    return installed;
+  }
+
+  @override
+  Future<void> markInstalled() async => installed = true;
+}
+
+class _BrokenInstallStore implements DemoInstallStore {
+  @override
+  Future<bool> isInstalled() async => throw StateError('no storage');
+  @override
+  Future<void> markInstalled() async => throw StateError('no storage');
+}
+
+Future<void> _finishInstall(DemoMoavController c, _Clock clock) async {
+  final h = await c.install(const InstallSpec(
+    domain: DemoMoavController.installDomain,
+    email: 'info@demo.example.org',
+    adminPassword: DemoMoavController.installPassword,
+  ));
+  clock.advance(const Duration(seconds: 30));
+  expect((await c.installStatus(h)).phase, InstallPhase.succeeded);
 }
 
 DemoMoavController _demo(_Clock clock) =>
@@ -447,7 +479,8 @@ void main() {
     expect((await c.donateStatus()).mahsaNet.total, 6);
   });
 
-  test('reset returns every mutable thing to the baseline', () async {
+  test('reset returns the management state to the baseline but stays installed',
+      () async {
     final clock = _Clock();
     final c = _demo(clock);
     final h = await c.install(const InstallSpec(
@@ -459,12 +492,94 @@ void main() {
     await c.installStatus(h);
     await c.addUser('dave');
     await c.service(const ServiceAction(ServiceActionKind.stop, service: 'xray'));
+    await c.service(const ServiceAction(ServiceActionKind.enable, service: 'gooserelay'));
+    await c.startUpdate();
+    clock.advance(const Duration(seconds: 30));
+    expect((await c.updateStatus())!.phase, InstallPhase.succeeded);
+    expect((await c.status()).version, DemoMoavController.latestVersion);
     expect((await c.ping()).moavInstalled, isTrue);
 
     c.reset();
-    expect((await c.ping()).moavInstalled, isFalse);
+    final after = await c.ping();
+    expect(after.moavInstalled, isTrue, reason: 'a finished install is kept');
+    expect(after.moavVersion, DemoMoavController.installedVersion);
     expect((await c.listUsers()).length, 4);
     expect(_state(await c.status(), 'xray'), ServiceState.running);
+    expect((await c.serviceFlags()).isOn('ENABLE_GOOSERELAY'), isFalse);
+    expect((await c.status()).version, DemoMoavController.installedVersion);
     expect((await c.installStatus(h)).phase, InstallPhase.unknown);
+    expect(await c.updateStatus(), isNull);
+  });
+
+  test('a fresh controller without a store is not installed after reset', () async {
+    final c = _demo(_Clock());
+    c.reset();
+    expect((await c.ping()).moavInstalled, isFalse);
+  });
+
+  test('install store: finished install is written, a new instance reads it',
+      () async {
+    final clock = _Clock();
+    final store = _MemoryInstallStore();
+    final first = DemoMoavController(
+      now: () => clock.now,
+      delay: (_) async {},
+      installStore: store,
+    );
+    expect((await first.ping()).moavInstalled, isFalse);
+    expect(store.installed, isFalse);
+    await _finishInstall(first, clock);
+    expect(store.installed, isTrue);
+
+    // The next visit builds a new controller, as resetDemo does.
+    final second = DemoMoavController(
+      now: () => clock.now,
+      delay: (_) async {},
+      installStore: store,
+    );
+    final check = await second.ping();
+    expect(check.moavInstalled, isTrue);
+    expect(check.moavVersion, DemoMoavController.installedVersion);
+    expect((await second.listUsers()).length, 4, reason: 'users still reset');
+    await second.ping();
+    expect(store.reads, 2, reason: 'each instance reads the flag once');
+  });
+
+  test('install store: a stored flag is removed only outside the controller',
+      () async {
+    final clock = _Clock();
+    final store = _MemoryInstallStore(true);
+    final c = DemoMoavController(
+      now: () => clock.now,
+      delay: (_) async {},
+      installStore: store,
+    );
+    expect((await c.ping()).moavInstalled, isTrue);
+    c.reset();
+    expect((await c.ping()).moavInstalled, isTrue);
+    expect(store.installed, isTrue);
+  });
+
+  test('install store: unreadable storage neither blocks the demo nor the install',
+      () async {
+    final clock = _Clock();
+    final c = DemoMoavController(
+      now: () => clock.now,
+      delay: (_) async {},
+      installStore: _BrokenInstallStore(),
+    );
+    expect((await c.ping()).moavInstalled, isFalse);
+    await _finishInstall(c, clock);
+    expect((await c.ping()).moavInstalled, isTrue);
+  });
+
+  test('factory hands the demo the install store it was given', () async {
+    final store = _MemoryInstallStore(true);
+    final factory = MoavControllerFactory(
+      secretResolver: (_) async => null,
+      demoInstalls: store,
+    );
+    final c = factory.forServer(ServerProfile.demo);
+    expect((await c.ping()).moavInstalled, isTrue);
   });
 }

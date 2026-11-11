@@ -8,10 +8,10 @@ import '../../security/onboarding.dart';
 import '../../theme/moav_theme.dart';
 import '../about/about_screen.dart';
 
-/// Shows [WelcomeDialog] once per session until "Don't show this again" is
-/// chosen, and only once the app is unlocked (so it never floats over the
-/// privacy shield). With [requireUnlock] false it shows as soon as the
-/// flag has loaded; tests use that.
+/// Shows [WelcomeDialog] on every launch (once per process) until "Don't
+/// show this again" is ticked, and only once the app is unlocked (so it
+/// never floats over the privacy shield). With [requireUnlock] false it
+/// shows as soon as the flag has loaded; tests use that.
 class WelcomeGate extends ConsumerStatefulWidget {
   const WelcomeGate({super.key, required this.child, this.requireUnlock = true});
 
@@ -50,8 +50,9 @@ class _WelcomeGateState extends ConsumerState<WelcomeGate> {
 
 /// Opens the welcome dialog and records the "Don't show this again" choice
 /// however the dialog was closed (button, About link or tapping outside).
+/// The box starts unticked: closing without it keeps the welcome coming back.
 Future<void> showWelcomeDialog(BuildContext context, WidgetRef ref) async {
-  final dontShowAgain = ValueNotifier<bool>(true);
+  final dontShowAgain = ValueNotifier<bool>(false);
   final action = await showDialog<_WelcomeAction>(
     context: context,
     builder: (_) => WelcomeDialog(dontShowAgain: dontShowAgain),

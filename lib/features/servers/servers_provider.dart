@@ -13,6 +13,7 @@ final moavControllerFactoryProvider = Provider<MoavControllerFactory>((ref) {
   final store = ref.watch(secureCredStoreProvider);
   return MoavControllerFactory(
     secretResolver: (profile) => store.readSecret(profile.id),
+    demoInstalls: store,
   );
 });
 
@@ -32,7 +33,7 @@ final moavControllerProvider = Provider.family<MoavController, String>((
 });
 
 /// Whether [serverId] is the built-in demo server (nothing is persisted for
-/// it beyond the profile entry itself).
+/// it beyond the profile entry and whether its emulated install finished).
 bool isDemoServer(Ref ref, String serverId) =>
     ref
         .read(serversProvider)
@@ -85,6 +86,8 @@ class ServersNotifier extends AsyncNotifier<List<ServerProfile>> {
     await _store.saveProfiles(next);
     await _store.deleteSecret(id);
     await _store.deleteInstallHandle(id);
+    // Removing the demo is the one way back to a fresh, uninstalled demo.
+    if (id == ServerProfile.demoId) await _store.forgetDemoInstall();
     ref.invalidate(moavControllerProvider(id));
     state = AsyncData(next);
   }

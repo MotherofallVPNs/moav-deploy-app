@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../core/demo_moav_controller.dart' show DemoInstallStore;
 import '../core/server_profile.dart';
 
 /// Thin wrapper over [FlutterSecureStorage] so the rest of the app never
@@ -11,7 +12,7 @@ import '../core/server_profile.dart';
 /// Android Keystore-wrapped AES-GCM storage. Server profiles (non-secret) and
 /// per-server secrets are stored under separate keys so a profile list can be
 /// shown without pulling secrets into memory.
-class SecureCredStore {
+class SecureCredStore implements DemoInstallStore {
   SecureCredStore([FlutterSecureStorage? storage])
     : _storage =
           storage ??
@@ -30,6 +31,9 @@ class SecureCredStore {
   static String _secretKey(String serverId) => 'moav.secret.v1.$serverId';
   static String _sshKeySecret(String keyId) => 'moav.sshkey.v1.$keyId';
   static String _installKey(String serverId) => 'moav.install.v1.$serverId';
+
+  /// Whether the demo server's emulated install has finished.
+  static const _demoInstalledKey = 'moav.demo.installed.v1';
 
   /// Disguise settings (`DecoyConfig` JSON). The only key [wipeAll] keeps:
   /// a wipe under duress must not turn the Notes icon back into MoaV.
@@ -94,6 +98,18 @@ class SecureCredStore {
 
   Future<void> deleteInstallHandle(String serverId) =>
       _storage.delete(key: _installKey(serverId));
+
+  /// The demo's install result survives leaving the demo and restarting the
+  /// app; removing the demo server ([forgetDemoInstall]) or a wipe clears it.
+  @override
+  Future<bool> isInstalled() async =>
+      await _storage.read(key: _demoInstalledKey) == 'true';
+
+  @override
+  Future<void> markInstalled() =>
+      _storage.write(key: _demoInstalledKey, value: 'true');
+
+  Future<void> forgetDemoInstall() => _storage.delete(key: _demoInstalledKey);
 
   Future<Map<String, Object?>?> readDecoy() async {
     final raw = await _storage.read(key: decoyKey);

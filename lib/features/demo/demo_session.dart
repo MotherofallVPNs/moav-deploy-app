@@ -11,11 +11,13 @@ import '../users/users_provider.dart';
 
 /// Lifecycle of the built-in demo server.
 ///
-/// The demo keeps its mutable state (users, service states, the install
-/// result) inside one in-memory `DemoMoavController`. Entering and leaving
-/// the demo both call [resetDemo], which drops that controller and every
-/// cached value read through it, so the next visit starts from the pristine
-/// baseline: not installed, stock users, every service as on a healthy box.
+/// The demo keeps its management state (users, service states, a running
+/// job) inside one in-memory `DemoMoavController`. Entering and leaving the
+/// demo both call [resetDemo], which drops that controller and every cached
+/// value read through it, so the next visit starts from the baseline: stock
+/// users, every service as on a healthy box. Whether MoaV is installed is
+/// the one thing kept (in the secure store): a brand-new demo opens the
+/// install flow once, and after it finishes every visit lands on the hub.
 
 /// Saves the demo profile when it is not in the list yet and resets its
 /// state. The caller then pushes the server hub for the returned profile.
@@ -26,7 +28,8 @@ Future<ServerProfile> prepareDemo(WidgetRef ref) async {
 }
 
 /// Back to the baseline: the demo controller and every provider that cached
-/// something read through it are rebuilt. Real servers are not touched.
+/// something read through it are rebuilt. Real servers are not touched, and
+/// neither is the remembered install result.
 void resetDemo(WidgetRef ref) {
   const id = ServerProfile.demoId;
   // The controller first: the notifiers below read it again on rebuild.
@@ -48,7 +51,7 @@ void resetDemo(WidgetRef ref) {
 }
 
 /// Wraps the demo's server hub: leaving it (back button or gesture) resets
-/// the demo, so re-entering always starts from the install flow.
+/// the demo's management state, so re-entering shows the stock users again.
 class DemoExitReset extends ConsumerWidget {
   const DemoExitReset({super.key, required this.child});
 
