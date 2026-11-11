@@ -26,12 +26,15 @@ screen from the install flow to analytics runs unchanged against emulated
 data (documentation values only: `demo.example.org`, `203.0.113.10`,
 synthetic keys). The demo never resolves a secret, opens SSH or touches the
 network; the Grafana and admin pages show a demo note instead of a tunnel.
-Its mutable state (users, service states, the install result) lives in the
+Its management state (users, service states, a running job) lives in the
 controller instance only; entering or leaving the demo hub rebuilds it
-(`lib/features/demo/demo_session.dart`), so the demo always restarts from
-the pristine baseline. The emulated install reports exact progress on a
-compressed timeline (`InstallStatus.progressIsExact`), which the deploy
-screen honours instead of re-estimating from elapsed time.
+(`lib/features/demo/demo_session.dart`), so the demo restarts from the
+baseline. The install result is the exception: once the emulated install
+finishes, the flag is kept in the secure store (`DemoInstallStore`), so the
+demo stays installed across visits and app restarts until the demo server
+is removed or the store is wiped. The emulated install reports exact
+progress on a compressed timeline (`InstallStatus.progressIsExact`), which
+the deploy screen honours instead of re-estimating from elapsed time.
 
 ## The controller interface
 

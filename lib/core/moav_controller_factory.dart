@@ -11,12 +11,18 @@ import 'ssh_moav_controller.dart';
 /// when a profile advertises a control API endpoint. The UI never depends
 /// on the concrete type.
 class MoavControllerFactory {
-  const MoavControllerFactory({required this.secretResolver});
+  const MoavControllerFactory({
+    required this.secretResolver,
+    this.demoInstalls,
+  });
 
   final SecretResolver secretResolver;
 
+  /// Where the demo remembers a finished install; null keeps it in memory.
+  final DemoInstallStore? demoInstalls;
+
   MoavController forServer(ServerProfile profile) {
-    if (profile.isDemo) return DemoMoavController();
+    if (profile.isDemo) return DemoMoavController(installStore: demoInstalls);
     return SshMoavController(
       profile: profile,
       secretResolver: secretResolver,

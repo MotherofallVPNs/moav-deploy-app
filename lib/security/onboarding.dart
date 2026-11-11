@@ -41,9 +41,9 @@ class OnboardingNotifier extends AsyncNotifier<bool> {
 final onboardingProvider =
     AsyncNotifierProvider<OnboardingNotifier, bool>(OnboardingNotifier.new);
 
-/// Remembers "Don't show this again" of the welcome dialog shown on the
-/// first launch (see `WelcomeGate`). Same store as [OnboardingStore], so a
-/// wipe brings the welcome back with everything else.
+/// Remembers "Don't show this again" of the welcome dialog, which otherwise
+/// opens on every launch (see `WelcomeGate`). Same store as
+/// [OnboardingStore], so a wipe brings the welcome back with everything else.
 class WelcomeStore {
   WelcomeStore([FlutterSecureStorage? storage])
       : _storage = storage ?? const FlutterSecureStorage();
@@ -72,8 +72,8 @@ class WelcomeNotifier extends AsyncNotifier<bool> {
   @override
   Future<bool> build() => ref.read(welcomeStoreProvider).isDismissed();
 
-  /// Persists the choice; with [forever] false the dialog may come back on
-  /// the next launch, but not again in this session (the gate tracks that).
+  /// Persists the choice only when the box was ticked; otherwise the dialog
+  /// comes back on the next launch, but not again in this session.
   Future<void> dismiss({required bool forever}) async {
     if (!forever) return;
     await ref.read(welcomeStoreProvider).markDismissed();

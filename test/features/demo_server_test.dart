@@ -13,7 +13,8 @@ import '../support/memory_cred_store.dart';
 
 /// The demo server from the user's side: the hint on Add Server, the
 /// empty-state button, the pre-filled emulated install, the hub with its
-/// badge, and the reset when the demo is left.
+/// badge, the reset of users when the demo is left, and the install result
+/// that survives leaving, restarting and only goes with the demo itself.
 
 Widget _app(MemoryCredStore store) => ProviderScope(
       retry: noProviderRetry,
@@ -89,7 +90,8 @@ void main() {
     expect(find.text('Start install'), findsOneWidget);
 
     await _runInstall(tester);
-    expect(store.installHandles, isEmpty, reason: 'nothing persisted for the demo');
+    expect(store.installHandles, isEmpty, reason: 'no job handle for the demo');
+    expect(store.demoInstalled, isTrue, reason: 'the install result is kept');
 
     await tester.tap(find.text('Go to the server'));
     await tester.pumpAndSettle();
@@ -120,7 +122,8 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    // Leaving the hub resets the demo: back in, the install runs again.
+    // Leaving the hub resets the users, not the install: back in, the hub
+    // reports MoaV installed and does not reopen the install view.
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('Demo server'), findsOneWidget);
@@ -128,12 +131,60 @@ void main() {
     expect(find.text('emulated · no SSH, no network'), findsOneWidget);
     await tester.tap(find.text('Demo server'));
     await tester.pumpAndSettle();
-    expect(find.text('Set up the demo server'), findsOneWidget);
+    expect(find.text('Set up the demo server'), findsNothing);
+    expect(find.text('Connected. MoaV 2.3.1 is installed.'), findsOneWidget);
+    expect(find.text('Install MoaV'), findsNothing);
+    await tester.tap(find.text('Users'));
+    await tester.pumpAndSettle();
+    expect(find.text('4 USERS'), findsOneWidget);
+    expect(find.text('dave'), findsNothing);
     await tester.pageBack();
     await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('Demo server'), findsOneWidget);
+  });
+
+  testWidgets('an installed demo opens on the hub after an app restart',
+      (tester) async {
+    final store = MemoryCredStore()
+      ..profiles = [ServerProfile.demo]
+      ..demoInstalled = true;
+    await tester.pumpWidget(_app(store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Demo server'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connected. MoaV 2.3.1 is installed.'), findsOneWidget);
+    expect(find.text('Set up the demo server'), findsNothing);
+    expect(find.text('Deploy · Demo server'), findsNothing);
+    // "Test connection" from the card agrees with the hub.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Test connection'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connected. MoaV 2.3.1 is installed.'), findsOneWidget);
+  });
+
+  testWidgets('removing the demo server forgets its install', (tester) async {
+    final store = MemoryCredStore()
+      ..profiles = [ServerProfile.demo]
+      ..demoInstalled = true;
+    await tester.pumpWidget(_app(store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.pumpAndSettle();
+    expect(store.profiles, isEmpty);
+    expect(store.demoInstalled, isFalse);
+    // Added back, the demo starts fresh: the install flow opens again.
+    await tester.tap(find.byKey(const ValueKey('try-demo-empty')));
+    await tester.pumpAndSettle();
+    expect(find.text('Set up the demo server'), findsOneWidget);
   });
 
   testWidgets('demo card menu has no edit, users, Grafana or deploy entries',

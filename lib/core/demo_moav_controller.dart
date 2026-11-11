@@ -3,9 +3,13 @@
 /// analytics, without a server, SSH or network.
 ///
 /// Values are documentation values only (RFC 2606 domain, TEST-NET-3
-/// address, synthetic keys). State is mutable (users, service states, the
-/// install result) but never persisted: a fresh instance is the pristine
-/// baseline. See docs/ARCHITECTURE.md.
+/// address, synthetic keys). Management state (users, service states, a
+/// running job) is mutable but never persisted: a fresh instance is the
+/// pristine baseline. The one exception is the install result: once the
+/// emulated install has finished the demo stays installed, remembered
+/// through a [DemoInstallStore] across resets and app restarts, so a
+/// returning user lands on the hub instead of the install flow again.
+/// See docs/ARCHITECTURE.md.
 library;
 
 import 'dart:convert';
@@ -27,6 +31,13 @@ import 'moav_services.dart';
 /// One log line of an emulated job and when it appears, relative to start.
 typedef _Line = (Duration at, String text);
 
+/// Where the demo remembers that its emulated install finished. The secure
+/// store implements it; a wipe or removing the demo server forgets it.
+abstract interface class DemoInstallStore {
+  Future<bool> isInstalled();
+  Future<void> markInstalled();
+}
+
 /// A service row of the demo, mutable so actions can move it.
 class _DemoService {
   _DemoService(this.name, this.state, this.ports, this.uptime);
@@ -41,8 +52,10 @@ class DemoMoavController implements MoavController {
   DemoMoavController({
     DateTime Function()? now,
     Future<void> Function(Duration)? delay,
+    DemoInstallStore? installStore,
   })  : _now = now ?? clock.now,
-        _delay = delay ?? ((d) => Future<void>.delayed(d)) {
+        _delay = delay ?? ((d) => Future<void>.delayed(d)),
+        _installStore = installStore {
     reset();
   }
 
@@ -52,6 +65,9 @@ class DemoMoavController implements MoavController {
 
   /// How the demo waits; tests pass a no-op so nothing sleeps.
   final Future<void> Function(Duration) _delay;
+
+  /// Remembers a finished install across instances; null keeps it in memory.
+  final DemoInstallStore? _installStore;
 
   static const domain = 'demo.example.org';
   static const ip = '203.0.113.10';
@@ -73,7 +89,10 @@ class DemoMoavController implements MoavController {
 
   // --- Emulated state ---
 
-  late bool _installed;
+  /// Set by a finished install and never cleared by [reset]; a stored flag
+  /// is read into it on the first [ping].
+  bool _installed = false;
+  Future<void>? _installedLoad;
   late String _version;
   late List<MoavUser> _users;
   late List<_DemoService> _services;
@@ -83,10 +102,10 @@ class DemoMoavController implements MoavController {
   InstallSpec? _installSpec;
   DateTime? _updateStartedAt;
 
-  /// Back to the pristine baseline: not installed, stock users, every
-  /// service as `moav status` shows it on a healthy box.
+  /// Back to the pristine baseline: stock users, every service as
+  /// `moav status` shows it on a healthy box, no job in flight. Whether
+  /// MoaV is installed is kept: a finished demo install stays finished.
   void reset() {
-    _installed = false;
     _version = installedVersion;
     _installStartedAt = null;
     _installSpec = null;
@@ -166,9 +185,29 @@ class DemoMoavController implements MoavController {
 
   // --- Connection ---
 
+  /// Reads the remembered install result once. Unreadable storage leaves
+  /// the demo as it is in memory, so a fresh one still offers the install.
+  Future<void> _loadInstalled() => _installedLoad ??= () async {
+        final store = _installStore;
+        if (store == null || _installed) return;
+        try {
+          _installed = await store.isInstalled();
+        } on Object catch (_) {}
+      }();
+
+  /// Flips the flag and persists it; storage trouble never fails the install.
+  Future<void> _markInstalled() async {
+    if (_installed) return;
+    _installed = true;
+    try {
+      await _installStore?.markInstalled();
+    } on Object catch (_) {}
+  }
+
   @override
   Future<ConnectionCheck> ping() async {
     await _delay(const Duration(milliseconds: 300));
+    await _loadInstalled();
     return ConnectionCheck(
       reachable: true,
       moavInstalled: _installed,
@@ -300,7 +339,7 @@ class DemoMoavController implements MoavController {
       if (elapsed >= installStepsAt[i]) step = i + 1;
     }
     if (elapsed >= installDoneAt) {
-      _installed = true;
+      await _markInstalled();
       return InstallStatus(
         phase: InstallPhase.succeeded,
         logTail: lines,
