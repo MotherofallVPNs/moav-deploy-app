@@ -1,0 +1,1 @@
+Fixes: the demo server now stays installed after you run the demo install, so reopening it goes straight to management. The welcome screen now shows on each launch until you tick "Do not show again".
