@@ -1,0 +1,64 @@
+{
+  "en-US": [
+    {
+      "shot": "06-server-hub",
+      "slug": "server-hub",
+      "title": "Run your own VPN server",
+      "subtitle": "Install, manage and monitor MoaV in one app"
+    },
+    {
+      "shot": "04-install-progress",
+      "slug": "guided-install",
+      "title": "Guided install over SSH",
+      "subtitle": "From a fresh VPS to 18+ protocols"
+    },
+    {
+      "shot": "08-user-detail",
+      "slug": "users",
+      "title": "Add the people you trust",
+      "subtitle": "Create and revoke users in seconds"
+    },
+    {
+      "shot": "09-bundle-qr",
+      "slug": "bundle-qr",
+      "title": "Share access by QR code",
+      "subtitle": "Ready-to-import configs for each user"
+    },
+    {
+      "shot": "10-services",
+      "slug": "services",
+      "title": "Control every service",
+      "subtitle": "Start, stop and restart protocols"
+    },
+    {
+      "shot": "11-health",
+      "slug": "health",
+      "title": "Check server health",
+      "subtitle": "Built-in diagnostics, check by check"
+    },
+    {
+      "shot": "12b-analytics-charts",
+      "slug": "analytics",
+      "title": "Live server metrics",
+      "subtitle": "CPU, memory, traffic and active users"
+    },
+    {
+      "shot": "15-menu",
+      "slug": "safety",
+      "title": "Built for risky places",
+      "subtitle": "App lock, disguise mode, emergency wipe"
+    },
+    {
+      "shot": "14-give-back",
+      "slug": "give-back",
+      "title": "Give bandwidth back",
+      "subtitle": "Help Psiphon, Tor Snowflake and MahsaNet users"
+    },
+    {
+      "shot": "01-servers",
+      "slug": "servers",
+      "title": "All your servers in one app",
+      "subtitle": "Try the built-in demo, no server needed"
+    }
+  ]
+}
