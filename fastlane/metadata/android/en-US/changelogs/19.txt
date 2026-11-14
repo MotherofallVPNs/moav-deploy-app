@@ -1,0 +1,1 @@
+Polish: the donate button in Support now simply reads "Donate". Maintenance: build toolchain pinned for more reliable releases.
