@@ -4,8 +4,10 @@
     python3 release/store-assets/tool/check_copy.py           # check only
     python3 release/store-assets/tool/check_copy.py --apply   # also write fastlane/metadata
 
-A field is a `<!-- field: <path> max=<n> -->` marker followed by a ```text
-block. Paths ending in .txt are relative to fastlane/metadata/.
+The drafts are copy/*.md in the private moav-store-assets repo (a checkout
+next to this repo, or $MOAV_STORE_ASSETS). A field is a
+`<!-- field: <path> max=<n> -->` marker followed by a ```text block. Paths
+ending in .txt are relative to this repo's fastlane/metadata/.
 """
 
 from __future__ import annotations
@@ -13,10 +15,9 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from pathlib import Path
 
-COPY = Path(__file__).resolve().parent.parent / "copy"
-ROOT = COPY.parent.parent.parent
+from store_assets import ROOT, assets_dir
+
 METADATA = ROOT / "fastlane/metadata"
 
 FIELD = re.compile(
@@ -30,9 +31,10 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true", help="write .txt fields to fastlane/metadata")
     args = parser.parse_args()
 
+    copy = assets_dir() / "copy"
     failed = False
     seen = 0
-    for doc in sorted(COPY.glob("*.md")):
+    for doc in sorted(copy.glob("*.md")):
         for match in FIELD.finditer(doc.read_text(encoding="utf-8")):
             seen += 1
             path, limit, body = match["path"], int(match["max"]), match["body"]
@@ -48,7 +50,7 @@ def main() -> int:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(body + "\n", encoding="utf-8")
     if seen == 0:
-        print("no fields found", file=sys.stderr)
+        print(f"no fields found in {copy}", file=sys.stderr)
         return 1
     return 1 if failed else 0
 

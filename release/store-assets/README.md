@@ -1,20 +1,34 @@
 # Store assets: first public release
 
-Everything needed to fill in the App Store and Google Play listings for
+What is needed to fill in the App Store and Google Play listings for
 MoaV Deploy 0.2.15 (build 18). Start with
 [MANUAL-CHECKLIST.md](MANUAL-CHECKLIST.md): it lists each console step and
 the file to take the value from.
+
+The package is split across two repos:
+
+- **This folder** holds the checklist, the compliance notes and the tooling.
+- **[moav-store-assets](https://github.com/MotherofallVPNs/moav-store-assets)**
+  (private) holds the listing images and the listing copy. They are kept
+  out of this public repo on purpose: do not commit them here.
 
 ## Contents
 
 | Path | What |
 |---|---|
 | `MANUAL-CHECKLIST.md` | The by-hand steps in App Store Connect and Play Console |
-| `copy/app-store.md` | Name, subtitle, promotional text, keywords, description, What's New, URLs, category |
-| `copy/google-play.md` | Title, short and full description, release notes, category, contact details |
 | `compliance/privacy.md` | Privacy policy URL, Play Data safety answers, App Store privacy label, with code evidence |
 | `compliance/export-compliance.md` | Encryption answers, the France question, country availability |
 | `compliance/review-notes.md` | App Review notes to paste, content rating answers, review risks |
+| `compliance/france-anssi-declaration.md` | The French encryption declaration pack |
+| `tool/` | Scripts that produce and check the images and copy in `moav-store-assets` |
+
+In `moav-store-assets`:
+
+| Path | What |
+|---|---|
+| `copy/app-store.md` | Name, subtitle, promotional text, keywords, description, What's New, URLs, category |
+| `copy/google-play.md` | Title, short and full description, release notes, category, contact details |
 | `screenshots/ios/iphone-6.9/` | 10 screenshots, 1290x2796 |
 | `screenshots/ios/iphone-6.5/` | 10 screenshots, 1242x2688 |
 | `screenshots/ios/ipad-12.9/` | 10 screenshots, 2048x2732 (the app ships for iPad) |
@@ -22,7 +36,22 @@ the file to take the value from.
 | `branding/ios-app-icon-1024.png` | 1024x1024, no alpha, square corners |
 | `branding/play-icon-512.png` | 512x512, 32-bit PNG |
 | `branding/play-feature-graphic-1024x500.png` | Play feature graphic |
-| `tool/` | Scripts that produce and check all of the above |
+
+Everywhere in this folder, a path that starts with `copy/`, `screenshots/`
+or `branding/` is a path in `moav-store-assets`.
+
+## Getting the assets repo
+
+The tools read and write a `moav-store-assets` checkout. Clone it next to
+this repo and they find it without any setup:
+
+```
+git clone git@github.com:MotherofallVPNs/moav-store-assets.git ../moav-store-assets
+```
+
+For any other location, set `MOAV_STORE_ASSETS` to the checkout path. The
+tools stop with a clear message if they cannot find it. You need access to
+the private repo; ask a MotherofallVPNs org owner.
 
 The screenshots show the app's built-in demo server, so every value on
 screen is emulated documentation data (RFC 2606 hosts, synthetic keys). The
@@ -31,8 +60,9 @@ by the capture run for the same reason.
 
 ## Regenerating
 
-From the repo root. Needs Flutter, Xcode with the two simulators below, the
-Android SDK with an AVD, and Python 3 with Pillow.
+From the root of this repo. Needs the `moav-store-assets` checkout (above),
+Flutter, Xcode with the two simulators below, the Android SDK with an AVD,
+and Python 3 with Pillow.
 
 ```
 release/store-assets/tool/capture.sh iphone     # iPhone 18 Pro Max simulator
@@ -50,14 +80,18 @@ python3 release/store-assets/tool/check_copy.py # store length limits
 - The run uses an in-memory credential store and the demo controller. It
   opens no SSH connection and writes nothing to the keychain or keystore.
 - `compose.py` reads the raw shots and `tool/captions.json` and writes the
-  framed images at the exact store sizes. `compose.py --check` only
-  verifies sizes and colour modes of what is already there.
-- `check_copy.py --apply` writes the approved en-US text into
+  framed images, at the exact store sizes, into `screenshots/` and
+  `branding/` of the `moav-store-assets` checkout. `compose.py --check`
+  only verifies sizes and colour modes of what is already there.
+- `check_copy.py` reads `copy/*.md` from the `moav-store-assets` checkout.
+  `--apply` writes the approved en-US text into this repo's
   `fastlane/metadata/` for the existing `sync_metadata` and `sync_listing`
   lanes.
 
-To change a caption or the order, edit `tool/captions.json` and rerun
-`compose.py`. The first eight entries are the Play set; iOS takes all ten.
+Regenerated images and edited copy are committed in `moav-store-assets`,
+not here. To change a caption or the order, edit `tool/captions.json` in
+this repo, rerun `compose.py`, and commit the new images there. The first
+eight entries are the Play set; iOS takes all ten.
 
 ## Known limits
 

@@ -38,3 +38,6 @@ vendor/bundle/
 .bundle/
 **/fastlane/report.xml
 **/fastlane/README.md
+
+# python tooling (release/store-assets/tool)
+__pycache__/

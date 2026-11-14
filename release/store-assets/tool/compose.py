@@ -5,7 +5,9 @@
     python3 release/store-assets/tool/compose.py --check    # verify outputs only
 
 Raw captures come from capture.sh (build/store-shots/<target>/). Captions
-live in captions.json next to this file. Requires Pillow with FreeType.
+live in captions.json next to this file. The images are written to the
+private moav-store-assets repo (a checkout next to this repo, or
+$MOAV_STORE_ASSETS). Requires Pillow with FreeType.
 """
 
 from __future__ import annotations
@@ -17,9 +19,10 @@ from pathlib import Path
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
+from store_assets import ROOT, assets_dir
+
 TOOL = Path(__file__).resolve().parent
-OUT = TOOL.parent
-ROOT = OUT.parent.parent
+OUT = assets_dir()
 RAW = ROOT / "build/store-shots"
 FONT_BOLD = ROOT / "assets/fonts/Inter-Bold.ttf"
 FONT_MEDIUM = ROOT / "assets/fonts/Inter-Medium.ttf"

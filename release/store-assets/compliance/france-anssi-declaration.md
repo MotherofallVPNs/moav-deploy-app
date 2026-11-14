@@ -279,7 +279,7 @@ this guide blocks the release in other countries.
 
 - The technical description (section 2 of this file, exported to PDF).
 - A short product presentation: store description and a few screenshots
-  from `release/store-assets/`.
+  from the private `moav-store-assets` repo (`copy/`, `screenshots/`).
 - Link to the public source repository and the MIT licence.
 - Proof of identity of the declarant if the form asks for it (company
   registration extract, or ID for an individual). **[VERIFY]**
