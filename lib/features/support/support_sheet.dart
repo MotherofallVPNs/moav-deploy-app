@@ -51,7 +51,7 @@ class SupportSheet extends StatelessWidget {
             const SizedBox(height: 20),
             GradientButton(
               icon: Icons.favorite_outline,
-              label: 'Donate (Apple Pay / Google Pay)',
+              label: 'Donate',
               expand: true,
               onPressed: () => onOpen(MoavLinks.supportDonate),
             ),
