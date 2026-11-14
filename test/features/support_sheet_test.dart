@@ -31,7 +31,7 @@ void main() {
 
     expect(find.byType(SupportSheet), findsOneWidget);
     expect(find.text('Support MoaV'), findsOneWidget);
-    expect(find.text('Donate (Apple Pay / Google Pay)'), findsOneWidget);
+    expect(find.text('Donate'), findsOneWidget);
     expect(find.text('GitHub Sponsors'), findsOneWidget);
     expect(find.text('Buy Me a Coffee'), findsOneWidget);
     expect(find.text('More ways to support'), findsOneWidget);
@@ -43,7 +43,7 @@ void main() {
       theme: moavDarkTheme(),
       home: Scaffold(body: SupportSheet(onOpen: (u) async => opened.add(u))),
     ));
-    await tester.tap(find.text('Donate (Apple Pay / Google Pay)'));
+    await tester.tap(find.text('Donate'));
     await tester.tap(find.text('GitHub Sponsors'));
     await tester.tap(find.text('Buy Me a Coffee'));
     await tester.tap(find.text('More ways to support'));
