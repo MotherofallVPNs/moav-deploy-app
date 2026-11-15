@@ -85,3 +85,18 @@ run_fdroid build --verbose --test --refresh-scanner --on-server --no-tarball "$A
 cp -f "$home_vagrant/tmp/${APPID}_${VC}.apk" /out/
 sha256sum "/out/${APPID}_${VC}.apk"
 echo "OK: fdroid build passed for $APPID:$VC; unsigned APK in build/fdroid/."
+
+# Informational: distance from the signed GitHub Release APK (reproducibility).
+VN=$(sed -n 's/^CurrentVersion: //p' "$DATA/metadata/$APPID.yml")
+RELEASE_APK=https://github.com/MotherofallVPNs/moav-deploy-app/releases/download/v$VN/app-release.apk
+entries() { unzip -v "$1" | awk '$7 ~ /^[0-9a-f]{8}$/ {print $7, $8}' | sort -k2; }
+if curl -fsSL -o /tmp/release.apk "$RELEASE_APK"; then
+  if diff <(entries /tmp/release.apk) <(entries "/out/${APPID}_${VC}.apk") >/tmp/apk.diff; then
+    echo "REPRODUCIBLE: every entry matches the v$VN release APK."
+  else
+    echo "NOT REPRODUCIBLE YET: entries that differ from the v$VN release APK:"
+    sed -n 's/^> [0-9a-f]* /  /p' /tmp/apk.diff
+  fi
+else
+  echo "No release APK at $RELEASE_APK; skipped the comparison."
+fi

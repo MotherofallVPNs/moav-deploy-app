@@ -35,7 +35,7 @@ Builds:
       - '[[ $flutterVersion ]]'
       - git -C $$flutter$$ checkout -f $flutterVersion
       - sed -i -e '/signingConfig = if (keystorePropertiesFile.exists())/,+3d' android/app/build.gradle.kts
-      - '! grep -q "signingConfig = " android/app/build.gradle.kts'
+      - test "$(grep -c 'signingConfig = ' android/app/build.gradle.kts)" = 0
       - export repo=/home/runner/work/moav-deploy-app/moav-deploy-app
       - cd ..
       - mv org.motherofallvpns.moavdeploy $repo
