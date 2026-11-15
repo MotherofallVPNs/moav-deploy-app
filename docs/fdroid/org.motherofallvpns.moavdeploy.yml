@@ -14,6 +14,8 @@ AutoName: MoaV Deploy
 
 RepoType: git
 Repo: https://github.com/MotherofallVPNs/moav-deploy-app.git
+Binaries: 
+  https://github.com/MotherofallVPNs/moav-deploy-app/releases/download/v%v/app-release.apk
 
 Builds:
   - versionName: 0.2.16
@@ -56,6 +58,8 @@ Builds:
       - $$flutter$$/bin/flutter build apk --release
       - popd
       - mv $repo org.motherofallvpns.moavdeploy
+
+AllowedAPKSigningKeys: bbd565a138fe28831673f78659eca2c3139d6b862116c8a1b8bb9d7196f80aa6
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
