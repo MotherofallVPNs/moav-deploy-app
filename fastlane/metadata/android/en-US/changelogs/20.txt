@@ -1,0 +1,1 @@
+Maintenance: release builds are now reproducible, so F-Droid can verify them from source. No user-facing changes.
