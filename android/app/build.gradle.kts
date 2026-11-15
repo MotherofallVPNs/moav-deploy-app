@@ -59,6 +59,12 @@ android {
                 signingConfigs.getByName("debug")
         }
     }
+
+    // Keep AGP's Google-encrypted dependency list out of the APK signing
+    // block: F-Droid rejects APKs that carry it. The Play AAB is unchanged.
+    dependenciesInfo {
+        includeInApk = false
+    }
 }
 
 kotlin {
