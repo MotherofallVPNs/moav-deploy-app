@@ -1,0 +1,61 @@
+name: Reproducible build
+
+# Rehearses F-Droid's reproducible-build check before a release is tagged:
+# builds this commit the release.yml way and the F-Droid way, and fails unless
+# the two APKs are identical. See docs/DISTRIBUTION.md (F-Droid).
+on:
+  pull_request:
+    paths:
+      - android/**
+      - pubspec.yaml
+      - pubspec.lock
+      - docs/fdroid/**
+      - scripts/fdroid-validate.sh
+      - .github/workflows/release.yml
+      - .github/workflows/reproducible.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rehearse:
+    # F-Droid clones this repo, so a fork's commits cannot be built.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The pushed head commit; F-Droid cannot fetch the PR merge commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Same Flutter as the release build, read the way the recipe reads it.
+      - name: Read the Flutter version from release.yml
+        id: flutter
+        run: |
+          version=$(sed -n -E 's/.*flutter-version:[[:space:]]*"?([0-9.]+)"?.*/\1/p' .github/workflows/release.yml | head -n 1)
+          [[ $version ]]
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ steps.flutter.outputs.version }}
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter build apk --release
+      - run: scripts/fdroid-validate.sh rehearse build/app/outputs/flutter-apk/app-release.apk
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reproducible-apks
+          path: build/fdroid/*.apk
+          if-no-files-found: ignore

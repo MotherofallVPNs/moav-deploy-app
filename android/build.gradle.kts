@@ -19,6 +19,17 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+// Reproducible builds: link plugin native code (libdartjni.so) without an ELF
+// build ID, which hashes host paths. See docs/DISTRIBUTION.md (F-Droid).
+subprojects {
+    plugins.withId("com.android.library") {
+        extensions.configure<com.android.build.api.dsl.LibraryExtension>("android") {
+            defaultConfig.externalNativeBuild.cmake.arguments +=
+                "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,--build-id=none"
+        }
+    }
+}
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }

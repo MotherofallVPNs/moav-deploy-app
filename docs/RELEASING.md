@@ -40,7 +40,9 @@ the release flow. Push it deliberately with `fastlane android sync_listing`.
 2. **Update the release notes** in
    `fastlane/metadata/android/en-US/changelogs/default.txt`.
 3. **Open the release PR.** The body must include a `## Store release notes`
-   section with the same text. CI must be green.
+   section with the same text. CI must be green, including
+   `Reproducible build / rehearse`: F-Droid only ships a release it can
+   rebuild bit for bit.
 4. **Merge** to `main`.
 5. **Publish a GitHub Release** tagged `vX.Y.Z` on the merge commit
    (`gh release create vX.Y.Z --generate-notes`). Publishing triggers
@@ -55,6 +57,9 @@ the release flow. Push it deliberately with `fastlane android sync_listing`.
    - in a separate macOS job, builds the signed iOS IPA and uploads it to
      TestFlight **internal** testers (needs the `ASC_*` and `MATCH_*` secrets;
      skipped with a log line otherwise, without starting a macOS runner).
+   Then bump the F-Droid recipe in a follow-up PR; its `F-Droid recipe / build`
+   check confirms that F-Droid can reproduce the published APK (see
+   [DISTRIBUTION.md](DISTRIBUTION.md), "Reproducible builds").
 6. **Test the closed testing build** from the Play listing or the testers
    link in the Play Console.
 7. **Promote to production** when ready. Either click Promote in the Play
