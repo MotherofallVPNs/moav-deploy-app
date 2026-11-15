@@ -1,0 +1,35 @@
+name: F-Droid recipe
+
+# Runs the fdroiddata pipeline checks on docs/fdroid/*.yml, so a broken recipe
+# shows up here and not in the F-Droid merge request. Nothing is published.
+on:
+  pull_request:
+    paths:
+      - docs/fdroid/**
+      - scripts/fdroid-validate.sh
+      - .github/workflows/fdroid.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/fdroid-validate.sh lint
+
+  # Builds the version the recipe pins (a release tag), not this checkout.
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/fdroid-validate.sh build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fdroid-unsigned-apk
+          path: build/fdroid/*.apk
+          if-no-files-found: error
