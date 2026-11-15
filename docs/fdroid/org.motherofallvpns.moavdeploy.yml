@@ -18,9 +18,9 @@ Binaries:
   https://github.com/MotherofallVPNs/moav-deploy-app/releases/download/v%v/app-release.apk
 
 Builds:
-  - versionName: 0.2.16
-    versionCode: 19
-    commit: 533e6ba7146f0c9e6836ef8915a968e75fcc53a8
+  - versionName: 0.2.17
+    versionCode: 20
+    commit: c119109e4c510ad43bee8a8ba13e28859e92933c
     sudo:
       - mkdir -p /home/runner/work/moav-deploy-app
       - chown -R vagrant /home/runner
@@ -64,5 +64,5 @@ AllowedAPKSigningKeys: bbd565a138fe28831673f78659eca2c3139d6b862116c8a1b8bb9d719
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
 UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
-CurrentVersion: 0.2.16
-CurrentVersionCode: 19
+CurrentVersion: 0.2.17
+CurrentVersionCode: 20
