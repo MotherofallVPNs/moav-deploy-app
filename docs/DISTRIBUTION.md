@@ -161,6 +161,10 @@ comments, so the notes are here:
   `android/app/build.gradle.kts` so the APK comes out unsigned, and the
   `test` line fails the build if that assignment ever changes shape. Update
   both together with the Gradle file.
+- `Binaries` and `AllowedAPKSigningKeys` switch on reproducible mode: F-Droid
+  downloads `app-release.apk` from the GitHub Release of each version, checks
+  that it is signed with our key and that its own build is identical, and
+  then publishes our APK. See "Reproducible builds" below.
 - `AutoUpdateMode: Version` with `UpdateCheckMode: Tags` makes F-Droid pick up
   each new `vX.Y.Z` tag by reading `version: X.Y.Z+N` from `pubspec.yaml`.
   No merge request is needed per release.
@@ -175,19 +179,37 @@ steps as the fdroiddata merge request pipeline inside F-Droid's buildserver
 image. It needs Docker and nothing else.
 
 ```
-scripts/fdroid-validate.sh lint    # fdroid lint, rewritemeta, checkupdates
-scripts/fdroid-validate.sh build   # full fdroid build of the latest entry
+scripts/fdroid-validate.sh lint            # fdroid lint, rewritemeta, checkupdates
+scripts/fdroid-validate.sh build           # fdroid build of the latest entry
+scripts/fdroid-validate.sh rehearse <apk>  # fdroid build of HEAD, compared with <apk>
 ```
 
-`build` leaves the unsigned APK in `build/fdroid/` and prints how it differs
-from the signed GitHub Release APK of the same version. The
-`F-Droid recipe` workflow runs both modes on every pull request that touches
-the recipe, the script or the workflow.
+`build` builds the version the recipe pins, with `Binaries` in force: fdroid
+downloads that version's GitHub Release APK and fails unless its own build is
+identical. v0.2.16 predates the reproducibility fixes, so for that one
+version the script drops `Binaries` and only reports the differences. The
+unsigned APK is left in `build/fdroid/`.
 
-The image is amd64 only. On Apple Silicon `lint` works, but `build` stops at
-the Dart compile step because the Dart VM aborts under Rosetta
-(`Unexpected EINTR errno`). Use the pull request check or an x86_64 Linux
-host for the build.
+`rehearse` answers the question before a release exists: would this commit
+reproduce if it were tagged now? It points the recipe at `HEAD` (which must be
+pushed), runs `fdroid build`, and compares the result with `<apk>`, a release
+APK built from the same commit the way `release.yml` builds it. The comparison
+is the one fdroid uses: copy the signature of `<apk>` onto the F-Droid build
+and verify it, which only passes when the two are identical.
+
+Two workflows run these:
+
+- `F-Droid recipe` runs `lint` and `build` on pull requests that touch the
+  recipe, the script or the workflow.
+- `Reproducible build` runs `rehearse` on pull requests that touch
+  `android/`, `pubspec.yaml`, `pubspec.lock`, `release.yml`, the recipe or the
+  script. Every release PR bumps `pubspec.yaml`, so every release is
+  rehearsed before it is tagged.
+
+The image is amd64 only. On Apple Silicon `lint` works, but `build` and
+`rehearse` stop at the Dart compile step because the Dart VM aborts under
+Rosetta (`Unexpected EINTR errno`). Use the pull request checks or an x86_64
+Linux host.
 
 Results for v0.2.16 (versionCode 19): lint, rewritemeta and checkupdates are
 clean, and `fdroid build` passes, including the source scanner.
@@ -218,54 +240,66 @@ cannot switch to the developer's key later.
 
 ### Reproducible builds: where we stand
 
-Measured on v0.2.16 by comparing the F-Droid build with the signed GitHub
-Release APK entry by entry:
+Reproducible mode is switched on in the recipe. What made the build
+reproducible:
 
-- 489 of 492 entries are identical, in the same order.
-- The three that differ are `lib/<abi>/libdartjni.so`, and only in their
-  20-byte ELF build ID. That ID is a hash over the linker's input; the likely
-  cause is absolute paths that differ between the two hosts (NDK and pub
-  cache locations).
-- The v0.2.16 release APK also carries AGP's "Dependency metadata" signing
-  block, a Google-encrypted dependency list that fdroidserver's APK scanner
-  counts as a problem in developer-signed APKs. `dependenciesInfo
-  { includeInApk = false }` in `android/app/build.gradle.kts` removes it from
-  the next release on. The Play AAB is not affected.
+- The recipe builds at `/home/runner/work/moav-deploy-app/moav-deploy-app`,
+  the path `release.yml` builds in, so the Dart snapshot (`libapp.so`) comes
+  out identical.
+- `dependenciesInfo { includeInApk = false }` in
+  `android/app/build.gradle.kts` keeps AGP's "Dependency metadata" block (a
+  Google-encrypted dependency list) out of the APK signing block.
+  fdroidserver's APK scanner flags it in developer-signed APKs. The
+  Play AAB is not affected.
+- `android/build.gradle.kts` passes `-Wl,--build-id=none` to the CMake link of
+  every plugin. On v0.2.16, 489 of 492 APK entries already matched; the three
+  that did not were `lib/<abi>/libdartjni.so`, in their 20-byte ELF build ID
+  only. That library comes from `package:jni` and is compiled and linked on
+  the build host by the plugin's own CMake project, not shipped prebuilt, so
+  a linker flag is the right fix and nothing has to be stripped afterwards.
+  The NDK asks for a SHA-1 build ID, which is computed before debug info is
+  stripped and therefore covers host paths. Without the note section the
+  three libraries are the same on every host. Setting it in Gradle covers
+  `release.yml`, the F-Droid build and local builds with one line, where
+  fdroiddata recipes usually patch `CMakeLists.txt` in the pub cache on both
+  sides.
 
-So v0.2.16 cannot be the reference binary, and reproducible mode can start
-with the first release that has both fixes. What is left:
+Checked by the `Reproducible build` workflow on the pull request that added
+the flag: the F-Droid build and a release build of the same commit on a
+GitHub runner are identical in all 492 entries, and the runner APK's
+signature verifies on the F-Droid build. That run signs with the runner's
+debug key, so what is still untested is a real release: the APK that
+`release.yml` signs with the upload key and attaches to a GitHub Release.
 
-1. Drop the build ID from `libdartjni.so` on both sides with the line many
-   Flutter recipes in fdroiddata use (not yet tried on this app). In
-   `release.yml`, after `flutter pub get` in the Android job:
+v0.2.16 has neither of the last two fixes, so it can never be the reference
+binary. The first release tagged after this change is the first one F-Droid
+can ship. To confirm it, once the release workflow has attached
+`app-release.apk` to the GitHub Release:
+
+1. In the recipe, set `versionName`, `versionCode`, `CurrentVersion` and
+   `CurrentVersionCode` to the new version and `commit` to the full hash of
+   the tag (`git rev-list -n 1 vX.Y.Z`).
+2. Open a pull request with that change. `F-Droid recipe / build` then runs
+   `fdroid build` with `Binaries` in force and is green only if the F-Droid
+   build is identical to the published APK and the APK is signed with the key
+   in `AllowedAPKSigningKeys`. The log ends with `REPRODUCIBLE`. On an x86_64
+   Linux host the same check is `scripts/fdroid-validate.sh build`.
+3. Optional, by hand, with the `fdroid-unsigned-apk` artifact of that run
+   (`gh run download <run-id> -n fdroid-unsigned-apk`):
 
    ```
-   sed -i -e 's/-Wl,/-Wl,--build-id=none,/' "${PUB_CACHE:-$HOME/.pub-cache}"/hosted/pub.dev/jni-*/src/CMakeLists.txt
+   curl -LO https://github.com/MotherofallVPNs/moav-deploy-app/releases/download/vX.Y.Z/app-release.apk
+   apksigner verify --print-certs app-release.apk   # SHA-256 must be bbd565a1...f80aa6
+   apksigcopier compare --unsigned app-release.apk org.motherofallvpns.moavdeploy_N.apk
+   diffoscope app-release.apk org.motherofallvpns.moavdeploy_N.apk   # only if compare fails
    ```
 
-   and in the recipe's `prebuild`, after `pub get`:
-
-   ```
-   - sed -i -e 's/-Wl,/-Wl,--build-id=none,/' $PUB_CACHE/hosted/pub.dev/jni-*/src/CMakeLists.txt
-   ```
-
-2. Cut the release, point the recipe at it and run
-   `scripts/fdroid-validate.sh build`. It must report no differing entries.
-3. Add to the build entry and to the top level of the recipe:
-
-   ```
-       binary: https://github.com/MotherofallVPNs/moav-deploy-app/releases/download/v%v/app-release.apk
-   AllowedAPKSigningKeys: bbd565a138fe28831673f78659eca2c3139d6b862116c8a1b8bb9d7196f80aa6
-   ```
-
-   With `binary` set, `fdroid build` downloads the release APK and fails if
-   its own build does not match, so the check in step 2 becomes automatic.
-
-Things that keep this working once enabled: `release.yml` and the recipe must
-build with the same Flutter (the recipe reads it from `release.yml`), the
-release APK must be attached to the GitHub Release under the name
-`app-release.apk`, and the upload key must not change. A release that does
-not reproduce is simply not published by F-Droid until it is fixed.
+Things that keep this working: `release.yml` and the recipe must build with
+the same Flutter (the recipe reads it from `release.yml`), the release APK
+must be attached to the GitHub Release under the name `app-release.apk`, and
+the upload key must not change. A release that does not reproduce is not
+published by F-Droid until it is fixed, which is what the rehearsal check on
+the release PR is there to catch.
 
 ### Submitting
 
@@ -293,9 +327,8 @@ without another merge request.
 
 ### Remaining steps
 
-1. Decide the signing route: F-Droid's key (works today, three keys for
-   good) or reproducible (two keys, needs the steps above and one more
-   release).
+1. Cut the next release and confirm that it reproduces (steps above). The
+   signing route is decided: reproducible, so F-Droid ships our signed APK.
 2. Confirm the optional `Donate:` link and the categories in the recipe.
 3. Open the fdroiddata merge request.
 4. Add the F-Droid badge to the README next to Google Play once listed.
