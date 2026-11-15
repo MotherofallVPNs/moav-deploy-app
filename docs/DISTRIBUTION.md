@@ -14,7 +14,7 @@ first-class, not a fallback.
 | Apple App Store | iOS users with store access | `.ipa` via App Store Connect | Not yet published |
 | TestFlight | iOS beta, and regions where a listing may be pulled | same build | Internal testers get every release automatically via CI; public link not yet opened |
 | APK mirror via moav.sh or Telegram | Users who cannot reach GitHub | same `.apk` plus SHA-256 | Coordinated with the MoaV team |
-| F-Droid | Privacy-focused Android users | Built from source by F-Droid | Recipe builds in F-Droid's toolchain for v0.2.16; not yet submitted, see [F-Droid](#f-droid) |
+| F-Droid | Privacy-focused Android users | Built from source by F-Droid | Recipe reproduces the v0.2.17 release APK in F-Droid's toolchain; not yet submitted, see [F-Droid](#f-droid) |
 
 ## Google Play
 
@@ -71,8 +71,8 @@ first-class, not a fallback.
 
 ## F-Droid
 
-Status: recipe validated against the F-Droid toolchain for v0.2.16
-(versionCode 19); not submitted. Tracked in issue #24. The submission itself
+Status: recipe validated against the F-Droid toolchain for v0.2.17
+(versionCode 20), which reproduces the published release APK; not submitted. Tracked in issue #24. The submission itself
 is a manual merge request on GitLab, see [Submitting](#submitting).
 
 F-Droid builds every app from source on its own servers, rejects proprietary
@@ -211,8 +211,9 @@ The image is amd64 only. On Apple Silicon `lint` works, but `build` and
 Rosetta (`Unexpected EINTR errno`). Use the pull request checks or an x86_64
 Linux host.
 
-Results for v0.2.16 (versionCode 19): lint, rewritemeta and checkupdates are
-clean, and `fdroid build` passes, including the source scanner.
+Results for v0.2.17 (versionCode 20): lint, rewritemeta and checkupdates are
+clean, and `fdroid build` passes, including the source scanner and the
+comparison with the release APK (`REPRODUCIBLE`).
 
 ### Signing: three different keys
 
@@ -268,12 +269,14 @@ Checked by the `Reproducible build` workflow on the pull request that added
 the flag: the F-Droid build and a release build of the same commit on a
 GitHub runner are identical in all 492 entries, and the runner APK's
 signature verifies on the F-Droid build. That run signs with the runner's
-debug key, so what is still untested is a real release: the APK that
-`release.yml` signs with the upload key and attaches to a GitHub Release.
+debug key. The real thing was confirmed on v0.2.17 (versionCode 20), the
+first release tagged after the change: the F-Droid build is identical to the
+`app-release.apk` that `release.yml` signed with the upload key and attached
+to the GitHub Release.
 
 v0.2.16 has neither of the last two fixes, so it can never be the reference
-binary. The first release tagged after this change is the first one F-Droid
-can ship. To confirm it, once the release workflow has attached
+binary; v0.2.17 is the first release F-Droid can ship. To confirm a later
+release, once the release workflow has attached
 `app-release.apk` to the GitHub Release:
 
 1. In the recipe, set `versionName`, `versionCode`, `CurrentVersion` and
@@ -327,12 +330,11 @@ without another merge request.
 
 ### Remaining steps
 
-1. Cut the next release and confirm that it reproduces (steps above). The
+1. Confirm the optional `Donate:` link and the categories in the recipe. The
    signing route is decided: reproducible, so F-Droid ships our signed APK.
-2. Confirm the optional `Donate:` link and the categories in the recipe.
-3. Open the fdroiddata merge request.
-4. Add the F-Droid badge to the README next to Google Play once listed.
-5. Publish the release certificate fingerprint in the README and release
+2. Open the fdroiddata merge request.
+3. Add the F-Droid badge to the README next to Google Play once listed.
+4. Publish the release certificate fingerprint in the README and release
    notes so sideload and F-Droid users can compare it with the About screen.
 
 ## Naming and at-risk users
