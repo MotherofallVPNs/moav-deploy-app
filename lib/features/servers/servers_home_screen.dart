@@ -15,6 +15,7 @@ import '../demo/demo_widgets.dart';
 import '../deploy/deploy_screen.dart';
 import '../disguise/disguise_screen.dart';
 import '../keys/keyring_screen.dart';
+import '../lock/app_lock_sheet.dart';
 import '../operate/grafana_screen.dart';
 import '../server/server_screen.dart';
 import '../support/support_sheet.dart';
@@ -46,6 +47,13 @@ class ServersHomeScreen extends ConsumerWidget {
                 child: ListTile(
                   leading: Icon(Icons.key_outlined),
                   title: Text('SSH keys'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _HomeAction.appLock,
+                child: ListTile(
+                  leading: Icon(Icons.lock_outline),
+                  title: Text('App lock'),
                 ),
               ),
               PopupMenuItem(
@@ -132,6 +140,7 @@ class ServersHomeScreen extends ConsumerWidget {
 
 enum _HomeAction {
   keys,
+  appLock,
   disguise,
   docs,
   support,
@@ -151,6 +160,8 @@ Future<void> _handleHomeAction(
   switch (action) {
     case _HomeAction.keys:
       await Navigator.of(context).push(KeyringScreen.route());
+    case _HomeAction.appLock:
+      await showAppLockSheet(context);
     case _HomeAction.disguise:
       await Navigator.of(context).push(DisguiseScreen.route());
     case _HomeAction.wipe:
