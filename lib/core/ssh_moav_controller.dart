@@ -5,6 +5,7 @@ import 'package:dartssh2/dartssh2.dart';
 
 import '../security/app_log.dart';
 import 'app_error.dart';
+import 'apply_script.dart';
 import 'dns_check.dart';
 import 'dns_records.dart';
 import 'donate.dart';
@@ -189,9 +190,15 @@ class SshMoavController implements MoavController {
     return parseInstallStatus(out.stdout);
   }
 
+  ///
+  /// [stepHint] is the latest step marker of the whole log and [exitHint]
+  /// the job's exit file, for jobs whose output outruns the tail.
   static InstallStatus parseInstallStatus(
     String raw, {
     int totalSteps = InstallScript.totalSteps,
+    String noun = 'Install',
+    String? stepHint,
+    int? exitHint,
   }) {
     final idx = raw.indexOf('__LOG__');
     final head = idx < 0 ? raw : raw.substring(0, idx);
@@ -208,13 +215,13 @@ class SshMoavController implements MoavController {
       lines.removeLast();
     }
 
-    int? exitCode;
+    int? exitCode = exitHint;
     int step = 0;
     // The marker's own denominator wins, so a job written by another app
     // version (3 or 4 steps) still reports a sane fraction.
     int total = totalSteps;
     String? stepTitle;
-    for (final l in lines) {
+    for (final l in [?stepHint, ...lines]) {
       if (l.startsWith(InstallScript.exitMarker)) {
         exitCode = int.tryParse(l.substring(InstallScript.exitMarker.length).trim());
       } else if (l.startsWith(InstallScript.stepMarker)) {
@@ -236,8 +243,8 @@ class SshMoavController implements MoavController {
         logTail: lines,
         progress: exitCode == 0 ? 1.0 : progress,
         message: exitCode == 0
-            ? 'Install finished'
-            : 'Install failed (exit $exitCode)',
+            ? '$noun finished'
+            : '$noun failed (exit $exitCode)',
         step: seen,
         totalSteps: seenTotal,
       );
@@ -253,16 +260,16 @@ class SshMoavController implements MoavController {
       );
     }
     if (lines.isEmpty) {
-      return const InstallStatus(
+      return InstallStatus(
         phase: InstallPhase.unknown,
-        message: 'No install log found on the server',
+        message: 'No ${noun.toLowerCase()} log found on the server',
       );
     }
     return InstallStatus(
       phase: InstallPhase.failed,
       logTail: lines,
       progress: progress,
-      message: 'Install process ended without reporting a result',
+      message: '$noun process ended without reporting a result',
       step: seen,
       totalSteps: seenTotal,
     );
@@ -604,16 +611,90 @@ class SshMoavController implements MoavController {
     return check;
   }
 
-  /// Uploads [UpdateScript] to `~/.moav-deploy/update.sh` and launches it
-  /// with `setsid nohup`. A job still running is left alone (idempotent).
+  /// Uploads [UpdateScript] to `~/.moav-deploy/update.sh` (and, with
+  /// [applyAfter], [ApplyScript] for it to chain into) and launches it with
+  /// `setsid nohup`. A job still running is left alone (idempotent).
   @override
-  Future<void> startUpdate() async {
+  Future<void> startUpdate({bool applyAfter = true}) async {
     await _writeFile(UpdateScript.scriptPath, UpdateScript.body, mode: '700');
-    final out = await _run(UpdateScript.launch);
+    if (applyAfter) {
+      await _writeFile(ApplyScript.uploadPath, ApplyScript.script, mode: '700');
+    }
+    final out = await _run(UpdateScript.launch(applyAfter: applyAfter));
+    if (out.stdout.contains('BUSY apply')) {
+      throw StateError(
+          'A rebuild is still running on the server. Wait for it to finish, then update.');
+    }
     if (!RegExp(r'^(STARTED|RUNNING) \d+', multiLine: true)
         .hasMatch(out.stdout)) {
       throw StateError('Could not start the update: ${_short(out.combined)}');
     }
+  }
+
+  /// Uploads [ApplyScript] next to `~/.moav-deploy/apply.sh` and runs
+  /// [ApplyScript.launch], which swaps it in and starts it with
+  /// `setsid nohup` unless a job is already running (idempotent).
+  @override
+  Future<void> startApply(ApplySpec spec) async {
+    final launch = ApplyScript.launch(spec); // validates the service names
+    await _writeFile(ApplyScript.uploadPath, ApplyScript.script, mode: '700');
+    final out = await _run(launch);
+    if (out.stdout.contains('BUSY update')) {
+      throw StateError(
+          'An update is still running on the server. Wait for it to finish first.');
+    }
+    if (!RegExp(r'^(STARTED|RUNNING) \d+', multiLine: true)
+        .hasMatch(out.stdout)) {
+      throw StateError('Could not start the rebuild: ${_short(out.combined)}');
+    }
+  }
+
+  /// [ApplyScript.status]: liveness, `apply.exit`, `apply.job`, `apply.ack`,
+  /// `apply.pending` and the log tail, in one round trip.
+  @override
+  Future<ApplyStatus> applyStatus() async {
+    final out = await _run(ApplyScript.status(), allowFailure: true);
+    return parseApplyStatus(out.stdout);
+  }
+
+  static ApplyStatus parseApplyStatus(String raw) {
+    final idx = raw.indexOf('__LOG__');
+    final head = (idx < 0 ? raw : raw.substring(0, idx)).split('\n');
+    final pending = head.any((l) => l.trim() == 'PENDING');
+    if (idx < 0 || head.any((l) => l.trim() == 'NOJOB')) {
+      return ApplyStatus(updatePending: pending);
+    }
+    String? field(String key) {
+      for (final l in head) {
+        if (l.startsWith('$key=')) return l.substring(key.length + 1).trim();
+      }
+      return null;
+    }
+
+    final exitCode = int.tryParse(field('EXIT') ?? '');
+    final step = field('STEP');
+    final jobLine = field('JOB');
+    final job = jobLine == null ? null : ApplyScript.parseJob(jobLine);
+    return ApplyStatus(
+      job: parseInstallStatus(
+        raw,
+        totalSteps: ApplyScript.totalSteps,
+        noun: 'Rebuild',
+        stepHint: step == null || step.isEmpty ? null : step,
+        exitHint: exitCode,
+      ),
+      jobId: job?.id,
+      spec: job?.spec,
+      exitCode: exitCode,
+      acknowledged: head.any((l) => l.trim() == 'ACKED'),
+      updatePending: pending,
+    );
+  }
+
+  /// `touch ~/.moav-deploy/apply.ack` once the job has ended.
+  @override
+  Future<void> acknowledgeApply() async {
+    await _run(ApplyScript.acknowledge, allowFailure: true);
   }
 
   /// `kill -0 $(cat update.pid); tail -n 400 ~/.moav-deploy/update.log`.
@@ -623,7 +704,8 @@ class SshMoavController implements MoavController {
     if (out.stdout.contains('NOJOB') || !out.stdout.contains('__LOG__')) {
       return null;
     }
-    return parseInstallStatus(out.stdout, totalSteps: UpdateScript.totalSteps);
+    return parseInstallStatus(out.stdout,
+        totalSteps: UpdateScript.totalSteps, noun: 'Update');
   }
 
   static void _logFormat(String command, CliFormat format) =>

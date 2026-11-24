@@ -40,7 +40,11 @@ the bundles this app produces.
   and show every phone link (Reality, Hysteria2, Trojan, Shadowsocks, XHTTP,
   WireGuard, AmneziaWG, MTProxy) as a QR code with copy and share.
 - **Operate.** Start, stop and restart services, run `moav doctor`, read the
-  live service table, and open the admin dashboard inside the app.
+  live service table, and open the admin dashboard inside the app. Update
+  MoaV and have it applied in one go: the rebuild and restart run as a
+  detached job on the server, so you can lock the phone and find the result
+  when you come back. The same job rebuilds all services or one, with a
+  force (`--no-cache`) option.
 - **Monitor.** Headline metrics from Prometheus and Grafana embedded in the
   app, with an open-in-browser fallback for self-signed certificates.
 - **Donate.** See what the server gives back (Psiphon Conduit and Tor

@@ -22,6 +22,10 @@ class StubMoavController implements MoavController {
     OutputSink? onOutput,
   }) =>
       throw UnimplementedError('donateConfigs');
+
+  @override
+  Future<void> startUpdate({bool applyAfter = true}) =>
+      throw UnimplementedError('startUpdate');
 }
 
 /// Hands every server the same controller.

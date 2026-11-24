@@ -9,6 +9,7 @@ import '../../widgets/moav_app_bar.dart';
 import '../../widgets/cached_view.dart';
 import '../../widgets/log_view.dart';
 import 'analytics_view.dart';
+import 'apply_view.dart';
 import 'operate_provider.dart';
 import 'server_info_view.dart';
 
@@ -125,6 +126,16 @@ class _ServicesTab extends ConsumerWidget {
     final flags = ref.watch(serviceFlagsProvider(profile.id)).data;
     final actions = ref.watch(serviceActionsProvider(profile.id));
     final notifier = ref.read(serviceActionsProvider(profile.id).notifier);
+    final apply = ref.watch(applyProvider(profile.id));
+    // One thing at a time: a rebuild recreates the containers the quick
+    // actions would be starting and stopping.
+    final busy = actions.busy || apply.busy;
+
+    Future<void> rebuild({String? service}) async {
+      final spec = await showRebuildDialog(context, service: service);
+      if (spec == null) return;
+      await ref.read(applyProvider(profile.id).notifier).start(spec);
+    }
 
     ref.listen(serviceActionsProvider(profile.id), (prev, next) {
       final error = next.error;
@@ -232,6 +243,7 @@ class _ServicesTab extends ConsumerWidget {
                   ),
                 ),
               ),
+            ApplyJobPanel(serverId: profile.id),
             _SummaryCard(report: s, fetchedAt: status.fetchedAt),
             const SectionHeader('Actions', padding: EdgeInsets.only(top: 16, bottom: 8)),
             Wrap(
@@ -239,12 +251,12 @@ class _ServicesTab extends ConsumerWidget {
               runSpacing: 8,
               children: [
                 FilledButton.tonalIcon(
-                  onPressed: actions.busy ? null : () => confirmAndRun(ServiceAction.start),
+                  onPressed: busy ? null : () => confirmAndRun(ServiceAction.start),
                   icon: const Icon(Icons.play_arrow, size: 18),
                   label: const Text('Start all'),
                 ),
                 FilledButton.tonalIcon(
-                  onPressed: actions.busy
+                  onPressed: busy
                       ? null
                       : () => confirmAndRun(
                             ServiceAction.restart,
@@ -255,7 +267,7 @@ class _ServicesTab extends ConsumerWidget {
                   label: const Text('Restart all'),
                 ),
                 FilledButton.tonalIcon(
-                  onPressed: actions.busy
+                  onPressed: busy
                       ? null
                       : () => confirmAndRun(
                             ServiceAction.stop,
@@ -266,7 +278,7 @@ class _ServicesTab extends ConsumerWidget {
                   label: const Text('Stop all'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: actions.busy
+                  onPressed: busy
                       ? null
                       : () => confirmAndRun(
                             ServiceAction.regenerateUsers,
@@ -276,6 +288,11 @@ class _ServicesTab extends ConsumerWidget {
                           ),
                   icon: const Icon(Icons.autorenew, size: 18),
                   label: const Text('Regenerate users'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: busy ? null : rebuild,
+                  icon: const Icon(Icons.build_circle_outlined, size: 18),
+                  label: const Text('Rebuild & restart'),
                 ),
               ],
             ),
@@ -290,9 +307,10 @@ class _ServicesTab extends ConsumerWidget {
                       service: svc,
                       enabled: flags?.serviceEnabled(svc.name),
                       toggleable: MoavServices.toggleFor(svc.name) != null,
-                      busy: actions.busy,
+                      busy: busy,
                       active: actions.isRunningFor(svc.name),
                       onAction: (kind) => rowAction(svc, kind),
+                      onRebuild: () => rebuild(service: svc.name),
                     ),
                   ],
                 ],
@@ -369,6 +387,7 @@ class _ServiceRow extends StatelessWidget {
     required this.service,
     required this.busy,
     required this.onAction,
+    required this.onRebuild,
     this.enabled,
     this.toggleable = false,
     this.active = false,
@@ -388,6 +407,13 @@ class _ServiceRow extends StatelessWidget {
   /// The in-flight action targets this row.
   final bool active;
   final void Function(ServiceActionKind) onAction;
+
+  /// Opens the rebuild dialog for this service (a detached job, not a
+  /// [ServiceActionKind]).
+  final VoidCallback onRebuild;
+
+  /// Menu value of the rebuild entry, next to the [ServiceActionKind]s.
+  static const _rebuild = 'rebuild';
 
   @override
   Widget build(BuildContext context) {
@@ -443,14 +469,15 @@ class _ServiceRow extends StatelessWidget {
               ),
             )
           else
-            PopupMenuButton<ServiceActionKind>(
+            PopupMenuButton<Object>(
               enabled: !busy,
               tooltip: 'Actions for ${service.name}',
-              onSelected: onAction,
+              onSelected: (v) => v is ServiceActionKind ? onAction(v) : onRebuild(),
               itemBuilder: (_) => [
                 const PopupMenuItem(value: ServiceActionKind.start, child: Text('Start')),
                 const PopupMenuItem(value: ServiceActionKind.restart, child: Text('Restart')),
                 const PopupMenuItem(value: ServiceActionKind.stop, child: Text('Stop')),
+                const PopupMenuItem(value: _rebuild, child: Text('Rebuild and restart…')),
                 if (toggleable) ...[
                   const PopupMenuDivider(),
                   if (enabled != true)

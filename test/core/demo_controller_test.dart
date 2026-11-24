@@ -426,6 +426,65 @@ void main() {
     expect((await c.status()).version, '2.3.2');
   });
 
+  test('update chains into the apply job, which ends and can be dismissed',
+      () async {
+    final clock = _Clock();
+    final c = _demo(clock);
+    expect((await c.applyStatus()).job, isNull);
+    await c.startUpdate();
+    clock.advance(DemoMoavController.updateDoneAt);
+    expect((await c.updateStatus())!.logTail, contains(startsWith('[moav-deploy] apply=started')));
+
+    // The apply started where the update ended, without being asked again.
+    clock.advance(const Duration(seconds: 1));
+    final running = await c.applyStatus();
+    expect(running.running, isTrue);
+    expect(running.job!.step, 2);
+    expect(running.job!.totalSteps, 4);
+    expect(running.spec!.regenerateUsers, isTrue);
+    expect(running.updatePending, isTrue);
+    // A second launch re-attaches instead of restarting the timeline.
+    await c.startApply(const ApplySpec(noCache: true));
+    expect((await c.applyStatus()).spec!.noCache, isFalse);
+
+    clock.advance(DemoMoavController.applyDoneAt);
+    final done = await c.applyStatus();
+    expect(done.running, isFalse);
+    expect(done.job!.phase, InstallPhase.succeeded);
+    expect(done.exitCode, 0);
+    expect(done.updatePending, isFalse);
+    expect(done.hasUnseenResult, isTrue);
+    await c.acknowledgeApply();
+    expect((await c.applyStatus()).hasUnseenResult, isFalse);
+  });
+
+  test('update without apply leaves it pending; a service rebuild does not settle it',
+      () async {
+    final clock = _Clock();
+    final c = _demo(clock);
+    await c.startUpdate(applyAfter: false);
+    clock.advance(DemoMoavController.updateDoneAt);
+    expect((await c.updateStatus())!.logTail, contains(startsWith('[moav-deploy] apply=pending')));
+    final idle = await c.applyStatus();
+    expect(idle.job, isNull);
+    expect(idle.updatePending, isTrue);
+
+    await c.startApply(const ApplySpec(services: ['sing-box'], noCache: true));
+    clock.advance(DemoMoavController.applyDoneAt);
+    final one = await c.applyStatus();
+    expect(one.job!.phase, InstallPhase.succeeded);
+    expect(one.spec!.services, ['sing-box']);
+    expect(one.updatePending, isTrue);
+
+    await c.startApply(ApplySpec.afterUpdate);
+    clock.advance(DemoMoavController.applyDoneAt);
+    expect((await c.applyStatus()).updatePending, isFalse);
+    await expectLater(
+      c.startApply(const ApplySpec(services: ['nope'])),
+      throwsA(isA<AppError>()),
+    );
+  });
+
   test('web UIs: access is readable, the tunnel is refused with a demo note',
       () async {
     final c = _demo(_Clock());

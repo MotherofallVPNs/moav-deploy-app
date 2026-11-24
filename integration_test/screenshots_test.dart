@@ -515,10 +515,19 @@ class _FakeController implements MoavController {
       ));
 
   @override
-  Future<void> startUpdate() => _lag(null);
+  Future<void> startUpdate({bool applyAfter = true}) => _lag(null);
 
   @override
   Future<InstallStatus?> updateStatus() => _lag(null);
+
+  @override
+  Future<void> startApply(ApplySpec spec) => _lag(null);
+
+  @override
+  Future<ApplyStatus> applyStatus() => _lag(const ApplyStatus());
+
+  @override
+  Future<void> acknowledgeApply() => _lag(null);
 
   @override
   Future<AdminPanelAccess> adminPanelAccess() =>
