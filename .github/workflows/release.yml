@@ -137,7 +137,7 @@ jobs:
         if: github.event_name == 'release' && env.HAS_SIGNING == 'true' && env.HAS_PLAY_KEY == 'true'
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.4"
+          ruby-version: "4.0"
           bundler-cache: true
 
       - name: Write Play service-account key
@@ -205,7 +205,7 @@ jobs:
 
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.4"
+          ruby-version: "4.0"
           bundler-cache: true
 
       - run: flutter --version
