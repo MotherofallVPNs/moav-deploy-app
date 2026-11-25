@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
@@ -31,16 +32,57 @@ enum AuthOutcome {
   fallbackRequested,
 
   /// Biometrics cannot answer right now (locked out after too many tries,
-  /// none enrolled any more, sensor busy); only the passcode can.
+  /// sensor busy); only the passcode can.
   biometricUnavailable,
+
+  /// The device has a sensor with nothing enrolled on it.
+  biometricNotEnrolled,
+
+  /// The OS keeps biometrics from this app: no sensor, or (iOS) Face ID
+  /// switched off for the app in Settings. iOS reports both alike.
+  biometricRefused;
+
+  /// A biometric-only prompt ended where only the passcode can go on.
+  bool get wantsPasscode =>
+      this == fallbackRequested ||
+      this == biometricUnavailable ||
+      this == biometricNotEnrolled ||
+      this == biometricRefused;
+}
+
+/// Where biometric unlock stands for this app, as far as is known.
+enum BiometricStatus {
+  /// Enrolled and usable: the OS names it.
+  ready,
+
+  /// iOS and macOS only: the OS names none, yet the device can lock. Only a
+  /// biometric prompt says why (never asked, off in Settings, none enrolled).
+  unconfirmed,
+
+  /// Switched off for this app in the system settings.
+  denied,
+
+  /// A sensor with nothing enrolled on it.
+  notEnrolled,
+
+  /// Nothing to offer: no sensor, or no device lock at all.
+  unavailable;
+
+  /// Worth a biometric prompt: it works, or it says why it cannot.
+  bool get offered => this == ready || this == unconfirmed;
 }
 
 /// Wraps [LocalAuthentication] so it can be swapped in tests.
 class AppLockService {
-  AppLockService([LocalAuthentication? auth])
-      : _auth = auth ?? LocalAuthentication();
+  AppLockService([LocalAuthentication? auth, TargetPlatform? platform])
+      : _auth = auth ?? LocalAuthentication(),
+        _platform = platform ?? defaultTargetPlatform;
 
   final LocalAuthentication _auth;
+  final TargetPlatform _platform;
+
+  bool get _apple =>
+      _platform == TargetPlatform.iOS || _platform == TargetPlatform.macOS;
 
   /// True when the device can prompt for biometrics or a passcode.
   Future<bool> canLock() async {
@@ -51,14 +93,33 @@ class AppLockService {
     }
   }
 
-  /// The biometrics enrolled on the device right now; empty when there are
-  /// none or the OS will not say. Asked again for every unlock attempt,
-  /// since enrollment can change while the app is in the background.
+  /// The biometrics the OS names right now; empty when there are none or it
+  /// will not say (see [biometricStatus]). Asked again for every unlock
+  /// attempt, since enrollment can change while the app is in the background.
   Future<List<BiometricType>> enrolledBiometrics() async {
     try {
       return await _auth.getAvailableBiometrics();
     } on Object catch (_) {
       return const [];
+    }
+  }
+
+  /// What [enrolled] (from [enrolledBiometrics]) means here, without a prompt.
+  /// Android's list is the whole answer; iOS lists only what this app may
+  /// use now, so its empty list also covers "Face ID is off for the app".
+  Future<BiometricStatus> biometricStatus(List<BiometricType> enrolled) async {
+    if (enrolled.isNotEmpty) return BiometricStatus.ready;
+    if (!_apple || !await canLock()) return BiometricStatus.unavailable;
+    return BiometricStatus.unconfirmed;
+  }
+
+  /// True when the device has a biometric sensor, whether or not this app
+  /// may use it.
+  Future<bool> hasBiometricSensor() async {
+    try {
+      return await _auth.canCheckBiometrics;
+    } on Object catch (_) {
+      return false;
     }
   }
 
@@ -115,10 +176,12 @@ class AppLockService {
         AuthOutcome.fallbackRequested,
       LocalAuthExceptionCode.temporaryLockout ||
       LocalAuthExceptionCode.biometricLockout ||
-      LocalAuthExceptionCode.noBiometricsEnrolled ||
-      LocalAuthExceptionCode.noBiometricHardware ||
       LocalAuthExceptionCode.biometricHardwareTemporarilyUnavailable =>
         AuthOutcome.biometricUnavailable,
+      LocalAuthExceptionCode.noBiometricsEnrolled =>
+        AuthOutcome.biometricNotEnrolled,
+      LocalAuthExceptionCode.noBiometricHardware =>
+        AuthOutcome.biometricRefused,
       _ => AuthOutcome.failed,
     };
   }
@@ -151,8 +214,8 @@ final preferBiometricProvider =
   PreferBiometricNotifier.new,
 );
 
-/// The biometrics enrolled on the device as last asked: what the lock
-/// screen and the setting offer. Empty until the first answer.
+/// The biometrics the OS named when last asked, for labels and icons. Empty
+/// until the first answer; [biometricStatusProvider] keeps it current.
 class EnrolledBiometricsNotifier extends Notifier<List<BiometricType>> {
   @override
   List<BiometricType> build() => const [];
@@ -169,13 +232,70 @@ final enrolledBiometricsProvider =
   EnrolledBiometricsNotifier.new,
 );
 
+/// Whether biometric unlock can be offered, and if not, why: what the lock
+/// screen and the setting go by.
+class BiometricStatusNotifier extends Notifier<BiometricStatus> {
+  /// What a prompt said while the OS itself names nothing.
+  BiometricStatus? _learned;
+
+  @override
+  BiometricStatus build() => BiometricStatus.unavailable;
+
+  /// Asks the OS again, without prompting.
+  Future<BiometricStatus> refresh() async {
+    final service = ref.read(appLockServiceProvider);
+    final enrolled =
+        await ref.read(enrolledBiometricsProvider.notifier).refresh();
+    final found = await service.biometricStatus(enrolled);
+    if (!ref.mounted) return found;
+    if (found != BiometricStatus.unconfirmed) _learned = null;
+    return state = _learned ?? found;
+  }
+
+  /// Takes in how a biometric-only prompt ended: its refusals are the only
+  /// way to tell "off for this app" from "none enrolled" on iOS.
+  Future<void> learn(AuthOutcome outcome) async {
+    final service = ref.read(appLockServiceProvider);
+    final learned = switch (outcome) {
+      AuthOutcome.biometricNotEnrolled => BiometricStatus.notEnrolled,
+      AuthOutcome.biometricRefused => await service.hasBiometricSensor()
+          ? BiometricStatus.denied
+          : BiometricStatus.unavailable,
+      _ => null,
+    };
+    if (learned == null || !ref.mounted) return;
+    AppLog.info('lock', 'biometric prompt refused: ${learned.name}');
+    state = _learned = learned;
+  }
+
+  /// Asks for the biometric alone, now: on iOS that is what brings up the
+  /// Face ID permission alert, and what says why when it cannot.
+  Future<BiometricStatus> confirm() async {
+    final outcome = await ref.read(appLockServiceProvider).authenticate(
+          disguised: ref.read(decoyProvider).enabled,
+          biometricOnly: true,
+        );
+    if (!ref.mounted) return state;
+    await learn(outcome);
+    if (!ref.mounted) return state;
+    return refresh();
+  }
+}
+
+final biometricStatusProvider =
+    NotifierProvider<BiometricStatusNotifier, BiometricStatus>(
+  BiometricStatusNotifier.new,
+);
+
 /// "Face ID", "Touch ID" or a generic word, for buttons and the setting.
-/// Android only reports strength classes, never which sensor it is.
+/// Android only reports strength classes, never which sensor it is, and
+/// neither does iOS before the app has been allowed to use it.
 String biometricLabel(List<BiometricType> enrolled, TargetPlatform platform) {
   final apple =
       platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
   if (apple && enrolled.contains(BiometricType.face)) return 'Face ID';
   if (apple && enrolled.contains(BiometricType.fingerprint)) return 'Touch ID';
+  if (apple && enrolled.isEmpty) return 'Face ID or Touch ID';
   return 'biometrics';
 }
 
@@ -210,28 +330,34 @@ class AppLockNotifier extends Notifier<LockState> {
     state = LockState.unlocking;
     final service = ref.read(appLockServiceProvider);
     final disguised = ref.read(decoyProvider).enabled;
-    final enrolled =
-        await ref.read(enrolledBiometricsProvider.notifier).refresh();
+    final biometrics = ref.read(biometricStatusProvider.notifier);
+    final status = await biometrics.refresh();
     if (!ref.mounted) return;
     var chosen = method;
     // The setting only matters when there is a biometric to prefer.
-    if (chosen == null && enrolled.isNotEmpty) {
+    if (chosen == null && status.offered) {
       final prefer = await _preferBiometric();
       if (!ref.mounted) return;
       chosen = prefer ? UnlockMethod.biometric : UnlockMethod.deviceCredential;
     }
-    final biometric = chosen == UnlockMethod.biometric && enrolled.isNotEmpty;
+    final biometric = chosen == UnlockMethod.biometric && status.offered;
     var outcome = await service.authenticate(
       disguised: disguised,
       biometricOnly: biometric,
     );
-    if (biometric &&
-        (outcome == AuthOutcome.fallbackRequested ||
-            outcome == AuthOutcome.biometricUnavailable)) {
-      // Asked for on the sheet, or the only thing that clears a lockout.
+    if (biometric && outcome.wantsPasscode) {
+      await biometrics.learn(outcome);
+      if (!ref.mounted) return;
+      // Asked for on the sheet, or the only way in without the biometric.
       outcome = await service.authenticate(disguised: disguised);
     }
     if (!ref.mounted) return;
+    if (outcome == AuthOutcome.success &&
+        status == BiometricStatus.unconfirmed) {
+      // iOS names the biometric once the app has been allowed to use it.
+      await biometrics.refresh();
+      if (!ref.mounted) return;
+    }
     state = outcome == AuthOutcome.success
         ? LockState.unlocked
         : LockState.failed;
@@ -303,8 +429,8 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
         if (ref.read(appLockProvider) == LockState.locked) {
           ref.read(appLockProvider.notifier).unlock();
         } else {
-          // Face ID may have been set up or removed in Settings meanwhile.
-          ref.read(enrolledBiometricsProvider.notifier).refresh();
+          // Face ID may have been set up, removed or allowed in Settings.
+          ref.read(biometricStatusProvider.notifier).refresh();
         }
       case AppLifecycleState.inactive:
       case AppLifecycleState.hidden:
@@ -320,6 +446,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   Widget build(BuildContext context) {
     final lock = ref.watch(appLockProvider);
     final biometrics = ref.watch(enrolledBiometricsProvider);
+    final status = ref.watch(biometricStatusProvider);
     final unlocked = lock == LockState.unlocked;
     final covered = _obscured || !unlocked;
     return Stack(
@@ -336,6 +463,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
           PrivacyShield(
             lock: unlocked ? null : lock,
             biometrics: biometrics,
+            offerBiometric: status.offered,
             onUnlock: (method) =>
                 ref.read(appLockProvider.notifier).unlock(method: method),
             onWipe: () => showWipeDialog(context, ref),
@@ -349,23 +477,29 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
 /// plain splash shown while the app is inactive; otherwise it is the lock
 /// screen for that state, with the unlock buttons and the emergency wipe.
 ///
-/// With [biometrics] enrolled the main button always goes back to the
+/// With a biometric to offer the main button always goes back to the
 /// biometric prompt ("Use Face ID", "Try Face ID again" after a failure)
-/// and the device passcode is the secondary way in; without any there is
+/// and the device passcode is the secondary way in; without one there is
 /// the single "Unlock".
 class PrivacyShield extends StatelessWidget {
   const PrivacyShield({
     super.key,
     this.lock,
     this.biometrics = const [],
+    bool? offerBiometric,
     required this.onUnlock,
     required this.onWipe,
-  });
+  }) : _offerBiometric = offerBiometric;
 
   final LockState? lock;
 
-  /// Biometrics enrolled on the device; empty hides the biometric button.
+  /// Biometrics the OS names, for the label and icon.
   final List<BiometricType> biometrics;
+
+  /// Whether the biometric button shows. Defaults to "one is named"; iOS
+  /// names none before the app's first Face ID prompt, yet can still ask.
+  bool get offerBiometric => _offerBiometric ?? biometrics.isNotEmpty;
+  final bool? _offerBiometric;
 
   /// `null` lets the "Prefer biometric unlock" setting choose.
   final void Function(UnlockMethod? method) onUnlock;
@@ -395,7 +529,7 @@ class PrivacyShield extends StatelessWidget {
                 if (lock == LockState.unlocking)
                   const CircularProgressIndicator()
                 else ...[
-                  if (biometrics.isEmpty)
+                  if (!offerBiometric)
                     GradientButton(
                       onPressed: () => onUnlock(null),
                       icon: Icons.fingerprint,

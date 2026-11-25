@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:moav_deploy/security/app_lock.dart';
 import 'package:moav_deploy/security/onboarding.dart';
@@ -7,6 +8,8 @@ import 'package:moav_deploy/security/onboarding.dart';
 /// Each `authenticate()` call waits for the test to complete its gate, so a
 /// test can assert what is on screen while the biometric prompt is up.
 class GatedLock extends AppLockService {
+  GatedLock({TargetPlatform? platform}) : super(null, platform);
+
   final gates = <Completer<bool>>[];
 
   /// The `disguised` flag of each call, in order.
@@ -40,10 +43,20 @@ class GatedLock extends AppLockService {
 
 /// Answers each prompt from [outcomes] at once and records how it was asked.
 class ScriptedLock extends AppLockService {
-  ScriptedLock({this.enrolled = const [BiometricType.face]});
+  ScriptedLock({
+    this.enrolled = const [BiometricType.face],
+    TargetPlatform? platform,
+  }) : super(null, platform);
 
-  /// What the device has enrolled; change it between attempts at will.
+  /// What the OS names as enrolled; change it between attempts at will.
   List<BiometricType> enrolled;
+
+  /// What the OS names from the first successful prompt on, as iOS does
+  /// once the app has been allowed to use Face ID.
+  List<BiometricType>? enrolledOnceAllowed;
+
+  /// Whether the device has a biometric sensor at all.
+  bool sensor = true;
 
   /// Queue of answers; the last one repeats.
   final outcomes = <AuthOutcome>[AuthOutcome.failed];
@@ -58,12 +71,20 @@ class ScriptedLock extends AppLockService {
   Future<List<BiometricType>> enrolledBiometrics() async => enrolled;
 
   @override
+  Future<bool> hasBiometricSensor() async => sensor;
+
+  @override
   Future<AuthOutcome> authenticate({
     bool disguised = false,
     bool biometricOnly = false,
   }) async {
     prompts.add(biometricOnly);
-    return outcomes.length == 1 ? outcomes.first : outcomes.removeAt(0);
+    final outcome =
+        outcomes.length == 1 ? outcomes.first : outcomes.removeAt(0);
+    if (outcome == AuthOutcome.success) {
+      enrolled = enrolledOnceAllowed ?? enrolled;
+    }
+    return outcome;
   }
 }
 

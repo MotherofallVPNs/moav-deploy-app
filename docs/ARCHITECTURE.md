@@ -173,6 +173,12 @@ The concrete models live in `lib/core/moav_controller.dart`.
   passcode". "Use passcode" on the system sheet and a biometric lockout go
   to the passcode within the same attempt. Enrollment is read from the OS
   on each attempt; with none enrolled the gate is the passcode, as before.
+  On iOS and macOS an empty `getAvailableBiometrics()` is not read as "no
+  biometric": the OS lists one only while this app may use it, so the list
+  is just as empty when Face ID is switched off for the app. There the
+  status starts as `unconfirmed`, the unlock still asks for the biometric,
+  and the prompt's own refusal tells `denied` (the setting then points to
+  the Settings app) from `notEnrolled`. Android's list is taken as is.
 - "Install my key" helper flow; password auth is a fallback for that one
   step only.
 - No analytics and no crash reporting. Errors are scrubbed by

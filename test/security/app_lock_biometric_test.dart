@@ -24,6 +24,7 @@ import '../support/memory_cred_store.dart';
 /// [AppLockService] asks and how it reads the platform's errors.
 class _FakeAuth implements LocalAuthentication {
   bool supported = true;
+  bool sensor = true;
   List<BiometricType> enrolled = const [BiometricType.face];
   Object? enrolledError;
 
@@ -33,6 +34,9 @@ class _FakeAuth implements LocalAuthentication {
 
   @override
   Future<bool> isDeviceSupported() async => supported;
+
+  @override
+  Future<bool> get canCheckBiometrics async => sensor;
 
   @override
   Future<List<BiometricType>> getAvailableBiometrics() async {
@@ -118,11 +122,20 @@ void main() {
       for (final code in [
         LocalAuthExceptionCode.temporaryLockout,
         LocalAuthExceptionCode.biometricLockout,
-        LocalAuthExceptionCode.noBiometricsEnrolled,
-        LocalAuthExceptionCode.noBiometricHardware,
         LocalAuthExceptionCode.biometricHardwareTemporarilyUnavailable,
       ]) {
         expect(await ask(code), AuthOutcome.biometricUnavailable, reason: code.name);
+      }
+      // The two that say why, which is how iOS tells "off for this app"
+      // (it reports that as no hardware) from "none enrolled".
+      expect(await ask(LocalAuthExceptionCode.noBiometricsEnrolled),
+          AuthOutcome.biometricNotEnrolled);
+      expect(await ask(LocalAuthExceptionCode.noBiometricHardware),
+          AuthOutcome.biometricRefused);
+      for (final outcome in AuthOutcome.values) {
+        expect(outcome.wantsPasscode,
+            outcome != AuthOutcome.success && outcome != AuthOutcome.failed,
+            reason: outcome.name);
       }
       // The passcode prompt has nowhere further to fall back to.
       expect(await ask(LocalAuthExceptionCode.biometricLockout, biometricOnly: false),
