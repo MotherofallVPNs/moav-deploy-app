@@ -41,6 +41,11 @@
       "description": "The Flutter SDK pin is bumped deliberately (see the comment next to flutter-version in the workflows).",
       "matchDatasources": ["flutter-version"],
       "automerge": false
+    },
+    {
+      "description": "Ruby and fastlane only run in the release workflow, which PR CI never exercises, so a green PR proves nothing.",
+      "matchDepNames": ["ruby", "fastlane"],
+      "automerge": false
     }
   ]
 }
