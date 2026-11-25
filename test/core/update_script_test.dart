@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:moav_deploy/core/apply_script.dart';
 import 'package:moav_deploy/core/update_script.dart';
 
 import '../support/fake_box.dart';
@@ -52,10 +53,16 @@ Future<({int code, String log})> runJob(String moavSh) async {
     await Process.run('chmod', ['755', '${dir.path}/moav.sh']);
     final script = File('${dir.path}/update.sh')
       ..writeAsStringSync(UpdateScript.body);
+    await Directory('${dir.path}/state').create();
     final r = await Process.run(
       'bash',
       [script.path],
-      environment: {'MOAV_INSTALL_DIR': dir.path, 'PATH': Platform.environment['PATH'] ?? ''},
+      environment: {
+        'MOAV_INSTALL_DIR': dir.path,
+        // Never the developer's own ~/.moav-deploy.
+        'MOAV_DEPLOY_DIR': '${dir.path}/state',
+        'PATH': Platform.environment['PATH'] ?? '',
+      },
     );
     return (code: r.exitCode, log: '${r.stdout}${r.stderr}');
   } finally {
@@ -80,7 +87,24 @@ void main() {
       expect(body, isNot(contains('__LEGACY_')));
       // Local changes are stashed, never discarded, on either path.
       expect(body, isNot(contains('reset --hard')));
-      expect(UpdateScript.launch, contains('setsid nohup bash update.sh'));
+      final launch = UpdateScript.launch();
+      expect(launch, contains('setsid nohup bash update.sh'));
+      expect(launch, contains('MD_APPLY_AFTER=1 '));
+      expect(UpdateScript.launch(applyAfter: false), contains('MD_APPLY_AFTER=0 '));
+      // Never while a rebuild is running, and never rewriting a live script.
+      expect(launch, contains('if apply_alive; then echo "BUSY apply"; exit 0; fi'));
+      expect(launch, contains('mv -f apply.sh.new apply.sh'));
+      expect(launch.indexOf('BUSY apply'), lessThan(launch.indexOf('mv -f apply.sh.new')));
+    });
+
+    test('the job chains into the apply on the server, never by itself', () {
+      final body = UpdateScript.body;
+      expect(body, isNot(contains('__APPLY_SPAWN__')));
+      expect(body, contains('nohup bash apply.sh --regenerate > apply.log'));
+      expect(body, contains(r'[ "${MD_APPLY_AFTER:-0}" = 1 ]'));
+      expect(body, contains('apply.pending'));
+      // The checkout is rebuilt from afterwards: files must stay readable.
+      expect(body, contains('umask 022'));
     });
 
     test('startUpdate uploads that body and launches it detached', () async {
@@ -88,13 +112,33 @@ void main() {
       final uploads = box.uploads;
       final ran = box.ran;
       await box.controller.startUpdate();
-      expect(uploads.single.$1, UpdateScript.scriptPath);
-      expect(uploads.single.$1, '.moav-deploy/update.sh');
-      expect(uploads.single.$3, '700');
-      expect(uploads.single.$2, UpdateScript.body);
-      expect(uploads.single.$2, contains('update --yes'));
-      expect(uploads.single.$2, contains("printf '1\\nY\\n' | moav_cmd update"));
-      expect(ran, [UpdateScript.launch]);
+      expect(uploads, hasLength(2));
+      expect(uploads.first.$1, UpdateScript.scriptPath);
+      expect(uploads.first.$1, '.moav-deploy/update.sh');
+      expect(uploads.first.$3, '700');
+      expect(uploads.first.$2, UpdateScript.body);
+      expect(uploads.first.$2, contains('update --yes'));
+      expect(uploads.first.$2, contains("printf '1\\nY\\n' | moav_cmd update"));
+      // The apply script travels with it, parked until the launch swaps it in.
+      expect(uploads.last.$1, '.moav-deploy/apply.sh.new');
+      expect(uploads.last.$2, ApplyScript.script);
+      expect(ran, [UpdateScript.launch()]);
+    });
+
+    test('startUpdate without apply uploads the update job alone', () async {
+      final box = FakeBox.always('STARTED 4242\n');
+      await box.controller.startUpdate(applyAfter: false);
+      expect(box.uploads.single.$1, UpdateScript.scriptPath);
+      expect(box.ran, [UpdateScript.launch(applyAfter: false)]);
+    });
+
+    test('startUpdate refuses while a rebuild is running', () async {
+      final box = FakeBox.always('BUSY apply\n');
+      await expectLater(
+        box.controller.startUpdate(),
+        throwsA(isA<StateError>().having(
+            (e) => e.message, 'message', contains('rebuild is still running'))),
+      );
     });
   });
 
@@ -106,6 +150,8 @@ void main() {
       expect(r.code, 0, reason: r.log);
       expect(r.log, contains('new: noninteractive=1 stdin='));
       expect(r.log, contains('new: updated'));
+      // HEAD did not move, so there is nothing to apply.
+      expect(r.log, contains('Already up to date: nothing to rebuild or restart.'));
       expect(r.log, isNot(contains('retrying the legacy way')));
       expect(r.log, contains('[moav-deploy] step 3/3'));
       expect(r.log, contains('[moav-deploy] exit=0'));

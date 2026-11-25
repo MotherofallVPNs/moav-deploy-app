@@ -55,8 +55,11 @@ abstract class MoavController {
   Future<MetricsSnapshot> metrics();               // Prometheus headline metrics (slow, own timeout)
   Future<ServerInfo> serverInfo();                 // host CPU/RAM/disk + moav and component versions
   Future<UpdateCheck> checkForUpdates();           // moav doctor updates
-  Future<void> startUpdate();                      // detached moav update job
+  Future<void> startUpdate({bool applyAfter});     // detached moav update job, chains into the apply
   Future<InstallStatus?> updateStatus();           // progress of that job
+  Future<void> startApply(ApplySpec spec);         // detached rebuild + regenerate-users + start
+  Future<ApplyStatus> applyStatus();               // that job, read from its files on the server
+  Future<void> acknowledgeApply();                 // its result was seen
   Future<AdminPanelAccess> adminPanelAccess();     // PORT_ADMIN + ADMIN_PASSWORD from .env (memory only)
   Future<ServerTunnel> openTunnel(int remotePort); // ssh -L for server-local web UIs
   Future<GrafanaAccess> grafanaAccess();           // PORT_GRAFANA + ADMIN_PASSWORD from .env (memory only)
@@ -95,6 +98,32 @@ The concrete models live in `lib/core/moav_controller.dart`.
   (preflight, installer, bootstrap, start) have very different typical
   durations, so `InstallProgress` gives each a share of the bar and eases
   through it with the time spent in the step; 100% is the `exit=0` marker.
+- **Applying an update is a detached job too.** `moav update` pulls the new
+  revision and prints the steps to apply it; nothing in MoaV runs them. The
+  app's apply job (`lib/core/apply_script.dart`, `~/.moav-deploy/apply.sh`)
+  does: build the images of the enabled profiles (`DEFAULT_PROFILES`, like
+  bootstrap, with the same RAM-tiered build concurrency), `moav
+  regenerate-users`, then `moav start`, which recreates the containers
+  whose image changed. A failed build restarts nothing. The job is started
+  with `setsid nohup` and never depends on the SSH channel; next to
+  `apply.pid` and `apply.log` it writes `apply.exit` (the exit code, from an
+  EXIT trap, so every way out leaves a result) and `apply.job` (what was
+  launched). The app only reads those files (`applyStatus`), so a poll after
+  any gap, on the timer, when the app returns to the foreground, or on the
+  next launch, finds the job running or finished with its exit code.
+  Dismissing a result touches `apply.ack` on the server, so it is not shown
+  again on any device.
+- **The update hands over to the apply on the server.** With "Apply when
+  done" (the default) the update job itself starts `apply.sh` once it has
+  pulled a new revision, so the hand-over happens even while the phone is
+  locked. A pulled revision is recorded in `apply.pending` until an apply of
+  all services succeeds; while it exists and nothing is applying it, the
+  Server tab offers "Apply now (rebuild + restart)". The same job backs
+  "Rebuild & restart" on the Services tab (all services or one, with a
+  force option that passes `--no-cache`); quick start/stop/restart still run
+  on the SSH channel. The update and the apply never overlap: each launch
+  refuses while the other job is alive, and a script is uploaded beside the
+  live one and moved into place only when no job is running.
 - **Install is idempotent and never destructive.** On a box that already has
   `/opt/moav` the installer keeps the checkout untouched (a non-interactive
   run never updates it), fills only empty or placeholder `.env` values, and
@@ -135,7 +164,15 @@ The concrete models live in `lib/core/moav_controller.dart`.
 - Keys are generated on-device (ed25519) and stored in the iOS Keychain or
   Android Keystore through `flutter_secure_storage`. Passphrases are never
   persisted in plaintext.
-- App lock: biometric or device passcode gate on launch and resume.
+- App lock: biometric or device passcode gate on launch and resume. Every
+  unlock attempt chooses its method afresh (`lib/security/app_lock.dart`):
+  with "Prefer biometric unlock" on (the default, under Menu > App lock) and
+  a biometric enrolled, the prompt asks for the biometric alone, so a failed
+  or cancelled Face ID never leaves the session stuck on the passcode
+  sheet. The lock screen then offers "Try Face ID again" and "Use device
+  passcode". "Use passcode" on the system sheet and a biometric lockout go
+  to the passcode within the same attempt. Enrollment is read from the OS
+  on each attempt; with none enrolled the gate is the passcode, as before.
 - "Install my key" helper flow; password auth is a fallback for that one
   step only.
 - No analytics and no crash reporting. Errors are scrubbed by

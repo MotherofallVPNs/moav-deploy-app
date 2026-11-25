@@ -101,6 +101,12 @@ class DemoMoavController implements MoavController {
   DateTime? _installStartedAt;
   InstallSpec? _installSpec;
   DateTime? _updateStartedAt;
+  bool _updateApplies = false;
+  bool _updateSettled = false;
+  bool _applyPending = false;
+  DateTime? _applyStartedAt;
+  ApplySpec? _applySpec;
+  bool _applyAcked = false;
 
   /// Back to the pristine baseline: stock users, every service as
   /// `moav status` shows it on a healthy box, no job in flight. Whether
@@ -110,6 +116,12 @@ class DemoMoavController implements MoavController {
     _installStartedAt = null;
     _installSpec = null;
     _updateStartedAt = null;
+    _updateApplies = false;
+    _updateSettled = false;
+    _applyPending = false;
+    _applyStartedAt = null;
+    _applySpec = null;
+    _applyAcked = false;
     _mahsaNetKey = false;
     final created = DateTime.utc(2026, 10, 2, 9, 30);
     _users = [
@@ -900,18 +912,151 @@ Proxy = snell, $domain, 6160, psk=${_fakeHex('$user:snell', 20)}, version=4, obf
         (updateStepsAt[2], ''),
         (updateStepsAt[2], '[moav-deploy] step 3/3: Report'),
         (updateStepsAt[2], 'Updated to v$latestVersion.'),
-        (const Duration(milliseconds: 5700), 'Services were not restarted. Apply any rebuild/restart steps listed above when convenient.'),
+        (
+          const Duration(milliseconds: 5700),
+          _updateApplies
+              ? '[moav-deploy] apply=started (rebuild, regenerate users, start): see apply.log'
+              : '[moav-deploy] apply=pending: services still run the previous images.',
+        ),
         (updateDoneAt, ''),
         (updateDoneAt, '[moav-deploy] exit=0'),
       ];
 
   @override
-  Future<void> startUpdate() async {
+  Future<void> startUpdate({bool applyAfter = true}) async {
     await _delay(const Duration(milliseconds: 200));
     final started = _updateStartedAt;
     // Re-attach to a job that is still running, like the real one.
     if (started != null && _now().difference(started) < updateDoneAt) return;
     _updateStartedAt = _now();
+    _updateApplies = applyAfter;
+    _updateSettled = false;
+  }
+
+  /// What the update job does at its end on a real box: mark the pulled
+  /// revision as not applied yet and, when asked to, start the apply.
+  void _settleUpdate() {
+    final started = _updateStartedAt;
+    if (started == null || _updateSettled) return;
+    if (_now().difference(started) < updateDoneAt) return;
+    _updateSettled = true;
+    _applyPending = true;
+    if (!_updateApplies) return;
+    _applyStartedAt = started.add(updateDoneAt);
+    _applySpec = ApplySpec.afterUpdate;
+    _applyAcked = false;
+  }
+
+  static const applyStepsAt = [
+    Duration.zero,
+    Duration(milliseconds: 800),
+    Duration(milliseconds: 5200),
+    Duration(milliseconds: 6800),
+  ];
+  static const applyDoneAt = Duration(seconds: 9);
+  static const applyStepTitles = [
+    'Preflight',
+    'Build images',
+    'Regenerate user bundles',
+    'Start services on the new images',
+  ];
+
+  List<_Line> _applyLines(ApplySpec spec) {
+    Duration ms(int n) => Duration(milliseconds: n);
+    final scope = spec.allServices ? 'all enabled services' : spec.services.join(' ');
+    return [
+      (applyStepsAt[0], '[moav-deploy] step 1/4: Preflight'),
+      (applyStepsAt[0], 'Scope: $scope  no-cache: ${spec.noCache ? 1 : 0}  regenerate users: ${spec.regenerateUsers ? 1 : 0}'),
+      (applyStepsAt[1], ''),
+      (applyStepsAt[1], '[moav-deploy] step 2/4: Build images'),
+      if (spec.noCache) (ms(900), 'Forced rebuild: the Docker layer cache is ignored.'),
+      (ms(1500), '#1 [internal] load build definition from Dockerfile'),
+      (ms(2600), '#7 [builder 4/6] RUN go build -trimpath -o /out/app ./cmd'),
+      (ms(4400), '#12 exporting to image'),
+      (applyStepsAt[2], ''),
+      (applyStepsAt[2], '[moav-deploy] step 3/4: Regenerate user bundles'),
+      (
+        ms(5600),
+        spec.regenerateUsers
+            ? 'Regenerated ${_users.length} user bundles'
+            : 'Skipped (not requested).',
+      ),
+      (applyStepsAt[3], ''),
+      (applyStepsAt[3], '[moav-deploy] step 4/4: Start services on the new images'),
+      (ms(7600), 'Recreated (config or image changed): ${spec.allServices ? 'sing-box xray admin' : spec.services.join(' ')}'),
+      (ms(8400), 'Applied: services are running on the rebuilt images.'),
+      (applyDoneAt, ''),
+      (applyDoneAt, '[moav-deploy] exit=0'),
+    ];
+  }
+
+  @override
+  Future<void> startApply(ApplySpec spec) async {
+    await _delay(const Duration(milliseconds: 200));
+    for (final name in spec.services) {
+      _service(name);
+    }
+    _settleUpdate();
+    final started = _applyStartedAt;
+    if (started != null && _now().difference(started) < applyDoneAt) return;
+    _applyStartedAt = _now();
+    _applySpec = spec;
+    _applyAcked = false;
+  }
+
+  @override
+  Future<ApplyStatus> applyStatus() async {
+    await _delay(const Duration(milliseconds: 100));
+    _settleUpdate();
+    final started = _applyStartedAt;
+    final spec = _applySpec;
+    if (started == null || spec == null) {
+      return ApplyStatus(updatePending: _applyPending);
+    }
+    final elapsed = _now().difference(started);
+    final lines = [
+      for (final (at, text) in _applyLines(spec))
+        if (at <= elapsed) text,
+    ];
+    var step = 0;
+    for (var i = 0; i < applyStepsAt.length; i++) {
+      if (elapsed >= applyStepsAt[i]) step = i + 1;
+    }
+    final done = elapsed >= applyDoneAt;
+    if (done) {
+      if (spec.allServices) _applyPending = false;
+      final names = spec.allServices
+          ? _services.where((s) => s.state.isUp).map((s) => s.name)
+          : spec.services;
+      for (final name in names) {
+        _service(name)
+          ..state = ServiceState.running
+          ..uptime = 'just now';
+      }
+    }
+    return ApplyStatus(
+      job: InstallStatus(
+        phase: done ? InstallPhase.succeeded : InstallPhase.running,
+        logTail: lines,
+        progress: done ? 1 : step / applyStepsAt.length,
+        message: done ? 'Rebuild finished' : applyStepTitles[step - 1],
+        step: done ? applyStepsAt.length : step,
+        totalSteps: applyStepsAt.length,
+      ),
+      jobId: 'demo-${started.millisecondsSinceEpoch}',
+      spec: spec,
+      exitCode: done ? 0 : null,
+      acknowledged: done && _applyAcked,
+      updatePending: _applyPending,
+    );
+  }
+
+  @override
+  Future<void> acknowledgeApply() async {
+    final started = _applyStartedAt;
+    if (started != null && _now().difference(started) >= applyDoneAt) {
+      _applyAcked = true;
+    }
   }
 
   @override

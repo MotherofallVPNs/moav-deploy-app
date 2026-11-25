@@ -78,10 +78,26 @@ abstract class MoavController {
 
   /// Starts the MoaV self-update **detached** on the server. Re-attaches to a
   /// job that is still running instead of starting a second one.
-  Future<void> startUpdate();
+  ///
+  /// With [applyAfter] the server itself continues into the apply job (see
+  /// [startApply], all services, users regenerated) once a new revision was
+  /// pulled, so the hand-over needs no connection from the app.
+  Future<void> startUpdate({bool applyAfter = true});
 
   /// Progress of the detached update job; `null` when none was ever started.
   Future<InstallStatus?> updateStatus();
+
+  /// Starts the apply job **detached** on the server: rebuild images,
+  /// optionally regenerate the user bundles, start services on the new
+  /// images. Re-attaches to a job that is still running.
+  Future<void> startApply(ApplySpec spec);
+
+  /// The apply job as the server's own files describe it (pid, log, exit
+  /// code), so it can be read after any gap in the connection.
+  Future<ApplyStatus> applyStatus();
+
+  /// Marks the finished apply job's result as seen.
+  Future<void> acknowledgeApply();
 
   /// Port and password of the admin dashboard, read from the server's `.env`.
   /// The password is handed over in memory only and never stored or logged.
@@ -349,6 +365,72 @@ class InstallStatus {
 
   bool get isTerminal =>
       phase == InstallPhase.succeeded || phase == InstallPhase.failed;
+}
+
+/// What an apply job rebuilds and restarts; see [MoavController.startApply].
+class ApplySpec {
+  const ApplySpec({
+    this.services = const [],
+    this.noCache = false,
+    this.regenerateUsers = false,
+  });
+
+  /// What follows a `moav update`: everything, with fresh user bundles.
+  static const afterUpdate = ApplySpec(regenerateUsers: true);
+
+  /// Services to rebuild; empty means every enabled profile.
+  final List<String> services;
+
+  /// Force a clean rebuild (`--no-cache`).
+  final bool noCache;
+
+  /// Run `moav regenerate-users` between the build and the start.
+  final bool regenerateUsers;
+
+  bool get allServices => services.isEmpty;
+
+  /// e.g. `Rebuild sing-box (no cache)`.
+  String get label {
+    final target = allServices ? 'all services' : services.join(', ');
+    return 'Rebuild $target${noCache ? ' (no cache)' : ''}';
+  }
+}
+
+/// Result of [MoavController.applyStatus].
+class ApplyStatus {
+  const ApplyStatus({
+    this.job,
+    this.jobId,
+    this.spec,
+    this.exitCode,
+    this.acknowledged = false,
+    this.updatePending = false,
+  });
+
+  /// Progress of the latest apply job; `null` when none was ever launched.
+  final InstallStatus? job;
+
+  /// Identifies one launch (start time and pid), to tell two jobs apart.
+  final String? jobId;
+
+  /// What that job was asked to do, when the server still knows.
+  final ApplySpec? spec;
+
+  /// The job's exit code once it has ended.
+  final int? exitCode;
+
+  /// The result was already shown and dismissed (on any device).
+  final bool acknowledged;
+
+  /// An update pulled a new revision that no apply has completed for yet:
+  /// the services still run the previous images.
+  final bool updatePending;
+
+  bool get running =>
+      job?.phase == InstallPhase.pending || job?.phase == InstallPhase.running;
+
+  /// A finished job whose result nobody has dismissed yet.
+  bool get hasUnseenResult => (job?.isTerminal ?? false) && !acknowledged;
 }
 
 enum CheckResult { pass, warn, fail, skip }

@@ -418,12 +418,14 @@ class UpdateNotifier extends Notifier<UpdateState> {
     }
   }
 
-  Future<void> start() async {
+  /// With [applyAfter] the server continues into the apply job by itself
+  /// once the new revision is pulled; [applyProvider] picks it up from there.
+  Future<void> start({bool applyAfter = true}) async {
     if (state.starting || state.jobRunning) return;
     state = state.copyWith(starting: true, clearJobError: true, clearJob: true);
     final op = _beginOp();
     try {
-      await _controller.startUpdate();
+      await _controller.startUpdate(applyAfter: applyAfter);
       if (!ref.mounted) return;
       state = state.copyWith(starting: false);
       await poll();
@@ -476,6 +478,8 @@ class UpdateNotifier extends Notifier<UpdateState> {
     state = UpdateState(job: state.job);
     unawaited(ref.read(serverInfoProvider(serverId).notifier).refresh());
     unawaited(ref.read(statusProvider(serverId).notifier).refresh());
+    // The update job has started the apply (or left it pending) by now.
+    unawaited(ref.read(applyProvider(serverId).notifier).poll());
   }
 
   void _startPolling() {
@@ -494,4 +498,196 @@ class UpdateNotifier extends Notifier<UpdateState> {
 final updateProvider =
     NotifierProvider.family<UpdateNotifier, UpdateState, String>(
   UpdateNotifier.new,
+);
+
+// --- Rebuild and restart (the detached apply job) ---
+
+/// The apply job of one server as last read from its files, plus what the
+/// app is doing about it.
+class ApplyState {
+  const ApplyState({
+    this.status,
+    this.starting = false,
+    this.polling = false,
+    this.error,
+    this.dismissedJobId,
+  });
+
+  final ApplyStatus? status;
+  final bool starting;
+  final bool polling;
+
+  /// Failure of the last launch or poll; cleared by the next good poll.
+  final AppError? error;
+
+  /// The ended job dismissed on this device (`''` when it had no id), kept
+  /// so it stays hidden even if the server-side acknowledgement was lost.
+  final String? dismissedJobId;
+
+  bool get running => status?.running ?? false;
+  bool get busy => starting || running;
+
+  /// What the job was asked to do, when known.
+  ApplySpec? get spec => status?.spec;
+
+  /// The job to show: a running one, or an ended one nobody dismissed yet.
+  InstallStatus? get job {
+    final s = status;
+    final job = s?.job;
+    if (s == null || job == null) return null;
+    if (s.running) return job;
+    if (s.acknowledged || dismissedJobId == (s.jobId ?? '')) return null;
+    return job;
+  }
+
+  /// An update was pulled but never applied and nothing is applying it now.
+  bool get updatePending => (status?.updatePending ?? false) && !busy;
+
+  ApplyState copyWith({
+    ApplyStatus? status,
+    bool? starting,
+    bool? polling,
+    AppError? error,
+    bool clearError = false,
+    String? dismissedJobId,
+  }) =>
+      ApplyState(
+        status: status ?? this.status,
+        starting: starting ?? this.starting,
+        polling: polling ?? this.polling,
+        error: clearError ? null : (error ?? this.error),
+        dismissedJobId: dismissedJobId ?? this.dismissedJobId,
+      );
+}
+
+/// Launches [MoavController.startApply] and follows the job through
+/// [MoavController.applyStatus]. The job lives on the server, so every
+/// poll is also a re-attach: on creation, on a timer while it runs, and
+/// whenever the app returns to the foreground ([poll] is all it takes).
+class ApplyNotifier extends Notifier<ApplyState> {
+  ApplyNotifier(this.serverId);
+
+  final String serverId;
+
+  static const pollInterval = Duration(seconds: 3);
+
+  Timer? _timer;
+
+  /// Activity entry for the job being watched, if any.
+  OperationHandle? _op;
+
+  MoavController get _controller => ref.read(moavControllerProvider(serverId));
+
+  @override
+  ApplyState build() {
+    ref.onDispose(() {
+      _timer?.cancel();
+      _timer = null;
+      // Other providers must not change inside a dispose callback.
+      final op = _op;
+      _op = null;
+      if (op != null) scheduleMicrotask(op.detach);
+    });
+    Future<void>.microtask(poll);
+    return const ApplyState();
+  }
+
+  OperationHandle _beginOp(ApplySpec? spec) {
+    _op?.detach();
+    return _op = ref.read(activityProvider.notifier).begin(
+        '${spec?.label ?? 'Rebuild'} · ${serverLabelOf(ref, serverId)}');
+  }
+
+  Future<void> start(ApplySpec spec) async {
+    if (state.busy) return;
+    state = state.copyWith(starting: true, clearError: true);
+    final op = _beginOp(spec);
+    try {
+      await _controller.startApply(spec);
+      if (!ref.mounted) return;
+      state = state.copyWith(starting: false);
+      await poll();
+    } on Object catch (e) {
+      final error = AppError.from(e);
+      op.fail(error.summary);
+      _op = null;
+      if (!ref.mounted) return;
+      state = state.copyWith(starting: false, error: error);
+    }
+  }
+
+  /// Reads the job from the server. An error is kept for the UI only while
+  /// a job is on screen; polling goes on, since a dropped SSH session after
+  /// backgrounding is expected and the job does not depend on it.
+  Future<void> poll() async {
+    try {
+      final status = await _controller.applyStatus();
+      if (!ref.mounted) return;
+      final wasRunning = state.running;
+      state = state.copyWith(status: status, clearError: true);
+      final job = status.job;
+      if (status.running) {
+        (_op ?? _beginOp(status.spec)).setLog(job!.logTail);
+        _startPolling();
+        return;
+      }
+      _stopPolling();
+      final op = _op;
+      _op = null;
+      if (op != null && job != null) {
+        op.setLog(job.logTail);
+        if (job.phase == InstallPhase.succeeded) {
+          op.finish();
+        } else {
+          op.fail(job.message ?? 'Rebuild failed');
+        }
+      } else {
+        op?.detach();
+      }
+      if (wasRunning || op != null) _afterEnd(status);
+    } on Object catch (e) {
+      if (!ref.mounted) return;
+      if (state.job != null) state = state.copyWith(error: AppError.from(e));
+    }
+  }
+
+  /// Hides the ended job here and tells the server its result was seen, so
+  /// no device shows it again.
+  Future<void> dismiss() async {
+    final status = state.status;
+    if (status == null || status.running) return;
+    state = state.copyWith(dismissedJobId: status.jobId ?? '', clearError: true);
+    try {
+      await _controller.acknowledgeApply();
+    } on Object {
+      // Stays hidden on this device; the next dismiss acknowledges again.
+    }
+  }
+
+  void _afterEnd(ApplyStatus status) {
+    // Containers were recreated (or a start failed half way): re-read them.
+    unawaited(ref.read(statusProvider(serverId).notifier).refresh());
+    if (status.job?.phase != InstallPhase.succeeded) return;
+    unawaited(ref.read(serverInfoProvider(serverId).notifier).refresh());
+    if (status.spec?.regenerateUsers ?? true) {
+      ref.invalidate(usersProvider(serverId));
+    }
+  }
+
+  void _startPolling() {
+    if (_timer != null) return;
+    _timer = Timer.periodic(pollInterval, (_) => poll());
+    state = state.copyWith(polling: true);
+  }
+
+  void _stopPolling() {
+    _timer?.cancel();
+    _timer = null;
+    if (ref.mounted && state.polling) state = state.copyWith(polling: false);
+  }
+}
+
+final applyProvider =
+    NotifierProvider.family<ApplyNotifier, ApplyState, String>(
+  ApplyNotifier.new,
 );

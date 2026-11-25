@@ -13,6 +13,7 @@ class MemoryCredStore implements SecureCredStore {
   final Map<String, Map<String, Object?>> installHandles = {};
   Map<String, Object?>? decoy;
   bool demoInstalled = false;
+  bool preferBiometric = true;
 
   @override
   Future<List<ServerProfile>> loadProfiles() async => profiles;
@@ -57,6 +58,10 @@ class MemoryCredStore implements SecureCredStore {
   @override
   Future<void> deleteDecoy() async => decoy = null;
   @override
+  Future<bool> readPreferBiometric() async => preferBiometric;
+  @override
+  Future<void> writePreferBiometric(bool value) async => preferBiometric = value;
+  @override
   Future<List<String>> listKeys() async => [
         ...secrets.keys,
         ...installHandles.keys,
@@ -71,6 +76,7 @@ class MemoryCredStore implements SecureCredStore {
     sshKeys = [];
     sshKeySecrets.clear();
     demoInstalled = false;
+    preferBiometric = true;
     return removed;
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:moav_deploy/app.dart';
 import 'package:moav_deploy/core/app_error.dart';
 import 'package:moav_deploy/core/moav_controller.dart';
@@ -90,7 +91,14 @@ class _LockedService extends AppLockService {
   Future<bool> canLock() async => true;
 
   @override
-  Future<bool> authenticate({bool disguised = false}) async => false;
+  Future<List<BiometricType>> enrolledBiometrics() async => const [];
+
+  @override
+  Future<AuthOutcome> authenticate({
+    bool disguised = false,
+    bool biometricOnly = false,
+  }) async =>
+      AuthOutcome.failed;
 }
 
 Widget _app(MemoryCredStore store, _Controller controller) => ProviderScope(

@@ -328,7 +328,7 @@ void main() {
     expect(UpdateScript.body, isNot(contains('reset --hard')));
     expect(UpdateScript.body, isNot(contains('moav_cmd restart')));
     expect(UpdateScript.body, isNot(contains('moav_cmd build')));
-    expect(UpdateScript.launch, contains('setsid nohup bash update.sh'));
+    expect(UpdateScript.launch(), contains('setsid nohup bash update.sh'));
   });
 
   test('log lines never carry the document, only the format', () async {

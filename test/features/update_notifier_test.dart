@@ -22,6 +22,7 @@ class _Controller extends StubMoavController {
   final statuses = <InstallStatus?>[];
   int updateStatusCalls = 0;
   int startCalls = 0;
+  final applyAfterArgs = <bool>[];
   int serverInfoCalls = 0;
   int statusCalls = 0;
   Object? checkError;
@@ -38,10 +39,21 @@ class _Controller extends StubMoavController {
   }
 
   @override
-  Future<void> startUpdate() async {
+  Future<void> startUpdate({bool applyAfter = true}) async {
     final e = startError;
     if (e != null) throw e;
     startCalls++;
+    applyAfterArgs.add(applyAfter);
+  }
+
+  /// What the apply job looks like once the update has ended.
+  ApplyStatus apply = const ApplyStatus();
+  int applyStatusCalls = 0;
+
+  @override
+  Future<ApplyStatus> applyStatus() async {
+    applyStatusCalls++;
+    return apply;
   }
 
   @override
@@ -217,6 +229,48 @@ void main() {
 
     await notifier().start();
     expect(c.startCalls, 1);
+  });
+
+  test('start applies by default and passes an opt-out through', () async {
+    await boot([null, _running]);
+    await notifier().start();
+    expect(c.applyAfterArgs, [true]);
+    notifier().dismiss();
+    c.statuses
+      ..clear()
+      ..addAll([_done, _running]);
+    await notifier().poll();
+    await notifier().start(applyAfter: false);
+    expect(c.applyAfterArgs, [true, false]);
+  });
+
+  test('a finished update hands over to the apply job the server started',
+      () async {
+    await boot([_running, _done]);
+    container.listen(applyProvider(id), (_, _) {});
+    await _settle();
+    final before = c.applyStatusCalls;
+    c.apply = const ApplyStatus(
+      job: InstallStatus(
+        phase: InstallPhase.running,
+        logTail: ['[moav-deploy] step 2/4: Build images'],
+        message: 'Build images',
+        step: 2,
+        totalSteps: 4,
+      ),
+      jobId: '1-2',
+      spec: ApplySpec.afterUpdate,
+      updatePending: true,
+    );
+    await notifier().poll();
+    await _settle();
+    expect(c.applyStatusCalls, greaterThan(before));
+    final apply = container.read(applyProvider(id));
+    expect(apply.running, isTrue);
+    expect(apply.polling, isTrue);
+    expect(apply.spec!.regenerateUsers, isTrue);
+    // Being applied right now: not offered as "pending" on top.
+    expect(apply.updatePending, isFalse);
   });
 
   test('a failed launch reports the cause and fails the entry', () async {

@@ -8,6 +8,7 @@ import '../../widgets/cached_view.dart';
 import '../../widgets/error_view.dart';
 import '../../widgets/log_view.dart';
 import '../admin/admin_panel_screen.dart';
+import 'apply_view.dart';
 import 'operate_provider.dart';
 import 'operate_screen.dart';
 
@@ -26,6 +27,7 @@ class ServerInfoView extends ConsumerWidget {
     final infoNotifier = ref.read(serverInfoProvider(id).notifier);
     final update = ref.watch(updateProvider(id));
     final updateNotifier = ref.read(updateProvider(id).notifier);
+    final apply = ref.watch(applyProvider(id));
 
     return StaleRefresher(
       onOpen: (ref) => ref
@@ -53,6 +55,15 @@ class ServerInfoView extends ConsumerWidget {
                 onDismiss: updateNotifier.dismiss,
               ),
             ],
+            if (apply.updatePending && !update.jobRunning) ...[
+              const SectionHeader('Apply update'),
+              ApplyPendingCard(
+                onApply: () => ref
+                    .read(applyProvider(id).notifier)
+                    .start(ApplySpec.afterUpdate),
+              ),
+            ],
+            ApplyJobPanel(serverId: id, header: 'Rebuild job'),
             const SectionHeader('Host'),
             _HostGrid(host: s.host),
             const SectionHeader('Web panel'),
@@ -82,24 +93,67 @@ class ServerInfoView extends ConsumerWidget {
     UpdateState state,
     UpdateNotifier notifier,
   ) async {
-    final latest = state.check?.latestVersion;
-    final ok = await showDialog<bool>(
+    final applyAfter = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(latest == null ? 'Update MoaV?' : 'Update MoaV to v$latest?'),
-        content: const Text(
-          'Runs moav update on the server in the background: git pull on the '
-          'current branch, then the post-update checks. Local edits in '
-          '/opt/moav are stashed, never discarded. Services are not rebuilt '
-          'or restarted; the log lists any steps to apply afterwards.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Update')),
-        ],
-      ),
+      builder: (_) => _UpdateDialog(latest: state.check?.latestVersion),
     );
-    if (ok == true) await notifier.start();
+    if (applyAfter != null) await notifier.start(applyAfter: applyAfter);
+  }
+}
+
+/// Confirms the update; pops whether to apply it afterwards (`null` when
+/// cancelled).
+class _UpdateDialog extends StatefulWidget {
+  const _UpdateDialog({this.latest});
+
+  final String? latest;
+
+  @override
+  State<_UpdateDialog> createState() => _UpdateDialogState();
+}
+
+class _UpdateDialogState extends State<_UpdateDialog> {
+  bool _apply = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final latest = widget.latest;
+    return AlertDialog(
+      title: Text(latest == null ? 'Update MoaV?' : 'Update MoaV to v$latest?'),
+      contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Runs moav update on the server in the background: git pull on '
+              'the current branch, then the post-update checks. Local edits '
+              'in /opt/moav are stashed, never discarded.',
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Apply when done'),
+              subtitle: const Text(
+                'Rebuild images, regenerate user bundles and restart services '
+                'on the server right after the pull. Clients disconnect '
+                'briefly. Safe to leave the app meanwhile.',
+              ),
+              value: _apply,
+              onChanged: (v) => setState(() => _apply = v),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _apply),
+          child: Text(_apply ? 'Update and apply' : 'Update only'),
+        ),
+      ],
+    );
   }
 }
 

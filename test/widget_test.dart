@@ -272,11 +272,13 @@ class _FakeController extends StubMoavController {
   List<InstallStatus> updateStatuses = const [];
   int updateStatusCalls = 0;
   bool updateStarted = false;
+  bool? updateApplies;
 
   @override
-  Future<void> startUpdate() async {
+  Future<void> startUpdate({bool applyAfter = true}) async {
     _maybeFail();
     log.add('start update');
+    updateApplies = applyAfter;
     updateStarted = true;
     updateStatusCalls = 0;
   }
@@ -1223,9 +1225,12 @@ void main() {
     // pumps: the spinning activity indicator would let pumpAndSettle poll.
     await tester.tap(find.text('Update to v2.3.1'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Update'));
+    // Applying afterwards is the default, and the button says so.
+    expect(find.text('Apply when done'), findsOneWidget);
+    await tester.tap(find.text('Update and apply'));
     await _pumpFor(tester);
     expect(controller.log, contains('start update'));
+    expect(controller.updateApplies, isTrue);
     expect(find.text('RUNNING'), findsOneWidget);
     expect(find.textContaining('Pulling latest changes'), findsOneWidget);
 
