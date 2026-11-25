@@ -761,6 +761,26 @@ class ServiceStatus {
   final String? lastRun;
   final String? uptime;
   final List<String> ports;
+
+  /// Jobs that do their work and exit, so `exited` means finished. Matched
+  /// by name because `moav status` reports the state word, not the exit code.
+  static const oneShots = {
+    'certbot',
+    'geoip-updater',
+    'tor-geoip-updater',
+    'bootstrap',
+  };
+
+  /// A one-shot job that ran and exited.
+  bool get isDone => state == ServiceState.exited && oneShots.contains(name);
+
+  /// Stopped or crashed while it is meant to run. [enabled] is the `.env`
+  /// verdict (`ServiceFlags.serviceEnabled`), `null` when there is none.
+  bool isDown({bool? enabled}) =>
+      !state.isUp &&
+      !isDone &&
+      state != ServiceState.never &&
+      enabled != false;
 }
 
 class ServiceStatusReport {
@@ -785,6 +805,13 @@ class ServiceStatusReport {
   final List<String> defaultProfiles;
 
   int get runningCount => services.where((s) => s.state.isUp).length;
+
+  /// Services that are stopped or crashed (see [ServiceStatus.isDown]).
+  /// Finished one-shots, never-created services and, once [flags] are
+  /// known, the ones switched off in `.env` are left out.
+  int downCount([ServiceFlags? flags]) => services
+      .where((s) => s.isDown(enabled: flags?.serviceEnabled(s.name)))
+      .length;
 }
 
 /// `ENABLE_*` toggles and `DEFAULT_PROFILES` as written in `/opt/moav/.env`.
