@@ -16,6 +16,12 @@ class _Controller extends StubMoavController {
   int statusCalls = 0;
   int flagsCalls = 0;
   Map<String, String> flags = const {};
+  List<ServiceStatus> services = const [
+    ServiceStatus(name: 'sing-box', state: ServiceState.running, uptime: '7 days'),
+    ServiceStatus(name: 'wireguard', state: ServiceState.stopped),
+    ServiceStatus(name: 'telemt', state: ServiceState.never),
+    ServiceStatus(name: 'certbot', state: ServiceState.exited),
+  ];
 
   /// Thrown by every [serviceFlags] call when set.
   Object? flagsError;
@@ -30,12 +36,7 @@ class _Controller extends StubMoavController {
       collectedAt: DateTime(2026),
       version: '2.3.1',
       defaultProfiles: const ['proxy', 'wireguard', 'admin'],
-      services: const [
-        ServiceStatus(name: 'sing-box', state: ServiceState.running, uptime: '7 days'),
-        ServiceStatus(name: 'wireguard', state: ServiceState.stopped),
-        ServiceStatus(name: 'telemt', state: ServiceState.never),
-        ServiceStatus(name: 'certbot', state: ServiceState.exited),
-      ],
+      services: services,
     );
   }
 
@@ -58,8 +59,13 @@ class _Controller extends StubMoavController {
   }
 }
 
-Future<_Controller> _pump(WidgetTester tester, {Map<String, String> flags = const {}}) async {
+Future<_Controller> _pump(
+  WidgetTester tester, {
+  Map<String, String> flags = const {},
+  List<ServiceStatus>? services,
+}) async {
   final c = _Controller()..flags = flags;
+  if (services != null) c.services = services;
   await tester.pumpWidget(ProviderScope(
     retry: noProviderRetry,
     overrides: [moavControllerProvider(demoProfile.id).overrideWithValue(c)],
@@ -121,6 +127,42 @@ void main() {
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
     expect(c.log, ['stop sing-box', 'restart sing-box']);
+  });
+
+  testWidgets('the summary counts only stopped services as down', (tester) async {
+    await _pump(tester);
+    // wireguard is stopped; telemt never ran and certbot finished.
+    expect(find.text('1 DOWN'), findsOneWidget);
+    expect(find.text('DONE'), findsOneWidget);
+    expect(find.text('EXITED'), findsNothing);
+  });
+
+  testWidgets('all up with a finished certbot and a disabled gooserelay', (tester) async {
+    await _pump(
+      tester,
+      flags: {'ENABLE_GOOSERELAY': 'false'},
+      services: const [
+        ServiceStatus(name: 'sing-box', state: ServiceState.running, uptime: '7 days'),
+        ServiceStatus(name: 'certbot', state: ServiceState.exited),
+        ServiceStatus(name: 'gooserelay', state: ServiceState.exited),
+      ],
+    );
+    expect(find.text('ALL UP'), findsOneWidget);
+    expect(find.textContaining('DOWN'), findsNothing);
+    expect(find.text('DONE'), findsOneWidget);
+    expect(find.text('DISABLED'), findsOneWidget);
+    // gooserelay keeps its real state next to the disabled pill.
+    expect(find.text('EXITED'), findsOneWidget);
+  });
+
+  testWidgets('a crashed service is counted and named', (tester) async {
+    await _pump(tester, services: const [
+      ServiceStatus(name: 'sing-box', state: ServiceState.exited),
+      ServiceStatus(name: 'certbot', state: ServiceState.exited),
+    ]);
+    expect(find.text('1 DOWN'), findsOneWidget);
+    expect(find.text('EXITED'), findsOneWidget);
+    expect(find.text('DONE'), findsOneWidget);
   });
 
   testWidgets('a disabled service shows a pill and offers enable, which re-reads the flags',

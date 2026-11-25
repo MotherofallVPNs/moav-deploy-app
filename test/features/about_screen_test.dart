@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moav_deploy/core/app_identity.dart';
+import 'package:moav_deploy/core/app_settings.dart';
 import 'package:moav_deploy/features/about/about_screen.dart';
 import 'package:moav_deploy/theme/moav_theme.dart';
 
@@ -13,9 +14,26 @@ const _fingerprint =
     '0F:1E:2D:3C:4B:5A:69:78:87:96:A5:B4:C3:D2:E1:F0:'
     '00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF';
 
-Widget _screen(AppIdentity identity) => ProviderScope(
+/// Records taps on "Open App Settings" instead of leaving the app.
+class _FakeSettingsLink extends AppSettingsLink {
+  _FakeSettingsLink({this.opens = true});
+
+  final bool opens;
+  int calls = 0;
+
+  @override
+  Future<bool> open() async {
+    calls++;
+    return opens;
+  }
+}
+
+Widget _screen(AppIdentity identity, {AppSettingsLink? settings}) =>
+    ProviderScope(
       overrides: [
         appIdentityProvider.overrideWith((_) async => identity),
+        if (settings != null)
+          appSettingsLinkProvider.overrideWithValue(settings),
       ],
       child: MaterialApp(theme: moavDarkTheme(), home: const AboutScreen()),
     );
@@ -161,6 +179,23 @@ void main() {
       expect(find.textContaining('App Store or TestFlight'), findsOneWidget);
     }, variant: ios);
 
+    testWidgets('Open App Settings points at the Face ID switch and opens it',
+        (tester) async {
+      final settings = _FakeSettingsLink();
+      await tester.pumpWidget(_screen(iosIdentity, settings: settings));
+      await tester.pumpAndSettle();
+
+      expect(find.text('SYSTEM SETTINGS'), findsOneWidget);
+      expect(find.text(AboutScreen.iosSettingsHint), findsOneWidget);
+      expect(AboutScreen.iosSettingsHint, contains('Face ID'));
+      expect(find.text(AboutScreen.androidSettingsHint), findsNothing);
+      await tester.tap(find.text(AboutScreen.openSettingsLabel));
+      await tester.pumpAndSettle();
+
+      expect(settings.calls, 1);
+      expect(find.text(AboutScreen.settingsFailed), findsNothing);
+    }, variant: ios);
+
     testWidgets('a rebuilt app with another identifier is called out',
         (tester) async {
       await tester.pumpWidget(_screen(const AppIdentity(
@@ -176,6 +211,45 @@ void main() {
       expect(find.text('OFFICIAL BUNDLE IDENTIFIER'), findsNothing);
     }, variant: ios);
   });
+
+  testWidgets('Open App Settings on Android describes the App info page',
+      (tester) async {
+    final settings = _FakeSettingsLink();
+    await tester.pumpWidget(_screen(_identity, settings: settings));
+    await tester.pumpAndSettle();
+
+    expect(find.text(AboutScreen.androidSettingsHint), findsOneWidget);
+    expect(find.text(AboutScreen.iosSettingsHint), findsNothing);
+    // Above the links, below the verification section.
+    final row = tester.getCenter(find.text(AboutScreen.openSettingsLabel));
+    expect(tester.getCenter(find.text('VERIFY YOUR DOWNLOAD')).dy,
+        lessThan(row.dy));
+    expect(row.dy, lessThan(tester.getCenter(find.text('Source code')).dy));
+    await tester.tap(find.text(AboutScreen.openSettingsLabel));
+    await tester.pumpAndSettle();
+    expect(settings.calls, 1);
+  });
+
+  testWidgets('says so when the system will not open Settings', (tester) async {
+    final settings = _FakeSettingsLink(opens: false);
+    await tester.pumpWidget(_screen(_identity, settings: settings));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(AboutScreen.openSettingsLabel));
+    await tester.pumpAndSettle();
+
+    expect(settings.calls, 1);
+    expect(find.text(AboutScreen.settingsFailed), findsOneWidget);
+  });
+
+  testWidgets('desktop has no per-app settings page, so no shortcut',
+      (tester) async {
+    await tester.pumpWidget(_screen(_identity));
+    await tester.pumpAndSettle();
+
+    expect(find.text(AboutScreen.openSettingsLabel), findsNothing);
+    expect(find.text('SYSTEM SETTINGS'), findsNothing);
+    expect(find.text('Source code'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
   testWidgets('without a signing API the card says so and hides Copy',
       (tester) async {

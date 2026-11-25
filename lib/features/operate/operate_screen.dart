@@ -244,7 +244,7 @@ class _ServicesTab extends ConsumerWidget {
                 ),
               ),
             ApplyJobPanel(serverId: profile.id),
-            _SummaryCard(report: s, fetchedAt: status.fetchedAt),
+            _SummaryCard(report: s, flags: flags, fetchedAt: status.fetchedAt),
             const SectionHeader('Actions', padding: EdgeInsets.only(top: 16, bottom: 8)),
             Wrap(
               spacing: 8,
@@ -324,15 +324,19 @@ class _ServicesTab extends ConsumerWidget {
 }
 
 class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.report, this.fetchedAt});
+  const _SummaryCard({required this.report, this.flags, this.fetchedAt});
 
   final ServiceStatusReport report;
+
+  /// `.env` toggles, so a switched-off service is not counted as down.
+  final ServiceFlags? flags;
   final DateTime? fetchedAt;
 
   @override
   Widget build(BuildContext context) {
     final s = report;
-    final allUp = s.runningCount == s.services.length;
+    final down = s.downCount(flags);
+    final allUp = down == 0;
     return MoavCard(
       accent: true,
       child: Column(
@@ -352,7 +356,7 @@ class _SummaryCard extends StatelessWidget {
               ),
               const Spacer(),
               StatusPill(
-                allUp ? 'all up' : '${s.services.length - s.runningCount} down',
+                allUp ? 'all up' : '$down down',
                 tone: allUp ? StatusTone.pass : StatusTone.warn,
               ),
             ],
@@ -417,12 +421,15 @@ class _ServiceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Red only for a service that is meant to run: not a switched-off one.
+    final offTone = enabled == false ? StatusTone.neutral : StatusTone.fail;
     final (tone, label) = switch (service.state) {
       ServiceState.running => (StatusTone.pass, 'running'),
       ServiceState.unhealthy => (StatusTone.warn, 'unhealthy'),
       ServiceState.starting => (StatusTone.warn, 'starting'),
-      ServiceState.exited => (StatusTone.neutral, 'exited'),
-      ServiceState.stopped => (StatusTone.fail, 'stopped'),
+      ServiceState.exited when service.isDone => (StatusTone.pass, 'done'),
+      ServiceState.exited => (offTone, 'exited'),
+      ServiceState.stopped => (offTone, 'stopped'),
       ServiceState.never => (StatusTone.neutral, 'never'),
       ServiceState.unknown => (StatusTone.warn, 'unknown'),
     };
