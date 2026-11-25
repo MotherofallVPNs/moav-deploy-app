@@ -3,8 +3,10 @@
   "extends": [
     "config:recommended"
   ],
-  "dependencyDashboard": true,
-  "dependencyDashboardTitle": "🔄 Dependency Dashboard",
+  "dependencyDashboard": {
+    "enabled": true,
+    "title": "🔄 Dependency Dashboard"
+  },
   "platformAutomerge": false,
   "schedule": [
     "* 0-6 * * 1"
@@ -51,7 +53,6 @@
     "enabled": true,
     "labels": ["security"],
     "schedule": ["at any time"],
-    "prPriority": 10,
     "minimumReleaseAge": null
   }
 }
