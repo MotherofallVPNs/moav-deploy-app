@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_identity.dart';
+import '../../core/app_settings.dart';
 import '../../core/moav_links.dart';
 import '../../theme/moav_theme.dart';
 import '../../widgets/moav_app_bar.dart';
@@ -42,6 +43,22 @@ class AboutScreen extends ConsumerWidget {
   /// a rebuilt app, not the official one.
   static const iosBundleId = 'org.motherofallvpns.moavdeploy';
 
+  static const openSettingsLabel = 'Open App Settings';
+
+  /// iOS keeps a per-app Face ID switch there; while it is off the app lock
+  /// sees no biometrics and uses the passcode.
+  static const iosSettingsHint =
+      'Face ID or Touch ID for the app lock is switched on and off for '
+      'MoaV Deploy in iOS Settings. If the app lock only offers the '
+      'passcode, check that it is allowed there.';
+
+  static const androidSettingsHint =
+      'Permissions, notifications and storage for MoaV Deploy in Android '
+      'Settings. Fingerprint and face unlock are set up in the device '
+      'security settings.';
+
+  static const settingsFailed = 'Could not open Settings';
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final identity = ref.watch(appIdentityProvider);
@@ -71,6 +88,16 @@ class AboutScreen extends ConsumerWidget {
             ),
             const SectionHeader('Verify your download'),
             const _VerifyCard(),
+          ],
+          if (AppSettingsLink.supported) ...[
+            const SectionHeader('System settings'),
+            _LinkTile(
+              key: const ValueKey('about-open-settings'),
+              icon: Icons.settings_outlined,
+              title: openSettingsLabel,
+              subtitle: ios ? iosSettingsHint : androidSettingsHint,
+              onTap: () => _openSettings(context, ref),
+            ),
           ],
           const SectionHeader('Links'),
           _LinkTile(
@@ -106,6 +133,13 @@ class AboutScreen extends ConsumerWidget {
 
   static Future<void> _open(Uri url) =>
       launchUrl(url, mode: LaunchMode.externalApplication);
+
+  static Future<void> _openSettings(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final opened = await ref.read(appSettingsLinkProvider).open();
+    if (opened) return;
+    messenger.showSnackBar(const SnackBar(content: Text(settingsFailed)));
+  }
 }
 
 class _Header extends StatelessWidget {
@@ -336,6 +370,7 @@ class _VerifyCard extends StatelessWidget {
 
 class _LinkTile extends StatelessWidget {
   const _LinkTile({
+    super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
