@@ -52,7 +52,7 @@ jobs:
           echo "MOAV_TEST_HOST / MOAV_TEST_USER / MOAV_TEST_SSH_KEY secrets not set;"
           echo "skipping the live round. See docs/LIVE-CI.md to enable it."
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: env.HAS_LIVE_SECRETS == 'true'
 
       - uses: subosito/flutter-action@v2
