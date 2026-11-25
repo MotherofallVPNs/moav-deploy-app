@@ -3,49 +3,55 @@
   "extends": [
     "config:recommended"
   ],
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "🔄 Dependency Dashboard",
   "platformAutomerge": false,
+  "schedule": [
+    "* 0-6 * * 1"
+  ],
+  "prConcurrentLimit": 8,
+  "labels": [
+    "dependencies"
+  ],
   "packageRules": [
     {
-      "description": "Low-risk updates merge themselves once CI is green. Majors and 0.x packages stay manual.",
-      "matchUpdateTypes": ["minor", "patch", "pin", "digest", "pinDigest"],
-      "matchCurrentVersion": "!/^v?0/",
-      "automerge": true
+      "description": "Nothing automerges — every update is reviewed and merged by a human.",
+      "matchPackageNames": ["*"],
+      "automerge": false
     },
     {
-      "description": "pub packages ship in the app: let a release sit for 3 days before it can automerge.",
+      "description": "Batch ALL non-major updates into a single weekly PR to keep the queue small.",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest", "pinDigest"],
+      "groupName": "all non-major dependencies",
+      "schedule": ["* 0-6 * * 1"]
+    },
+    {
+      "description": "Major updates each get their own PR (potentially breaking), labeled so they stand out and show on the dashboard.",
+      "matchUpdateTypes": ["major"],
+      "addLabels": ["major"]
+    },
+    {
+      "description": "AGP sets a minimum Gradle version, so the plugin and the wrapper always move together in one PR.",
+      "matchManagers": ["gradle-wrapper", "gradle"],
+      "matchDepNames": ["com.android.application", "gradle"],
+      "groupName": "android gradle toolchain"
+    },
+    {
+      "description": "pub packages ship inside the app: let a release age 3 days before it is proposed.",
       "matchDatasources": ["dart"],
       "minimumReleaseAge": "3 days"
-    },
-    {
-      "description": "One PR for all GitHub Actions bumps (Renovate still splits major from non-major).",
-      "matchManagers": ["github-actions"],
-      "matchDepTypes": ["action"],
-      "groupName": "github-actions"
-    },
-    {
-      "description": "AGP sets a minimum Gradle version, so the plugin and the wrapper move in one PR.",
-      "matchManagers": ["gradle-wrapper"],
-      "groupName": "android gradle toolchain"
-    },
-    {
-      "matchManagers": ["gradle"],
-      "matchDepNames": ["com.android.application"],
-      "groupName": "android gradle toolchain"
     },
     {
       "description": "JDK 17 is the release JDK verified reproducible against F-Droid. JDK 25 changes classes.dex (#96); raise this pin to try another.",
       "matchDepNames": ["java-jdk"],
       "allowedVersions": "/^17(\\.|$)/"
-    },
-    {
-      "description": "The Flutter SDK pin is bumped deliberately (see the comment next to flutter-version in the workflows).",
-      "matchDatasources": ["flutter-version"],
-      "automerge": false
-    },
-    {
-      "description": "Ruby and fastlane only run in the release workflow, which PR CI never exercises, so a green PR proves nothing.",
-      "matchDepNames": ["ruby", "fastlane"],
-      "automerge": false
     }
-  ]
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"],
+    "schedule": ["at any time"],
+    "prPriority": 10,
+    "minimumReleaseAge": null
+  }
 }
