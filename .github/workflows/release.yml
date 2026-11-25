@@ -84,7 +84,7 @@ jobs:
 
       - name: Upload workflow artifacts
         if: env.HAS_SIGNING == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: moav-deploy-${{ github.ref_name }}
           path: |
@@ -262,7 +262,7 @@ jobs:
 
       - name: Upload IPA as workflow artifact
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: moav-deploy-ios-${{ github.ref_name }}
           path: build/ios/ipa/*.ipa

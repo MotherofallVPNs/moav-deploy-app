@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: scripts/fdroid-validate.sh build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: fdroid-unsigned-apk
           path: build/fdroid/*.apk
