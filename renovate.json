@@ -2,5 +2,45 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "platformAutomerge": false,
+  "packageRules": [
+    {
+      "description": "Low-risk updates merge themselves once CI is green. Majors and 0.x packages stay manual.",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest", "pinDigest"],
+      "matchCurrentVersion": "!/^v?0/",
+      "automerge": true
+    },
+    {
+      "description": "pub packages ship in the app: let a release sit for 3 days before it can automerge.",
+      "matchDatasources": ["dart"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "One PR for all GitHub Actions bumps (Renovate still splits major from non-major).",
+      "matchManagers": ["github-actions"],
+      "matchDepTypes": ["action"],
+      "groupName": "github-actions"
+    },
+    {
+      "description": "AGP sets a minimum Gradle version, so the plugin and the wrapper move in one PR.",
+      "matchManagers": ["gradle-wrapper"],
+      "groupName": "android gradle toolchain"
+    },
+    {
+      "matchManagers": ["gradle"],
+      "matchDepNames": ["com.android.application"],
+      "groupName": "android gradle toolchain"
+    },
+    {
+      "description": "F-Droid builds with JDK 17. Another JDK changes classes.dex and breaks the reproducible build.",
+      "matchDepNames": ["java-jdk"],
+      "allowedVersions": "/^17(\\.|$)/"
+    },
+    {
+      "description": "The Flutter SDK pin is bumped deliberately (see the comment next to flutter-version in the workflows).",
+      "matchDatasources": ["flutter-version"],
+      "automerge": false
+    }
   ]
 }
