@@ -33,7 +33,7 @@
       "groupName": "android gradle toolchain"
     },
     {
-      "description": "F-Droid builds with JDK 17. Another JDK changes classes.dex and breaks the reproducible build.",
+      "description": "JDK 17 is the release JDK verified reproducible against F-Droid. JDK 25 changes classes.dex (#96); raise this pin to try another.",
       "matchDepNames": ["java-jdk"],
       "allowedVersions": "/^17(\\.|$)/"
     },
