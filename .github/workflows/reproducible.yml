@@ -33,7 +33,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "25"
 
       # Same Flutter as the release build, read the way the recipe reads it.
       - name: Read the Flutter version from release.yml
