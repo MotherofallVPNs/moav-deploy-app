@@ -2,5 +2,56 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
-  ]
+  ],
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "🔄 Dependency Dashboard",
+  "platformAutomerge": false,
+  "schedule": [
+    "* 0-6 * * 1"
+  ],
+  "prConcurrentLimit": 8,
+  "labels": [
+    "dependencies"
+  ],
+  "packageRules": [
+    {
+      "description": "Nothing automerges — every update is reviewed and merged by a human.",
+      "matchPackageNames": ["*"],
+      "automerge": false
+    },
+    {
+      "description": "Batch ALL non-major updates into a single weekly PR to keep the queue small.",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest", "pinDigest"],
+      "groupName": "all non-major dependencies",
+      "schedule": ["* 0-6 * * 1"]
+    },
+    {
+      "description": "Major updates each get their own PR (potentially breaking), labeled so they stand out and show on the dashboard.",
+      "matchUpdateTypes": ["major"],
+      "addLabels": ["major"]
+    },
+    {
+      "description": "AGP sets a minimum Gradle version, so the plugin and the wrapper always move together in one PR.",
+      "matchManagers": ["gradle-wrapper", "gradle"],
+      "matchDepNames": ["com.android.application", "gradle"],
+      "groupName": "android gradle toolchain"
+    },
+    {
+      "description": "pub packages ship inside the app: let a release age 3 days before it is proposed.",
+      "matchDatasources": ["dart"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "JDK 17 is the release JDK verified reproducible against F-Droid. JDK 25 changes classes.dex (#96); raise this pin to try another.",
+      "matchDepNames": ["java-jdk"],
+      "allowedVersions": "/^17(\\.|$)/"
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"],
+    "schedule": ["at any time"],
+    "prPriority": 10,
+    "minimumReleaseAge": null
+  }
 }
