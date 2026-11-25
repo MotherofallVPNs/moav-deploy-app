@@ -54,6 +54,8 @@ void main() {
     expect(find.byTooltip('X'), findsOneWidget);
     expect(find.byTooltip('Telegram'), findsOneWidget);
     expect(find.text('Emergency wipe'), findsOneWidget);
+    // The lock has no in-app setting: the OS decides biometric or passcode.
+    expect(find.text('App lock'), findsNothing);
     // The old standalone rows are gone (folded into the above).
     expect(find.text('Website & docs'), findsNothing);
     expect(find.text('GitHub'), findsNothing);

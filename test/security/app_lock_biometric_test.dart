@@ -1,12 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart' hide LockState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:moav_deploy/app.dart';
 import 'package:moav_deploy/core/app_error.dart';
-import 'package:moav_deploy/features/lock/app_lock_sheet.dart';
 import 'package:moav_deploy/features/servers/servers_provider.dart';
 import 'package:moav_deploy/security/app_lock.dart';
 import 'package:moav_deploy/security/onboarding.dart';
@@ -60,18 +57,11 @@ class _FakeAuth implements LocalAuthentication {
       throw UnimplementedError('${invocation.memberName}');
 }
 
-/// A secure store whose preference read never completes.
-class _StuckStore extends MemoryCredStore {
-  @override
-  Future<bool> readPreferBiometric() => Completer<bool>().future;
-}
-
-ProviderContainer _container(ScriptedLock lock, {bool prefer = true}) {
+ProviderContainer _container(ScriptedLock lock) {
   final c = ProviderContainer(
     retry: noProviderRetry,
     overrides: [
-      secureCredStoreProvider
-          .overrideWithValue(MemoryCredStore()..preferBiometric = prefer),
+      secureCredStoreProvider.overrideWithValue(MemoryCredStore()),
       appLockServiceProvider.overrideWithValue(lock),
     ],
   );
@@ -80,15 +70,14 @@ ProviderContainer _container(ScriptedLock lock, {bool prefer = true}) {
   return c;
 }
 
-Widget _app(AppLockService lock, {MemoryCredStore? store, bool lockEnabled = true}) =>
-    ProviderScope(
+Widget _app(AppLockService lock) => ProviderScope(
       retry: noProviderRetry,
       overrides: [
-        secureCredStoreProvider.overrideWithValue(store ?? MemoryCredStore()),
+        secureCredStoreProvider.overrideWithValue(MemoryCredStore()),
         onboardingStoreProvider.overrideWithValue(OnboardedStore()),
         appLockServiceProvider.overrideWithValue(lock),
       ],
-      child: MoavDeployApp(lockEnabled: lockEnabled),
+      child: const MoavDeployApp(),
     );
 
 void main() {
@@ -244,46 +233,19 @@ void main() {
       expect(lock.prompts, [false, true, false]);
     });
 
-    test('setting off: the OS prompt decides, Face ID still one tap away',
+    test('Face ID switched off for the app in the OS: passcode, then back',
         () async {
-      final lock = ScriptedLock();
-      final c = _container(lock, prefer: false);
+      // iOS reports no usable biometric while the app's Face ID toggle is
+      // off in Settings; that toggle is the only biometric switch there is.
+      final lock = ScriptedLock(enrolled: const []);
+      final c = _container(lock);
       final notifier = c.read(appLockProvider.notifier);
       await notifier.unlock();
-      await notifier.unlock(method: UnlockMethod.biometric);
+      expect(lock.prompts, [false]);
+      lock.enrolled = const [BiometricType.face];
+      notifier.lock();
+      await notifier.unlock();
       expect(lock.prompts, [false, true]);
-    });
-
-    test('a store that never answers does not hold the prompt back', () async {
-      final lock = ScriptedLock();
-      final c = ProviderContainer(
-        retry: noProviderRetry,
-        overrides: [
-          secureCredStoreProvider.overrideWithValue(_StuckStore()),
-          appLockServiceProvider.overrideWithValue(lock),
-        ],
-      );
-      addTearDown(c.dispose);
-      c.listen(appLockProvider, (_, _) {});
-      await c.read(appLockProvider.notifier).unlock();
-      // Fell back to the default (biometric first) after the short wait.
-      expect(lock.prompts, [true]);
-    });
-
-    test('the setting is on by default and remembered when changed', () async {
-      final store = MemoryCredStore();
-      final c = ProviderContainer(
-        retry: noProviderRetry,
-        overrides: [secureCredStoreProvider.overrideWithValue(store)],
-      );
-      addTearDown(c.dispose);
-      expect(await c.read(preferBiometricProvider.future), isTrue);
-      await c.read(preferBiometricProvider.notifier).set(false);
-      expect(store.preferBiometric, isFalse);
-      expect(c.read(preferBiometricProvider).value, isFalse);
-      // A wipe puts it back to the default.
-      await store.wipeAll();
-      expect(await store.readPreferBiometric(), isTrue);
     });
 
     test('two unlock calls share one prompt', () async {
@@ -398,50 +360,6 @@ void main() {
       await tester.pumpWidget(shield(LockState.unlocking, const [BiometricType.face]));
       expect(find.textContaining('Face ID'), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    });
-  });
-
-  group('App lock setting', () {
-    Future<void> open(WidgetTester tester) async {
-      await tester.tap(find.byTooltip('Menu'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('App lock'));
-      await tester.pumpAndSettle();
-    }
-
-    testWidgets('on by default, and switching it off is remembered',
-        (tester) async {
-      final store = MemoryCredStore();
-      final lock = ScriptedLock(enrolled: const [BiometricType.fingerprint]);
-      await tester.pumpWidget(_app(lock, store: store, lockEnabled: false));
-      await tester.pumpAndSettle();
-      await open(tester);
-
-      expect(find.byType(AppLockSheet), findsOneWidget);
-      final tile = find.widgetWithText(SwitchListTile, 'Prefer biometric unlock');
-      expect(tester.widget<SwitchListTile>(tile).value, isTrue);
-      expect(find.textContaining('Always try biometrics first'), findsOneWidget);
-      await tester.tap(tile);
-      await tester.pumpAndSettle();
-      expect(tester.widget<SwitchListTile>(tile).value, isFalse);
-      expect(store.preferBiometric, isFalse);
-    });
-
-    testWidgets('disabled, with the reason, when nothing is enrolled',
-        (tester) async {
-      final store = MemoryCredStore();
-      final lock = ScriptedLock(enrolled: const []);
-      await tester.pumpWidget(_app(lock, store: store, lockEnabled: false));
-      await tester.pumpAndSettle();
-      await open(tester);
-
-      final tile = tester.widget<SwitchListTile>(
-          find.widgetWithText(SwitchListTile, 'Prefer biometric unlock'));
-      expect(tile.onChanged, isNull);
-      expect(tile.value, isFalse);
-      expect(find.textContaining('No Face ID or fingerprint is set up'), findsOneWidget);
-      // The stored choice is untouched: it applies again once one is set up.
-      expect(store.preferBiometric, isTrue);
     });
   });
 }
