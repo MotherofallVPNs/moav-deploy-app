@@ -122,16 +122,6 @@ class SecureCredStore implements DemoInstallStore {
 
   Future<void> deleteDecoy() => _storage.delete(key: decoyKey);
 
-  static const _preferBiometricKey = 'moav.lock.prefer_biometric.v1';
-
-  /// The "Prefer biometric unlock" setting: on unless it was switched off.
-  /// A wipe removes the key, which puts it back to on.
-  Future<bool> readPreferBiometric() async =>
-      await _storage.read(key: _preferBiometricKey) != 'false';
-
-  Future<void> writePreferBiometric(bool value) =>
-      _storage.write(key: _preferBiometricKey, value: '$value');
-
   /// Every key currently held, for the wipe report and for tests.
   Future<List<String>> listKeys() async =>
       (await _storage.readAll()).keys.toList();

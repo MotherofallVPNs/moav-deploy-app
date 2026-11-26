@@ -164,15 +164,16 @@ The concrete models live in `lib/core/moav_controller.dart`.
 - Keys are generated on-device (ed25519) and stored in the iOS Keychain or
   Android Keystore through `flutter_secure_storage`. Passphrases are never
   persisted in plaintext.
-- App lock: biometric or device passcode gate on launch and resume. Every
-  unlock attempt chooses its method afresh (`lib/security/app_lock.dart`):
-  with "Prefer biometric unlock" on (the default, under Menu > App lock) and
-  a biometric enrolled, the prompt asks for the biometric alone, so a failed
-  or cancelled Face ID never leaves the session stuck on the passcode
-  sheet. The lock screen then offers "Try Face ID again" and "Use device
-  passcode". "Use passcode" on the system sheet and a biometric lockout go
-  to the passcode within the same attempt. Enrollment is read from the OS
-  on each attempt; with none enrolled the gate is the passcode, as before.
+- App lock: biometric or device passcode gate on launch and resume, always
+  on, with no in-app setting. Every unlock attempt chooses its method afresh
+  (`lib/security/app_lock.dart`): when the OS offers this app a biometric,
+  the prompt asks for the biometric alone, so a failed or cancelled Face ID
+  never leaves the session stuck on the passcode sheet. The lock screen
+  then offers "Try Face ID again" and "Use device passcode". "Use passcode"
+  on the system sheet and a biometric lockout go to the passcode within the
+  same attempt. Availability is read from the OS on each attempt; with no
+  biometric enrolled, or with the app's Face ID toggle off in iOS Settings
+  (About > Open App Settings), the gate is the passcode.
 - "Install my key" helper flow; password auth is a fallback for that one
   step only.
 - No analytics and no crash reporting. Errors are scrubbed by

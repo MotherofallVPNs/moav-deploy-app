@@ -4,10 +4,8 @@ import 'package:local_auth/local_auth.dart';
 import 'package:local_auth_android/local_auth_android.dart';
 import 'package:local_auth_darwin/local_auth_darwin.dart';
 
-import '../features/servers/servers_provider.dart';
 import '../features/wipe/wipe_dialog.dart';
 import '../theme/moav_theme.dart';
-import 'app_log.dart';
 import 'decoy/decoy_provider.dart';
 
 /// How one unlock attempt authenticates.
@@ -51,9 +49,10 @@ class AppLockService {
     }
   }
 
-  /// The biometrics enrolled on the device right now; empty when there are
-  /// none or the OS will not say. Asked again for every unlock attempt,
-  /// since enrollment can change while the app is in the background.
+  /// The biometrics this app may use right now; empty when none are
+  /// enrolled, the OS setting denies them to the app, or it will not say.
+  /// Asked again for every unlock attempt, since either can change while
+  /// the app is in the background.
   Future<List<BiometricType>> enrolledBiometrics() async {
     try {
       return await _auth.getAvailableBiometrics();
@@ -126,33 +125,8 @@ class AppLockService {
 
 final appLockServiceProvider = Provider<AppLockService>((_) => AppLockService());
 
-/// Whether an unlock tries the biometric first (default) or leaves the
-/// choice to the OS prompt.
-class PreferBiometricNotifier extends AsyncNotifier<bool> {
-  /// Unreadable storage counts as on: the setting must never lock anyone out.
-  @override
-  Future<bool> build() async {
-    try {
-      return await ref.read(secureCredStoreProvider).readPreferBiometric();
-    } on Object catch (e) {
-      AppLog.warn('lock', 'preference not read: ${e.runtimeType}');
-      return true;
-    }
-  }
-
-  Future<void> set(bool value) async {
-    state = AsyncData(value);
-    await ref.read(secureCredStoreProvider).writePreferBiometric(value);
-  }
-}
-
-final preferBiometricProvider =
-    AsyncNotifierProvider<PreferBiometricNotifier, bool>(
-  PreferBiometricNotifier.new,
-);
-
-/// The biometrics enrolled on the device as last asked: what the lock
-/// screen and the setting offer. Empty until the first answer.
+/// The biometrics the OS lets this app use, as last asked: what the lock
+/// screen offers. Empty until the first answer.
 class EnrolledBiometricsNotifier extends Notifier<List<BiometricType>> {
   @override
   List<BiometricType> build() => const [];
@@ -169,7 +143,7 @@ final enrolledBiometricsProvider =
   EnrolledBiometricsNotifier.new,
 );
 
-/// "Face ID", "Touch ID" or a generic word, for buttons and the setting.
+/// "Face ID", "Touch ID" or a generic word, for the lock screen buttons.
 /// Android only reports strength classes, never which sensor it is.
 String biometricLabel(List<BiometricType> enrolled, TargetPlatform platform) {
   final apple =
@@ -188,8 +162,8 @@ class AppLockNotifier extends Notifier<LockState> {
   @override
   LockState build() => LockState.locked;
 
-  /// One unlock attempt. Without [method] the "Prefer biometric unlock"
-  /// setting picks it.
+  /// One unlock attempt. Without [method] it is the biometric when the OS
+  /// offers one to this app, and the device passcode otherwise.
   ///
   /// Nothing is carried over from earlier attempts: a failed or cancelled
   /// biometric prompt does not demote the next one to the passcode, and
@@ -213,14 +187,10 @@ class AppLockNotifier extends Notifier<LockState> {
     final enrolled =
         await ref.read(enrolledBiometricsProvider.notifier).refresh();
     if (!ref.mounted) return;
-    var chosen = method;
-    // The setting only matters when there is a biometric to prefer.
-    if (chosen == null && enrolled.isNotEmpty) {
-      final prefer = await _preferBiometric();
-      if (!ref.mounted) return;
-      chosen = prefer ? UnlockMethod.biometric : UnlockMethod.deviceCredential;
-    }
-    final biometric = chosen == UnlockMethod.biometric && enrolled.isNotEmpty;
+    // Biometric first unless the passcode was asked for. The OS decides
+    // whether there is one: Face ID switched off for the app reads as none.
+    final biometric =
+        method != UnlockMethod.deviceCredential && enrolled.isNotEmpty;
     var outcome = await service.authenticate(
       disguised: disguised,
       biometricOnly: biometric,
@@ -235,18 +205,6 @@ class AppLockNotifier extends Notifier<LockState> {
     state = outcome == AuthOutcome.success
         ? LockState.unlocked
         : LockState.failed;
-  }
-
-  /// The setting, or its default when the store is slow or broken: reading
-  /// a preference must never be what keeps the prompt from appearing.
-  Future<bool> _preferBiometric() async {
-    try {
-      return await ref
-          .read(preferBiometricProvider.future)
-          .timeout(const Duration(seconds: 2), onTimeout: () => true);
-    } on Object catch (_) {
-      return true;
-    }
   }
 
   void lock() => state = LockState.locked;
@@ -367,7 +325,7 @@ class PrivacyShield extends StatelessWidget {
   /// Biometrics enrolled on the device; empty hides the biometric button.
   final List<BiometricType> biometrics;
 
-  /// `null` lets the "Prefer biometric unlock" setting choose.
+  /// `null` is the default: biometric when there is one, else the passcode.
   final void Function(UnlockMethod? method) onUnlock;
   final VoidCallback onWipe;
 
