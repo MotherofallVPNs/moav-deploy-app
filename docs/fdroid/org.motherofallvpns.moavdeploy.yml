@@ -59,10 +59,51 @@ Builds:
       - popd
       - mv $repo org.motherofallvpns.moavdeploy
 
+  - versionName: 0.2.18
+    versionCode: 27
+    commit: 9d1c868c22c8e2b89532461348c64aac3fbcd395
+    sudo:
+      - mkdir -p /home/runner/work/moav-deploy-app
+      - chown -R vagrant /home/runner
+    output: build/app/outputs/flutter-apk/app-release.apk
+    srclibs:
+      - flutter@stable
+    rm:
+      - ios
+      - integration_test
+      - test_driver
+    prebuild:
+      - flutterVersion=$(sed -n -E 's/.*flutter-version:[[:space:]]*"?([0-9.]+)"?.*/\1/p'
+        .github/workflows/release.yml | head -n 1)
+      - '[[ $flutterVersion ]]'
+      - git -C $$flutter$$ checkout -f $flutterVersion
+      - sed -i -e '/signingConfig = if (keystorePropertiesFile.exists())/,+3d' android/app/build.gradle.kts
+      - test "$(grep -c 'signingConfig = ' android/app/build.gradle.kts)" = 0
+      - export repo=/home/runner/work/moav-deploy-app/moav-deploy-app
+      - cd ..
+      - mv org.motherofallvpns.moavdeploy $repo
+      - pushd $repo
+      - export PUB_CACHE=$(pwd)/.pub-cache
+      - $$flutter$$/bin/flutter config --no-analytics
+      - $$flutter$$/bin/flutter pub get --enforce-lockfile
+      - popd
+      - mv $repo org.motherofallvpns.moavdeploy
+    scandelete:
+      - .pub-cache
+    build:
+      - export repo=/home/runner/work/moav-deploy-app/moav-deploy-app
+      - cd ..
+      - mv org.motherofallvpns.moavdeploy $repo
+      - pushd $repo
+      - export PUB_CACHE=$(pwd)/.pub-cache
+      - $$flutter$$/bin/flutter build apk --release
+      - popd
+      - mv $repo org.motherofallvpns.moavdeploy
+
 AllowedAPKSigningKeys: bbd565a138fe28831673f78659eca2c3139d6b862116c8a1b8bb9d7196f80aa6
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
 UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
-CurrentVersion: 0.2.17
-CurrentVersionCode: 20
+CurrentVersion: 0.2.18
+CurrentVersionCode: 27
