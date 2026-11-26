@@ -1,1 +1,1 @@
-Maintenance: release builds are now reproducible, so F-Droid can verify them from source. No user-facing changes.
+New: server updates now run as a background job on the server and apply automatically, so they finish even if your phone locks or the app goes to the background. Services gains Rebuild and Force rebuild. Fixes: Face ID unlock is more reliable. The services "down" count is now honest: finished certbot runs and disabled services no longer count. About has an Open App Settings shortcut. Removed the redundant App lock menu item; the lock stays on by default.
