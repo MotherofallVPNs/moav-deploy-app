@@ -14,7 +14,7 @@ first-class, not a fallback.
 | Apple App Store | iOS users with store access | `.ipa` via App Store Connect | Not yet published |
 | TestFlight | iOS beta, and regions where a listing may be pulled | same build | Internal testers get every release automatically via CI; public link not yet opened |
 | APK mirror via moav.sh or Telegram | Users who cannot reach GitHub | same `.apk` plus SHA-256 | Coordinated with the MoaV team |
-| F-Droid | Privacy-focused Android users | Built from source by F-Droid | Recipe reproduces the v0.2.17 release APK in F-Droid's toolchain; not yet submitted, see [F-Droid](#f-droid) |
+| F-Droid | Privacy-focused Android users | Built from source by F-Droid | Recipe reproduces the v0.2.18 release APK in F-Droid's toolchain; not yet submitted, see [F-Droid](#f-droid) |
 
 ## Google Play
 
@@ -71,8 +71,8 @@ first-class, not a fallback.
 
 ## F-Droid
 
-Status: recipe validated against the F-Droid toolchain for v0.2.17
-(versionCode 20), which reproduces the published release APK; not submitted. Tracked in issue #24. The submission itself
+Status: recipe validated against the F-Droid toolchain for v0.2.18
+(versionCode 27), which reproduces the published release APK; not submitted. Tracked in issue #24. The submission itself
 is a manual merge request on GitLab, see [Submitting](#submitting).
 
 F-Droid builds every app from source on its own servers, rejects proprietary
@@ -211,7 +211,7 @@ The image is amd64 only. On Apple Silicon `lint` works, but `build` and
 Rosetta (`Unexpected EINTR errno`). Use the pull request checks or an x86_64
 Linux host.
 
-Results for v0.2.17 (versionCode 20): lint, rewritemeta and checkupdates are
+Results for v0.2.18 (versionCode 27): lint, rewritemeta and checkupdates are
 clean, and `fdroid build` passes, including the source scanner and the
 comparison with the release APK (`REPRODUCIBLE`).
 
